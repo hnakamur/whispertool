@@ -11,7 +11,7 @@ import (
 
 var ErrDiffFound = errors.New("diff found")
 
-func Diff(src, dest string, recursive, ignoreSrcEmpty bool) error {
+func Diff(src, dest string, recursive, ignoreSrcEmpty, showAll bool) error {
 	if recursive {
 		return errors.New("recursive option not implemented yet")
 	}
@@ -40,6 +40,28 @@ func Diff(src, dest string, recursive, ignoreSrcEmpty bool) error {
 	iss := valueDiffIndexesMultiTimeSeriesPointsPointers(srcData.tss, destData.tss, ignoreSrcEmpty)
 	if diffIndexesEmpty(iss) {
 		return nil
+	}
+
+	if showAll {
+		for i, is := range iss {
+			srcTs := srcData.tss[i]
+			destTs := destData.tss[i]
+			for j, srcPt := range srcTs {
+				var diff int
+				if len(is) > 0 && is[0] == j {
+					diff = 1
+					is = is[1:]
+				}
+				destPt := destTs[j]
+				fmt.Printf("retId:%d\tt:%s\tsrcVal:%g\tdestVal:%g\tdiff:%d\n",
+					i,
+					formatTime(secondsToTime(int64(srcPt.Time))),
+					srcPt.Value,
+					destPt.Value,
+					diff)
+			}
+		}
+		return ErrDiffFound
 	}
 
 	for i, is := range iss {

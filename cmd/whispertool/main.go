@@ -190,6 +190,7 @@ func runDiffCmd(args []string) error {
 	}
 	recursive := fs.Bool("r", false, "diff files recursively.")
 	ignoreSrcEmpty := fs.Bool("ignore-src-empty", false, "ignore diff when source point is empty.")
+	showAll := fs.Bool("show-all", false, "print all points when diff exists.")
 	fs.Parse(args)
 
 	if fs.NArg() != 2 {
@@ -200,7 +201,7 @@ func runDiffCmd(args []string) error {
 		}
 	}
 
-	return whispertool.Diff(fs.Arg(0), fs.Arg(1), *recursive, *ignoreSrcEmpty)
+	return whispertool.Diff(fs.Arg(0), fs.Arg(1), *recursive, *ignoreSrcEmpty, *showAll)
 }
 
 const generateCmdUsage = `Usage: %s generate [options] dest.wsp
