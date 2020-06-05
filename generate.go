@@ -12,28 +12,40 @@ func Generate(dest string, retentionDefs string, fill bool, randMax int) error {
 	if err != nil {
 		return err
 	}
-	srcDB, err := whisper.Create(dest, retentions, whisper.Sum, 0)
-	if err != nil {
-		return err
-	}
-	defer srcDB.Close()
 
-	if !fill {
-		return nil
+	d := &whisperFileData{
+		retentions:   retentionsToRetentionSlice(retentions),
+		aggMethod:    "Sum",
+		xFilesFactor: 0,
 	}
 
-	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
-	now := time.Now()
-	until := now
-	tss := randomTimeSeriesPointsForArchives(retentions, until, now,
-		rnd, randMax)
+	if fill {
+		rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+		now := time.Now()
+		until := now
+		d.tss = randomTimeSeriesPointsForArchives(retentions, until, now,
+			rnd, randMax)
+	}
+
+	return createWhisperFile(dest, d)
+}
+
+func retentionsToRetentionSlice(retentions whisper.Retentions) []whisper.Retention {
+	retentions2 := make([]whisper.Retention, len(retentions))
 	for i, r := range retentions {
-		err := srcDB.UpdateManyForArchive(tss[i], r.MaxRetention())
-		if err != nil {
-			return err
-		}
+		retentions2[i] = whisper.NewRetention(
+			r.SecondsPerPoint(),
+			r.NumberOfPoints())
 	}
-	return nil
+	return retentions2
+}
+
+func retentionSliceToRetentions(retentions []whisper.Retention) whisper.Retentions {
+	retentions2 := make([]*whisper.Retention, len(retentions))
+	for i := range retentions {
+		retentions2[i] = &retentions[i]
+	}
+	return retentions2
 }
 
 func alignTime(t time.Time, secondsPerPoint int) time.Time {

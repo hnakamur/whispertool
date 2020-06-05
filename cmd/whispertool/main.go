@@ -26,6 +26,7 @@ func (e *requiredOptionError) Error() string {
 var errNeedsOneFileArg = errors.New("expected one whisper filename argument")
 var errNeedsSrcAndDestFilesArg = errors.New("expected source and destination whisper filename arguments")
 var errNeedsSrcAndDestDirsArg = errors.New("expected source and destination whisper directory arguments")
+var errEmptyRateOutOfBounds = errors.New("emptyRate must be 0 <= r <= 1.")
 
 const globalUsage = `Usage: %s <subcommand> [options]
 
@@ -162,6 +163,9 @@ func runHoleCmd(args []string) error {
 	emptyRate := fs.Float64("empty-rate", 0.2, "empty rate (0 < r <= 1).")
 	fs.Parse(args)
 
+	if *emptyRate < 0 || 1 < *emptyRate {
+		return errEmptyRateOutOfBounds
+	}
 	if fs.NArg() != 2 {
 		return errNeedsSrcAndDestFilesArg
 	}

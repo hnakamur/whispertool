@@ -71,11 +71,15 @@ func view(filename string) error {
 			r.Size(),
 		)
 	}
-	for i, ts := range d.tss {
+	printTimeSeriesForArchives(d.tss)
+	return nil
+}
+
+func printTimeSeriesForArchives(tss [][]*whisper.TimeSeriesPoint) {
+	for i, ts := range tss {
 		for j, p := range ts {
 			fmt.Printf("retentionId:%d\tpointId:%d\ttime:%s\tvalue:%g\n",
 				i, j, formatTime(secondsToTime(int64(p.Time))), p.Value)
 		}
 	}
-	return nil
 }

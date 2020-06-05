@@ -2,7 +2,6 @@ package whispertool
 
 import (
 	"fmt"
-	"math"
 	"math/rand"
 	"os"
 	"testing"
@@ -67,20 +66,6 @@ func deepCloneTimeSeriesPointPointersForArchives(tss [][]*whisper.TimeSeriesPoin
 		tss2[i] = deepCloneTimeSeriesPointPointers(ts)
 	}
 	return tss2
-}
-
-func emptyRandomPointsInTimeSeriesPoints(ts []*whisper.TimeSeriesPoint, rnd *rand.Rand) {
-	for _, p := range ts {
-		if rnd.Intn(100) < 20 {
-			p.Value = math.NaN()
-		}
-	}
-}
-
-func emptyRandomPointsInTimeSeriesPointsForAllArchives(tss [][]*whisper.TimeSeriesPoint, rnd *rand.Rand) {
-	for _, ts := range tss {
-		emptyRandomPointsInTimeSeriesPoints(ts, rnd)
-	}
 }
 
 func TestDiff(t *testing.T) {
