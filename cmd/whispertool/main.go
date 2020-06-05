@@ -85,14 +85,17 @@ func run() int {
 		return 2
 	}
 	if err != nil {
+		if errors.Is(err, whispertool.ErrDiffFound) {
+			return 1
+		}
+
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err.Error())
 		var roerr *requiredOptionError
 		if errors.As(err, &roerr) {
-			fmt.Fprint(os.Stderr, "\n")
+			fmt.Fprintf(os.Stderr, "\n", err.Error())
 			roerr.fs.Usage()
-			return 2
 		}
-		return 1
+		return 2
 	}
 	return 0
 }
@@ -186,6 +189,7 @@ func runDiffCmd(args []string) error {
 		fs.PrintDefaults()
 	}
 	recursive := fs.Bool("r", false, "diff files recursively.")
+	ignoreSrcEmpty := fs.Bool("ignore-src-empty", false, "ignore diff when source point is empty.")
 	fs.Parse(args)
 
 	if fs.NArg() != 2 {
@@ -196,7 +200,7 @@ func runDiffCmd(args []string) error {
 		}
 	}
 
-	return nil
+	return whispertool.Diff(fs.Arg(0), fs.Arg(1), *recursive, *ignoreSrcEmpty)
 }
 
 const generateCmdUsage = `Usage: %s generate [options] dest.wsp
