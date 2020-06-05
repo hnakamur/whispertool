@@ -24,29 +24,6 @@ func printTimeSeriesPoints(ts []*whisper.TimeSeriesPoint) {
 	}
 }
 
-func readTimeSeriesPointsForAllArchives(filename string, now time.Time) ([][]*whisper.TimeSeriesPoint, error) {
-	oflag := os.O_RDONLY
-	opts := &whisper.Options{OpenFileFlag: &oflag}
-	db, err := whisper.OpenWithOptions(filename, opts)
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
-	untilTime := int(now.Unix())
-	retentions := db.Retentions()
-	tss := make([][]*whisper.TimeSeriesPoint, len(retentions))
-	for i, r := range retentions {
-		fromTime := untilTime - r.MaxRetention()
-		ts, err := db.Fetch(fromTime, untilTime)
-		if err != nil {
-			return nil, err
-		}
-		tss[i] = ts.PointPointers()
-	}
-	return tss, nil
-}
-
 func equalTimeSeriesPointPointers(ts1, ts2 []*whisper.TimeSeriesPoint) bool {
 	if len(ts1) != len(ts2) {
 		return false

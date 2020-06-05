@@ -1,145 +1,81 @@
 package whispertool
 
 import (
-	"encoding/binary"
 	"fmt"
-	"io"
-	"math"
 	"os"
 	"time"
+
+	whisper "github.com/go-graphite/go-whisper"
 )
 
 func View(filename string, raw bool) error {
 	if raw {
 		return viewRaw(filename)
 	}
-	return nil
+	return view(filename)
 }
 
-func viewRaw(filename string) error {
-	f, err := os.Open(filename)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
+type whisperFileData struct {
+	aggMethod    string
+	maxRetention int
+	xFilesFactor float32
+	retentions   []whisper.Retention
+	tss          [][]*whisper.TimeSeriesPoint
+}
 
-	m := &metadata{}
-	err = m.readFrom(f)
+func readWhisperFile(filename string, now time.Time) (*whisperFileData, error) {
+	oflag := os.O_RDONLY
+	opts := &whisper.Options{OpenFileFlag: &oflag}
+	db, err := whisper.OpenWithOptions(filename, opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	fmt.Printf("aggType:%d\tmaxRetention:%s\txFileFactor:%g\tretentionCount:%d\n",
-		m.aggType,
-		secondsToDuration(int64(m.maxRetention)),
-		m.xFilesFactor,
-		m.retentionCount)
+	defer db.Close()
 
-	retentions := make([]retention, m.retentionCount)
-	for i := range retentions {
-		r := &retentions[i]
-		err = r.readFrom(f)
+	untilTime := int(now.Unix())
+	retentions := db.Retentions()
+	tss := make([][]*whisper.TimeSeriesPoint, len(retentions))
+	for i, r := range retentions {
+		fromTime := untilTime - r.MaxRetention()
+		ts, err := db.Fetch(fromTime, untilTime)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		fmt.Printf("retentionDef:%d\tretentionStep:%s\tnumberOfPoints:%d\toffset:%d\n",
+		tss[i] = ts.PointPointers()
+	}
+	return &whisperFileData{
+		aggMethod:    db.AggregationMethod(),
+		maxRetention: db.MaxRetention(),
+		xFilesFactor: db.XFilesFactor(),
+		retentions:   retentions,
+		tss:          tss,
+	}, nil
+}
+
+func view(filename string) error {
+	d, err := readWhisperFile(filename, time.Now())
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("aggMethod:%s\tmaxRetention:%s\txFilesFactor:%g\n",
+		d.aggMethod,
+		secondsToDuration(int64(d.maxRetention)),
+		d.xFilesFactor)
+
+	for i, r := range d.retentions {
+		fmt.Printf("retentionDef:%d\tretentionStep:%s\tnumberOfPoints:%d\tsize:%d\n",
 			i,
-			secondsToDuration(int64(r.secondsPerPoint)),
-			r.numberOfPoints,
-			r.offset)
+			secondsToDuration(int64(r.SecondsPerPoint())),
+			r.NumberOfPoints(),
+			r.Size(),
+		)
 	}
-	dataPoints := make([][]dataPoint, len(retentions))
-	for i := 0; i < len(retentions); i++ {
-		dataPoints[i] = make([]dataPoint, retentions[i].numberOfPoints)
-		for j := 0; j < int(retentions[i].numberOfPoints); j++ {
-			err = dataPoints[i][j].readFrom(f)
-			if err != nil {
-				return err
-			}
-			t := time.Unix(int64(dataPoints[i][j].interval), 0)
+	for i, ts := range d.tss {
+		for j, p := range ts {
 			fmt.Printf("retentionId:%d\tpointId:%d\ttime:%s\tvalue:%g\n",
-				i, j, t.UTC().Format("2006-01-02T15:04:05Z"), dataPoints[i][j].value)
+				i, j, formatTime(secondsToTime(int64(p.Time))), p.Value)
 		}
 	}
 	return nil
-}
-
-type metadata struct {
-	aggType        uint32
-	maxRetention   uint32
-	xFilesFactor   float32
-	retentionCount uint32
-}
-
-func (m *metadata) readFrom(r io.Reader) error {
-	err := binary.Read(r, binary.BigEndian, &m.aggType)
-	if err != nil {
-		return err
-	}
-	err = binary.Read(r, binary.BigEndian, &m.maxRetention)
-	if err != nil {
-		return err
-	}
-	m.xFilesFactor, err = readFloat32From(r)
-	if err != nil {
-		return err
-	}
-	return binary.Read(r, binary.BigEndian, &m.retentionCount)
-}
-
-type retention struct {
-	offset          uint32
-	secondsPerPoint uint32
-	numberOfPoints  uint32
-}
-
-func (rt *retention) readFrom(r io.Reader) error {
-	err := binary.Read(r, binary.BigEndian, &rt.offset)
-	if err != nil {
-		return err
-	}
-	err = binary.Read(r, binary.BigEndian, &rt.secondsPerPoint)
-	if err != nil {
-		return err
-	}
-	return binary.Read(r, binary.BigEndian, &rt.numberOfPoints)
-}
-
-type dataPoint struct {
-	interval uint32
-	value    float64
-}
-
-func (p *dataPoint) readFrom(r io.Reader) error {
-	err := binary.Read(r, binary.BigEndian, &p.interval)
-	if err != nil {
-		return err
-	}
-	v, err := readFloat64From(r)
-	if err != nil {
-		return err
-	}
-	p.value = v
-	return nil
-}
-
-func readFloat32From(r io.Reader) (float32, error) {
-	var intVal uint32
-	err := binary.Read(r, binary.BigEndian, &intVal)
-	if err != nil {
-		return float32(math.NaN()), err
-	}
-	return math.Float32frombits(intVal), nil
-}
-
-func readFloat64From(r io.Reader) (float64, error) {
-	var intVal uint64
-	err := binary.Read(r, binary.BigEndian, &intVal)
-	if err != nil {
-		return math.NaN(), err
-	}
-	return math.Float64frombits(intVal), nil
-}
-
-func secondsToDuration(d int64) time.Duration {
-	return time.Duration(d) * time.Second
 }

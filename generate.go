@@ -7,7 +7,7 @@ import (
 	whisper "github.com/go-graphite/go-whisper"
 )
 
-func Generate(dest string, retentionDefs string, randMax int) error {
+func Generate(dest string, retentionDefs string, fill bool, randMax int) error {
 	retentions, err := whisper.ParseRetentionDefs(retentionDefs)
 	if err != nil {
 		return err
@@ -17,6 +17,10 @@ func Generate(dest string, retentionDefs string, randMax int) error {
 		return err
 	}
 	defer srcDB.Close()
+
+	if !fill {
+		return nil
+	}
 
 	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 	now := time.Now()

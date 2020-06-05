@@ -31,7 +31,7 @@ const globalUsage = `Usage: %s <subcommand> [options]
 
 subcommands:
   diff                Show diff from src to dest whisper files.
-  empty               Copy whisper file and make some empty points in dest file.
+  hole                Copy whisper file and make some holes (empty points) in dest file.
   generate            Generate random whisper file.
   merge               Update empty points with value from src whisper file.
   view                View raw content of whisper file.
@@ -69,10 +69,10 @@ func run() int {
 	switch args[0] {
 	case "diff":
 		err = runDiffCmd(args[1:])
-	case "empty":
-		err = runEmptyCmd(args[1:])
 	case "generate":
 		err = runGenerateCmd(args[1:])
+	case "hole":
+		err = runHoleCmd(args[1:])
 	case "merge":
 		err = runMergeCmd(args[1:])
 	case "view":
@@ -148,15 +148,15 @@ func runMergeCmd(args []string) error {
 	return nil
 }
 
-const emptyCmdUsage = `Usage: %s empty [options] src.wsp dest.wsp
+const holeCmdUsage = `Usage: %s hole [options] src.wsp dest.wsp
 
 options:
 `
 
-func runEmptyCmd(args []string) error {
-	fs := flag.NewFlagSet("empty", flag.ExitOnError)
+func runHoleCmd(args []string) error {
+	fs := flag.NewFlagSet("hole", flag.ExitOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), emptyCmdUsage, cmdName)
+		fmt.Fprintf(fs.Output(), holeCmdUsage, cmdName)
 		fs.PrintDefaults()
 	}
 	emptyRate := fs.Float64("empty-rate", 0.2, "empty rate (0 < r <= 1).")
@@ -166,7 +166,7 @@ func runEmptyCmd(args []string) error {
 		return errNeedsSrcAndDestFilesArg
 	}
 
-	return whispertool.Empty(fs.Arg(0), fs.Arg(1), *emptyRate)
+	return whispertool.Hole(fs.Arg(0), fs.Arg(1), *emptyRate)
 }
 
 const diffCmdUsage = `Usage: %s diff [options] src.wsp dest.wsp
@@ -208,6 +208,7 @@ func runGenerateCmd(args []string) error {
 	}
 	retentionDefs := fs.String("retentions", "1m:2h,1h:2d,1d:30d", "retentions definitions.")
 	randMax := fs.Int("max", 100, "random max value for shortest retention unit.")
+	fill := fs.Bool("fill", true, "fill with random data.")
 	fs.Parse(args)
 
 	if *retentionDefs == "" {
@@ -217,5 +218,5 @@ func runGenerateCmd(args []string) error {
 		return errNeedsOneFileArg
 	}
 
-	return whispertool.Generate(fs.Arg(0), *retentionDefs, *randMax)
+	return whispertool.Generate(fs.Arg(0), *retentionDefs, *fill, *randMax)
 }
