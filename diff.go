@@ -48,7 +48,7 @@ func Diff(src, dest string, recursive, ignoreSrcEmpty bool) error {
 		for _, j := range is {
 			srcPt := srcTs[j]
 			destPt := destTs[j]
-			fmt.Printf("retentionId:%d\ttime:%s\tsrcVal:%g\tdestVal:%g\n",
+			fmt.Printf("retId:%d\tt:%s\tsrcVal:%g\tdestVal:%g\n",
 				i,
 				formatTime(secondsToTime(int64(srcPt.Time))),
 				srcPt.Value,

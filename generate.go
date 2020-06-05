@@ -127,3 +127,34 @@ func randomTimeSeriesPointsForArchives(retentions []*whisper.Retention, until, n
 	}
 	return tss
 }
+
+func createWhisperFile(filename string, d *whisperFileData) error {
+	aggMethod, err := stringToAggregationMethod(d.aggMethod)
+	if err != nil {
+		return err
+	}
+
+	db, err := whisper.Create(filename,
+		retentionSliceToRetentions(d.retentions),
+		aggMethod,
+		d.xFilesFactor)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	return updateWhisperFile(db, d.tss)
+}
+
+func updateWhisperFile(db *whisper.Whisper, tss [][]*whisper.TimeSeriesPoint) error {
+	if tss == nil {
+		return nil
+	}
+	for i, r := range db.Retentions() {
+		err := db.UpdateManyForArchive(tss[i], r.MaxRetention())
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}

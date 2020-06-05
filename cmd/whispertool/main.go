@@ -149,7 +149,7 @@ func runMergeCmd(args []string) error {
 		}
 	}
 
-	return nil
+	return whispertool.Merge(fs.Arg(0), fs.Arg(1), *recursive)
 }
 
 const holeCmdUsage = `Usage: %s hole [options] src.wsp dest.wsp

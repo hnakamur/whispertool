@@ -7,6 +7,8 @@ import (
 	"math"
 	"os"
 	"time"
+
+	whisper "github.com/go-graphite/go-whisper"
 )
 
 func viewRaw(filename string) error {
@@ -21,7 +23,8 @@ func viewRaw(filename string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("aggType:%d\tmaxRetention:%s\txFileFactor:%g\tretentionCount:%d\n",
+	fmt.Printf("aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%g\tretentionCount:%d\n",
+		whisper.AggregationMethod(m.aggType).String(),
 		m.aggType,
 		secondsToDuration(int64(m.maxRetention)),
 		m.xFilesFactor,
@@ -34,7 +37,7 @@ func viewRaw(filename string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("retentionDef:%d\tretentionStep:%s\tnumberOfPoints:%d\toffset:%d\n",
+		fmt.Printf("retentionDef:%d\tstep:%s\tnumberOfPoints:%d\toffset:%d\n",
 			i,
 			secondsToDuration(int64(r.secondsPerPoint)),
 			r.numberOfPoints,
@@ -48,7 +51,7 @@ func viewRaw(filename string) error {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("retentionId:%d\tpointId:%d\ttime:%s\tvalue:%g\n",
+			fmt.Printf("retId:%d\tpointIdx:%d\tt:%s\tval:%g\n",
 				i,
 				j,
 				formatTime(secondsToTime(int64(dataPoints[i][j].interval))),

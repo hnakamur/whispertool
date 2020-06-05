@@ -32,6 +32,10 @@ func readWhisperFile(filename string, now time.Time) (*whisperFileData, error) {
 	}
 	defer db.Close()
 
+	return readWhisperDB(db, now)
+}
+
+func readWhisperDB(db *whisper.Whisper, now time.Time) (*whisperFileData, error) {
 	untilTime := int(now.Unix())
 	retentions := db.Retentions()
 	tss := make([][]*whisper.TimeSeriesPoint, len(retentions))
@@ -64,7 +68,7 @@ func view(filename string) error {
 		d.xFilesFactor)
 
 	for i, r := range d.retentions {
-		fmt.Printf("retentionDef:%d\tretentionStep:%s\tnumberOfPoints:%d\tsize:%d\n",
+		fmt.Printf("retentionDef:%d\tstep:%s\tnumberOfPoints:%d\tsize:%d\n",
 			i,
 			secondsToDuration(int64(r.SecondsPerPoint())),
 			r.NumberOfPoints(),
@@ -77,9 +81,9 @@ func view(filename string) error {
 
 func printTimeSeriesForArchives(tss [][]*whisper.TimeSeriesPoint) {
 	for i, ts := range tss {
-		for j, p := range ts {
-			fmt.Printf("retentionId:%d\tpointId:%d\ttime:%s\tvalue:%g\n",
-				i, j, formatTime(secondsToTime(int64(p.Time))), p.Value)
+		for _, p := range ts {
+			fmt.Printf("retId:%d\tt:%s\tval:%g\n",
+				i, formatTime(secondsToTime(int64(p.Time))), p.Value)
 		}
 	}
 }

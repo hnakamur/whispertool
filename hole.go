@@ -41,33 +41,6 @@ func stringToAggregationMethod(method string) (whisper.AggregationMethod, error)
 	}
 }
 
-func createWhisperFile(filename string, d *whisperFileData) error {
-	aggMethod, err := stringToAggregationMethod(d.aggMethod)
-	if err != nil {
-		return err
-	}
-
-	db, err := whisper.Create(filename,
-		retentionSliceToRetentions(d.retentions),
-		aggMethod,
-		d.xFilesFactor)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	if d.tss == nil {
-		return nil
-	}
-	for i, r := range d.retentions {
-		err := db.UpdateManyForArchive(d.tss[i], r.MaxRetention())
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func emptyRandomPointsInTimeSeriesPoints(ts []*whisper.TimeSeriesPoint, rnd *rand.Rand, empyRate float64) []*whisper.TimeSeriesPoint {
 	var ts2 []*whisper.TimeSeriesPoint
 	for _, p := range ts {
