@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	whisper "github.com/go-graphite/go-whisper"
@@ -52,11 +53,11 @@ func Diff(src, dest string, recursive, ignoreSrcEmpty, showAll bool, now, from, 
 					is = is[1:]
 				}
 				destPt := destTs[j]
-				fmt.Printf("retId:%d\tt:%s\tsrcVal:%g\tdestVal:%g\tdiff:%d\n",
+				fmt.Printf("retId:%d\tt:%s\tsrcVal:%s\tdestVal:%s\tdiff:%d\n",
 					i,
 					formatTime(secondsToTime(int64(srcPt.Time))),
-					srcPt.Value,
-					destPt.Value,
+					strconv.FormatFloat(srcPt.Value, 'f', -1, 64),
+					strconv.FormatFloat(destPt.Value, 'f', -1, 64),
 					diff)
 			}
 		}
@@ -69,11 +70,11 @@ func Diff(src, dest string, recursive, ignoreSrcEmpty, showAll bool, now, from, 
 		for _, j := range is {
 			srcPt := srcTs[j]
 			destPt := destTs[j]
-			fmt.Printf("retId:%d\tt:%s\tsrcVal:%g\tdestVal:%g\n",
+			fmt.Printf("retId:%d\tt:%s\tsrcVal:%s\tdestVal:%s\n",
 				i,
 				formatTime(secondsToTime(int64(srcPt.Time))),
-				srcPt.Value,
-				destPt.Value)
+				strconv.FormatFloat(srcPt.Value, 'f', -1, 64),
+				strconv.FormatFloat(destPt.Value, 'f', -1, 64))
 		}
 	}
 

@@ -3,6 +3,7 @@ package whispertool
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	whisper "github.com/go-graphite/go-whisper"
@@ -87,10 +88,10 @@ func view(filename string, now, from, until time.Time) error {
 		return err
 	}
 
-	fmt.Printf("aggMethod:%s\tmaxRetention:%s\txFilesFactor:%g\n",
+	fmt.Printf("aggMethod:%s\tmaxRetention:%s\txFilesFactor:%s\n",
 		d.aggMethod,
 		secondsToDuration(int64(d.maxRetention)),
-		d.xFilesFactor)
+		strconv.FormatFloat(float64(d.xFilesFactor), 'f', -1, 32))
 
 	for i, r := range d.retentions {
 		fmt.Printf("retentionDef:%d\tstep:%s\tnumberOfPoints:%d\tsize:%d\n",
@@ -121,8 +122,10 @@ func filterTsPointPointersInRange(pts []*whisper.TimeSeriesPoint, from, until in
 func printTimeSeriesForArchives(tss [][]*whisper.TimeSeriesPoint) {
 	for i, ts := range tss {
 		for _, p := range ts {
-			fmt.Printf("retId:%d\tt:%s\tval:%g\n",
-				i, formatTime(secondsToTime(int64(p.Time))), p.Value)
+			fmt.Printf("retId:%d\tt:%s\tval:%s\n",
+				i,
+				formatTime(secondsToTime(int64(p.Time))),
+				strconv.FormatFloat(p.Value, 'f', -1, 64))
 		}
 	}
 }

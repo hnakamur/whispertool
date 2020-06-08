@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"strconv"
 	"time"
 
 	whisper "github.com/go-graphite/go-whisper"
@@ -28,11 +29,11 @@ func viewRaw(filename string, now, from, until time.Time) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%g\tretentionCount:%d\n",
+	fmt.Printf("aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%s\tretentionCount:%d\n",
 		whisper.AggregationMethod(m.aggType).String(),
 		m.aggType,
 		secondsToDuration(int64(m.maxRetention)),
-		m.xFilesFactor,
+		strconv.FormatFloat(float64(m.xFilesFactor), 'f', -1, 32),
 		m.retentionCount)
 
 	retentions := make([]retention, m.retentionCount)
@@ -62,11 +63,11 @@ func viewRaw(filename string, now, from, until time.Time) error {
 				continue
 			}
 
-			fmt.Printf("retId:%d\tpointIdx:%d\tt:%s\tval:%g\n",
+			fmt.Printf("retId:%d\tpointIdx:%d\tt:%s\tval:%s\n",
 				i,
 				j,
 				formatTime(secondsToTime(int64(t))),
-				dataPoints[i][j].value)
+				strconv.FormatFloat(dataPoints[i][j].value, 'f', -1, 64))
 		}
 	}
 	return nil
