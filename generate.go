@@ -90,7 +90,7 @@ func randomValWithHighSum(t time.Time, rnd *rand.Rand, highRndMax int, r, highRe
 		return v
 	}
 	n := int(highStartTime.Sub(t)/time.Second) / highRet.SecondsPerPoint()
-	v2 := float64(n * rnd.Intn(highRndMax))
+	v2 := float64(n * rnd.Intn(highRndMax+1))
 	return v + v2
 }
 
@@ -114,7 +114,7 @@ func randomTimeSeriesPoints(until, now time.Time, r, highRet *whisper.Retention,
 		t := thisUntil.Add(-time.Duration((n-1-i)*step) * time.Second)
 		var v float64
 		if thisHighStartTime.IsZero() || t.Before(thisHighStartTime) {
-			v = float64(rnd.Intn(rndMax))
+			v = float64(rnd.Intn(rndMax + 1))
 		} else {
 			v = randomValWithHighSum(t, rnd, highRndMax, r, highRet, highPts)
 		}
