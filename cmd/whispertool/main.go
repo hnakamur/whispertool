@@ -117,7 +117,7 @@ func run() int {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err.Error())
 		var roerr *requiredOptionError
 		if errors.As(err, &roerr) {
-			fmt.Fprintf(os.Stderr, "\n", err.Error())
+			fmt.Fprintf(os.Stderr, "\n")
 			roerr.fs.Usage()
 		}
 		return 2
@@ -172,7 +172,7 @@ options:
 func runMergeCmd(args []string) error {
 	fs := flag.NewFlagSet("merge", flag.ExitOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), mergeCmdUsage, cmdName)
+		fmt.Fprintf(fs.Output(), mergeCmdUsage, cmdName, cmdName)
 		fs.PrintDefaults()
 	}
 
@@ -211,7 +211,7 @@ options:
 func runSumCmd(args []string) error {
 	fs := flag.NewFlagSet("sum", flag.ExitOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), sumCmdUsage, cmdName)
+		fmt.Fprintf(fs.Output(), sumCmdUsage, cmdName, cmdName)
 		fs.PrintDefaults()
 	}
 
@@ -274,7 +274,7 @@ options:
 func runDiffCmd(args []string) error {
 	fs := flag.NewFlagSet("diff", flag.ExitOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), diffCmdUsage, cmdName)
+		fmt.Fprintf(fs.Output(), diffCmdUsage, cmdName, cmdName)
 		fs.PrintDefaults()
 	}
 	recursive := fs.Bool("r", false, "diff files recursively.")
