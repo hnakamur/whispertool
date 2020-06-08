@@ -50,12 +50,7 @@ func readWhisperDB(db *whisper.Whisper, now, from, until time.Time) (*whisperFil
 	for i, r := range retentions {
 		fetchFrom := fromUnix
 		step := r.SecondsPerPoint()
-		//minFrom := int(alignUnixTime(int64(nowUnix-r.MaxRetention()), step))
 		minFrom := nowUnix - r.MaxRetention()
-		fmt.Fprintf(os.Stderr, "before adjust, fetchFrom=%s, minFrom=%s, highMinFrom=%s\n",
-			formatTime(secondsToTime(int64(fetchFrom))),
-			formatTime(secondsToTime(int64(minFrom))),
-			formatTime(secondsToTime(int64(highMinFrom))))
 		if fetchFrom < minFrom {
 			fetchFrom = minFrom
 		} else if highMinFrom <= fetchFrom {
@@ -64,8 +59,6 @@ func readWhisperDB(db *whisper.Whisper, now, from, until time.Time) (*whisperFil
 				fetchFrom -= step
 			}
 		}
-		fmt.Fprintf(os.Stderr, "after adjust, fetchFrom=%s\n",
-			formatTime(secondsToTime(int64(fetchFrom))))
 		if fetchFrom <= untilUnix {
 			ts, err := db.Fetch(fetchFrom, untilUnix)
 			if err != nil {

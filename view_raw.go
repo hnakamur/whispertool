@@ -14,9 +14,6 @@ import (
 const UTCTimeLayout = "2006-01-02T15:04:05Z"
 
 func viewRaw(filename string, now, from, until time.Time) error {
-	fmt.Printf("viewRaw start, from=%s, until=%s\n",
-		formatTime(from),
-		formatTime(until))
 	fromUnix := uint32(from.Unix())
 	untilUnix := uint32(until.Unix())
 
