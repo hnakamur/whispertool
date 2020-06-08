@@ -14,7 +14,10 @@ func Merge(src, dest string, recursive bool, now, from, until time.Time) error {
 		return errors.New("recursive option not implemented yet")
 	}
 
-	srcData, err := readWhisperFile(src, now, from, until)
+	readFrom := time.Unix(0, 0)
+	readUntil := now
+
+	srcData, err := readWhisperFile(src, now, readFrom, readUntil)
 	if err != nil {
 		return err
 	}
@@ -26,7 +29,7 @@ func Merge(src, dest string, recursive bool, now, from, until time.Time) error {
 	}
 	defer destDB.Close()
 
-	destData, err := readWhisperDB(destDB, now, from, until)
+	destData, err := readWhisperDB(destDB, now, readFrom, readUntil)
 	if err != nil {
 		return err
 	}
@@ -41,11 +44,11 @@ func Merge(src, dest string, recursive bool, now, from, until time.Time) error {
 			"Resize the input before diffing", src, dest)
 	}
 
-	tss := buildMultiTimeSeriesPointsPointersForMerge(srcData.tss, destData.tss, srcData.retentions)
+	tss := buildMultiTimeSeriesPointsPointersForMerge(srcData.tss, destData.tss, int(from.Unix()), int(until.Unix()), srcData.retentions)
 	return updateWhisperFile(destDB, tss)
 }
 
-func buildTimeSeriesPointsPointersForMerge(srcTs, destTs []*whisper.TimeSeriesPoint, propagatedTs []int64) []*whisper.TimeSeriesPoint {
+func buildTimeSeriesPointsPointersForMerge(srcTs, destTs []*whisper.TimeSeriesPoint, from, until int, propagatedTs []int64) []*whisper.TimeSeriesPoint {
 	var ts []*whisper.TimeSeriesPoint
 	for i, srcPt := range srcTs {
 		var propagateCopy bool
@@ -53,8 +56,11 @@ func buildTimeSeriesPointsPointersForMerge(srcTs, destTs []*whisper.TimeSeriesPo
 			propagateCopy = true
 			propagatedTs = propagatedTs[1:]
 		}
-		if (math.IsNaN(destTs[i].Value) || propagateCopy) && !math.IsNaN(srcPt.Value) {
+		if ((from <= srcPt.Time && math.IsNaN(destTs[i].Value)) || propagateCopy) && !math.IsNaN(srcPt.Value) {
 			ts = append(ts, srcPt)
+		}
+		if until < srcPt.Time {
+			break
 		}
 	}
 	return ts
@@ -63,7 +69,7 @@ func buildTimeSeriesPointsPointersForMerge(srcTs, destTs []*whisper.TimeSeriesPo
 func buildPropagatedTs(highTs []*whisper.TimeSeriesPoint, step int) []int64 {
 	var ts []int64
 	for _, highPt := range highTs {
-		t := alignTime(secondsToTime(int64(highPt.Time)), step).Unix()
+		t := alignUnixTime(int64(highPt.Time), step)
 		if len(ts) == 0 || ts[len(ts)-1] != t {
 			ts = append(ts, t)
 		}
@@ -71,14 +77,14 @@ func buildPropagatedTs(highTs []*whisper.TimeSeriesPoint, step int) []int64 {
 	return ts
 }
 
-func buildMultiTimeSeriesPointsPointersForMerge(srcTss, destTss [][]*whisper.TimeSeriesPoint, retentions []whisper.Retention) [][]*whisper.TimeSeriesPoint {
+func buildMultiTimeSeriesPointsPointersForMerge(srcTss, destTss [][]*whisper.TimeSeriesPoint, from, until int, retentions []whisper.Retention) [][]*whisper.TimeSeriesPoint {
 	var propagatedTs []int64
 	tss := make([][]*whisper.TimeSeriesPoint, len(srcTss))
 	for i, srcTs := range srcTss {
 		if i > 0 {
 			propagatedTs = buildPropagatedTs(tss[i-1], retentions[i].SecondsPerPoint())
 		}
-		tss[i] = buildTimeSeriesPointsPointersForMerge(srcTs, destTss[i], propagatedTs)
+		tss[i] = buildTimeSeriesPointsPointersForMerge(srcTs, destTss[i], from, until, propagatedTs)
 	}
 	return tss
 }

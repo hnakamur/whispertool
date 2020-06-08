@@ -9,13 +9,15 @@ import (
 )
 
 func Hole(src, dest string, emptyRate float64, now, from, until time.Time) error {
-	d, err := readWhisperFile(src, now, from, until)
+	readFrom := time.Unix(0, 0)
+	readUntil := now
+	d, err := readWhisperFile(src, now, readFrom, readUntil)
 	if err != nil {
 		return err
 	}
 
 	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
-	emptyRandomPointsInTimeSeriesPointsForAllArchives(d.tss, rnd, emptyRate)
+	emptyRandomPointsInTimeSeriesPointsForAllArchives(d.tss, rnd, emptyRate, from, until, d.retentions)
 	return createWhisperFile(dest, d)
 }
 
@@ -40,10 +42,13 @@ func stringToAggregationMethod(method string) (whisper.AggregationMethod, error)
 	}
 }
 
-func emptyRandomPointsInTimeSeriesPoints(ts []*whisper.TimeSeriesPoint, rnd *rand.Rand, empyRate float64) []*whisper.TimeSeriesPoint {
+func emptyRandomPointsInTimeSeriesPoints(ts []*whisper.TimeSeriesPoint, rnd *rand.Rand, empyRate float64, from, until time.Time, retention whisper.Retention) []*whisper.TimeSeriesPoint {
 	var ts2 []*whisper.TimeSeriesPoint
+	step := retention.SecondsPerPoint()
+	fromSec := int(alignUnixTime(from.Unix(), step))
+	untilSec := int(alignUnixTime(until.Unix(), step))
 	for _, p := range ts {
-		if rnd.Float64() < empyRate {
+		if fromSec <= p.Time && p.Time <= untilSec && rnd.Float64() < empyRate {
 			continue
 		}
 		ts2 = append(ts2, &whisper.TimeSeriesPoint{
@@ -54,8 +59,8 @@ func emptyRandomPointsInTimeSeriesPoints(ts []*whisper.TimeSeriesPoint, rnd *ran
 	return ts2
 }
 
-func emptyRandomPointsInTimeSeriesPointsForAllArchives(tss [][]*whisper.TimeSeriesPoint, rnd *rand.Rand, emptyRate float64) {
+func emptyRandomPointsInTimeSeriesPointsForAllArchives(tss [][]*whisper.TimeSeriesPoint, rnd *rand.Rand, emptyRate float64, from, until time.Time, retentions []whisper.Retention) {
 	for i, ts := range tss {
-		tss[i] = emptyRandomPointsInTimeSeriesPoints(ts, rnd, emptyRate)
+		tss[i] = emptyRandomPointsInTimeSeriesPoints(ts, rnd, emptyRate, from, until, retentions[i])
 	}
 }
