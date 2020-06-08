@@ -101,7 +101,7 @@ func valueEqualTimeSeriesPoint(src, dest *whisper.TimeSeriesPoint, ignoreSrcEmpt
 
 	destVal := dest.Value
 	destIsNaN := math.IsNaN(destVal)
-	return srcIsNaN && destIsNaN ||
+	return (srcIsNaN && destIsNaN) ||
 		(!srcIsNaN && !destIsNaN && srcVal == destVal)
 }
 
