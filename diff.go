@@ -11,18 +11,17 @@ import (
 
 var ErrDiffFound = errors.New("diff found")
 
-func Diff(src, dest string, recursive, ignoreSrcEmpty, showAll bool) error {
+func Diff(src, dest string, recursive, ignoreSrcEmpty, showAll bool, now, from, until time.Time) error {
 	if recursive {
 		return errors.New("recursive option not implemented yet")
 	}
 
-	now := time.Now()
-	srcData, err := readWhisperFile(src, now)
+	srcData, err := readWhisperFile(src, now, from, until)
 	if err != nil {
 		return err
 	}
 
-	destData, err := readWhisperFile(dest, now)
+	destData, err := readWhisperFile(dest, now, from, until)
 	if err != nil {
 		return err
 	}

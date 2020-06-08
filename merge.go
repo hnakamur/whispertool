@@ -9,13 +9,12 @@ import (
 	whisper "github.com/go-graphite/go-whisper"
 )
 
-func Merge(src, dest string, recursive bool) error {
+func Merge(src, dest string, recursive bool, now, from, until time.Time) error {
 	if recursive {
 		return errors.New("recursive option not implemented yet")
 	}
 
-	now := time.Now()
-	srcData, err := readWhisperFile(src, now)
+	srcData, err := readWhisperFile(src, now, from, until)
 	if err != nil {
 		return err
 	}
@@ -27,7 +26,7 @@ func Merge(src, dest string, recursive bool) error {
 	}
 	defer destDB.Close()
 
-	destData, err := readWhisperDB(destDB, now)
+	destData, err := readWhisperDB(destDB, now, from, until)
 	if err != nil {
 		return err
 	}

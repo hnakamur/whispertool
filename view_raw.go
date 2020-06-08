@@ -11,7 +11,15 @@ import (
 	whisper "github.com/go-graphite/go-whisper"
 )
 
-func viewRaw(filename string) error {
+const UTCTimeLayout = "2006-01-02T15:04:05Z"
+
+func viewRaw(filename string, now, from, until time.Time) error {
+	fmt.Printf("viewRaw start, from=%s, until=%s\n",
+		formatTime(from),
+		formatTime(until))
+	fromUnix := uint32(from.Unix())
+	untilUnix := uint32(until.Unix())
+
 	f, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -51,10 +59,16 @@ func viewRaw(filename string) error {
 			if err != nil {
 				return err
 			}
+
+			t := dataPoints[i][j].interval
+			if t < fromUnix || untilUnix < t {
+				continue
+			}
+
 			fmt.Printf("retId:%d\tpointIdx:%d\tt:%s\tval:%g\n",
 				i,
 				j,
-				formatTime(secondsToTime(int64(dataPoints[i][j].interval))),
+				formatTime(secondsToTime(int64(t))),
 				dataPoints[i][j].value)
 		}
 	}
@@ -147,5 +161,5 @@ func secondsToTime(t int64) time.Time {
 }
 
 func formatTime(t time.Time) string {
-	return t.UTC().Format("2006-01-02T15:04:05Z")
+	return t.UTC().Format(UTCTimeLayout)
 }

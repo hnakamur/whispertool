@@ -48,8 +48,12 @@ func retentionSliceToRetentions(retentions []whisper.Retention) whisper.Retentio
 	return retentions2
 }
 
+func alignUnixTime(t int64, secondsPerPoint int) int64 {
+	return t - t%int64(secondsPerPoint)
+}
+
 func alignTime(t time.Time, secondsPerPoint int) time.Time {
-	return time.Unix(t.Unix()-t.Unix()%int64(secondsPerPoint), 0)
+	return time.Unix(alignUnixTime(t.Unix(), secondsPerPoint), 0)
 }
 
 func randomValWithHighSum(t time.Time, rnd *rand.Rand, highRndMax int, r, highRet *whisper.Retention, highPts []*whisper.TimeSeriesPoint) float64 {

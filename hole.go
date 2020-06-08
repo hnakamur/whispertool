@@ -8,9 +8,8 @@ import (
 	whisper "github.com/go-graphite/go-whisper"
 )
 
-func Hole(src, dest string, emptyRate float64) error {
-	now := time.Now()
-	d, err := readWhisperFile(src, now)
+func Hole(src, dest string, emptyRate float64, now, from, until time.Time) error {
+	d, err := readWhisperFile(src, now, from, until)
 	if err != nil {
 		return err
 	}
