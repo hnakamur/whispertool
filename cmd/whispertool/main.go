@@ -37,6 +37,7 @@ subcommands:
   hole                Copy whisper file and make some holes (empty points) in dest file.
   generate            Generate random whisper file.
   merge               Update empty points with value from src whisper file.
+  sum                 Sum value of whisper files.
   view                View raw content of whisper file.
   version             Show version
 
@@ -98,6 +99,8 @@ func run() int {
 		err = runHoleCmd(args[1:])
 	case "merge":
 		err = runMergeCmd(args[1:])
+	case "sum":
+		err = runSumCmd(args[1:])
 	case "view":
 		err = runViewCmd(args[1:])
 	case "version":
@@ -197,6 +200,33 @@ func runMergeCmd(args []string) error {
 	}
 
 	return whispertool.Merge(fs.Arg(0), fs.Arg(1), *recursive, now, from, until)
+}
+
+const sumCmdUsage = `Usage: %s sum [options] src.wsp dest.wsp
+       %s sum [options] srcDir destDir
+
+options:
+`
+
+func runSumCmd(args []string) error {
+	fs := flag.NewFlagSet("sum", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), sumCmdUsage, cmdName)
+		fs.PrintDefaults()
+	}
+
+	src := fs.String("src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
+	dest := fs.String("dest", "", "dest whisper filename (ex. dest.wsp).")
+	fs.Parse(args)
+
+	if *src == "" {
+		return newRequiredOptionError(fs, "src")
+	}
+	if *dest == "" {
+		return newRequiredOptionError(fs, "dest")
+	}
+
+	return whispertool.Sum(*src, *dest)
 }
 
 const holeCmdUsage = `Usage: %s hole [options] src.wsp dest.wsp
