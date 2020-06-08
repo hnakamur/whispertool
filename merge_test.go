@@ -2,6 +2,7 @@ package whispertool_test
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -134,16 +135,30 @@ func TestMerge(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
+			emptyRate := tc.emptyRate
+			now := time.Now().UTC()
+			from := tc.fromFn(now)
+			until := tc.untilFn(now)
+
 			dir, err := ioutil.TempDir("", "whispertool_test")
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() {
-				os.RemoveAll(dir)
-			})
-
 			srcFilename := filepath.Join(dir, "src.wsp")
 			destFilename := filepath.Join(dir, "dest.wsp")
+			t.Cleanup(func() {
+				if err == nil {
+					os.RemoveAll(dir)
+				} else {
+					fmt.Printf("We left dir=%s for you to investigate. Please delete it yourself after investigation.  For convenience, here is command to see diff:\nwhispertool diff -from=%s -until=%s %s %s\n",
+						dir,
+						from.Format(whispertool.UTCTimeLayout),
+						until.Format(whispertool.UTCTimeLayout),
+						srcFilename,
+						destFilename,
+					)
+				}
+			})
 
 			const retentionDefs = "1m:2h,1h:2d,1d:30d"
 			const fill = true
@@ -153,10 +168,6 @@ func TestMerge(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			emptyRate := tc.emptyRate
-			now := time.Now()
-			from := tc.fromFn(now)
-			until := tc.untilFn(now)
 			err = whispertool.Hole(srcFilename, destFilename, emptyRate, now, from, until)
 			if err != nil {
 				t.Fatal(err)
