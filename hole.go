@@ -16,7 +16,7 @@ func Hole(src, dest string, emptyRate float64, now, from, until time.Time) error
 		return err
 	}
 
-	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rnd := rand.New(rand.NewSource(newRandSeed()))
 	emptyRandomPointsInTimeSeriesPointsForAllArchives(d.tss, rnd, emptyRate, from, until, d.retentions)
 	return createWhisperFile(dest, d)
 }

@@ -1,6 +1,8 @@
 package whispertool
 
 import (
+	crand "crypto/rand"
+	"encoding/binary"
 	"math/rand"
 	"time"
 
@@ -20,7 +22,7 @@ func Generate(dest string, retentionDefs string, fill bool, randMax int) error {
 	}
 
 	if fill {
-		rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+		rnd := rand.New(rand.NewSource(newRandSeed()))
 		now := time.Now()
 		until := now
 		d.tss = randomTimeSeriesPointsForArchives(retentions, until, now,
@@ -28,6 +30,14 @@ func Generate(dest string, retentionDefs string, fill bool, randMax int) error {
 	}
 
 	return createWhisperFile(dest, d)
+}
+
+func newRandSeed() int64 {
+	var b [8]byte
+	if _, err := crand.Read(b[:]); err != nil {
+		return time.Now().UnixNano()
+	}
+	return int64(binary.BigEndian.Uint64(b[:]))
 }
 
 func retentionsToRetentionSlice(retentions whisper.Retentions) []whisper.Retention {
