@@ -64,7 +64,11 @@ func readWhisperDB(db *whisper.Whisper, now, from, until time.Time) (*whisperFil
 			if err != nil {
 				return nil, err
 			}
-			tss[i] = filterTsPointPointersInRange(ts.PointPointers(), fromUnix, untilUnix)
+			if fromUnix < fetchFrom {
+				tss[i] = filterTsPointPointersInRange(ts.PointPointers(), fromUnix, untilUnix)
+			} else {
+				tss[i] = ts.PointPointers()
+			}
 		}
 		highMinFrom = minFrom
 	}
