@@ -39,6 +39,8 @@ func readWhisperFile(filename string, now, from, until time.Time) (*whisperFileD
 }
 
 func readWhisperDB(db *whisper.Whisper, now, from, until time.Time) (*whisperFileData, error) {
+	//log.Printf("readWhisperDB start, from=%s, until=%s",
+	//	formatTime(from), formatTime(until))
 	nowUnix := int(now.Unix())
 	fromUnix := int(from.Unix())
 
@@ -54,22 +56,37 @@ func readWhisperDB(db *whisper.Whisper, now, from, until time.Time) (*whisperFil
 		fetchFrom := fromUnix
 		step := r.SecondsPerPoint()
 		minFrom := nowUnix - r.MaxRetention()
+		//log.Printf("retentionId=%d, fromUnix=%s, untilUnix=%s, minFrom=%s",
+		//	i,
+		//	formatTime(secondsToTime(int64(fromUnix))),
+		//	formatTime(secondsToTime(int64(untilUnix))),
+		//	formatTime(secondsToTime(int64(minFrom))))
 		if fetchFrom < minFrom {
+			//log.Printf("adjust fetchFrom to minFrom")
 			fetchFrom = minFrom
 		} else if highMinFrom <= fetchFrom {
 			fetchFrom = int(alignUnixTime(int64(highMinFrom), step))
 			if fetchFrom == highMinFrom {
 				fetchFrom -= step
 			}
+			//log.Printf("adjust fetchFrom to %s",
+			//	formatTime(secondsToTime(int64(fetchFrom))))
 		}
 		if fetchFrom <= untilUnix {
+			//log.Printf("calling db.Fetch with fetchFrom=%s, untilUnix=%s",
+			//	formatTime(secondsToTime(int64(fetchFrom))),
+			//	formatTime(secondsToTime(int64(untilUnix))))
 			ts, err := db.Fetch(fetchFrom, untilUnix)
 			if err != nil {
 				return nil, err
 			}
-			if fromUnix < fetchFrom {
+			if fetchFrom < fromUnix {
+				//log.Printf("calling filterTsPointPointersInRange with fromUnix=%s, untilUnix=%s",
+				//	formatTime(secondsToTime(int64(fromUnix))),
+				//	formatTime(secondsToTime(int64(untilUnix))))
 				tss[i] = filterTsPointPointersInRange(ts.PointPointers(), fromUnix, untilUnix)
 			} else {
+				//log.Printf("use ts.PointPointers as is")
 				tss[i] = ts.PointPointers()
 			}
 		}
