@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strconv"
 	"time"
@@ -40,8 +39,8 @@ func readWhisperFile(filename string, now, from, until time.Time) (*whisperFileD
 }
 
 func readWhisperDB(db *whisper.Whisper, now, from, until time.Time) (*whisperFileData, error) {
-	log.Printf("readWhisperDB start, from=%s, until=%s",
-		formatTime(from), formatTime(until))
+	//log.Printf("readWhisperDB start, from=%s, until=%s",
+	//	formatTime(from), formatTime(until))
 	nowUnix := int(now.Unix())
 	fromUnix := int(from.Unix())
 
@@ -58,21 +57,21 @@ func readWhisperDB(db *whisper.Whisper, now, from, until time.Time) (*whisperFil
 		fetchUntil := untilUnix
 		step := r.SecondsPerPoint()
 		minFrom := nowUnix - r.MaxRetention()
-		log.Printf("retentionId=%d, fromUnix=%s, untilUnix=%s, minFrom=%s",
-			i,
-			formatTime(secondsToTime(int64(fromUnix))),
-			formatTime(secondsToTime(int64(untilUnix))),
-			formatTime(secondsToTime(int64(minFrom))))
+		//log.Printf("retentionId=%d, fromUnix=%s, untilUnix=%s, minFrom=%s",
+		//	i,
+		//	formatTime(secondsToTime(int64(fromUnix))),
+		//	formatTime(secondsToTime(int64(untilUnix))),
+		//	formatTime(secondsToTime(int64(minFrom))))
 		if fetchFrom < minFrom {
-			log.Printf("adjust fetchFrom to minFrom")
+			//log.Printf("adjust fetchFrom to minFrom")
 			fetchFrom = minFrom
 		} else if highMinFrom <= fetchFrom {
 			fetchFrom = int(alignUnixTime(int64(highMinFrom), step))
 			if fetchFrom == highMinFrom {
 				fetchFrom -= step
 			}
-			log.Printf("adjust fetchFrom to %s",
-				formatTime(secondsToTime(int64(fetchFrom))))
+			//log.Printf("adjust fetchFrom to %s",
+			//	formatTime(secondsToTime(int64(fetchFrom))))
 		} else {
 			// NOTE: We need to adjust from and until by subtracting step
 			// since step is added to from and until in
@@ -90,26 +89,26 @@ func readWhisperDB(db *whisper.Whisper, now, from, until time.Time) (*whisperFil
 			fetchUntil -= step
 		}
 		if fetchFrom <= fetchUntil {
-			log.Printf("calling db.Fetch with fetchFrom=%s, fetchUntil=%s",
-				formatTime(secondsToTime(int64(fetchFrom))),
-				formatTime(secondsToTime(int64(fetchUntil))))
+			//log.Printf("calling db.Fetch with fetchFrom=%s, fetchUntil=%s",
+			//	formatTime(secondsToTime(int64(fetchFrom))),
+			//	formatTime(secondsToTime(int64(fetchUntil))))
 			ts, err := db.Fetch(fetchFrom, fetchUntil)
 			if err != nil {
 				return nil, err
 			}
-			for i, pt := range ts.PointPointers() {
-				log.Printf("i=%d, pt.Time=%s, pt.Value=%s",
-					i,
-					formatTime(secondsToTime(int64(pt.Time))),
-					strconv.FormatFloat(pt.Value, 'f', -1, 64))
-			}
+			//for i, pt := range ts.PointPointers() {
+			//	log.Printf("i=%d, pt.Time=%s, pt.Value=%s",
+			//		i,
+			//		formatTime(secondsToTime(int64(pt.Time))),
+			//		strconv.FormatFloat(pt.Value, 'f', -1, 64))
+			//}
 			if fetchFrom < fromUnix {
-				log.Printf("calling filterTsPointPointersInRange with fromUnix=%s, untilUnix=%s",
-					formatTime(secondsToTime(int64(fromUnix))),
-					formatTime(secondsToTime(int64(untilUnix))))
+				//log.Printf("calling filterTsPointPointersInRange with fromUnix=%s, untilUnix=%s",
+				//	formatTime(secondsToTime(int64(fromUnix))),
+				//	formatTime(secondsToTime(int64(untilUnix))))
 				tss[i] = filterTsPointPointersInRange(ts.PointPointers(), fromUnix, untilUnix)
 			} else {
-				log.Printf("use ts.PointPointers as is")
+				//log.Printf("use ts.PointPointers as is")
 				tss[i] = ts.PointPointers()
 			}
 		}
