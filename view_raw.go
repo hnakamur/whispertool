@@ -14,7 +14,7 @@ import (
 
 const UTCTimeLayout = "2006-01-02T15:04:05Z"
 
-func viewRaw(filename string, now, from, until time.Time, retId int) error {
+func viewRaw(filename string, now, from, until time.Time, retId int, showHeader bool) error {
 	fromUnix := uint32(from.Unix())
 	untilUnix := uint32(until.Unix())
 
@@ -29,12 +29,14 @@ func viewRaw(filename string, now, from, until time.Time, retId int) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%s\tretentionCount:%d\n",
-		whisper.AggregationMethod(m.aggType).String(),
-		m.aggType,
-		secondsToDuration(int64(m.maxRetention)),
-		strconv.FormatFloat(float64(m.xFilesFactor), 'f', -1, 32),
-		m.retentionCount)
+	if showHeader {
+		fmt.Printf("aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%s\tretentionCount:%d\n",
+			whisper.AggregationMethod(m.aggType).String(),
+			m.aggType,
+			secondsToDuration(int64(m.maxRetention)),
+			strconv.FormatFloat(float64(m.xFilesFactor), 'f', -1, 32),
+			m.retentionCount)
+	}
 
 	retentions := make([]retention, m.retentionCount)
 	for i := range retentions {
@@ -43,11 +45,13 @@ func viewRaw(filename string, now, from, until time.Time, retId int) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("retentionDef:%d\tstep:%s\tnumberOfPoints:%d\toffset:%d\n",
-			i,
-			secondsToDuration(int64(r.secondsPerPoint)),
-			r.numberOfPoints,
-			r.offset)
+		if showHeader {
+			fmt.Printf("retentionDef:%d\tstep:%s\tnumberOfPoints:%d\toffset:%d\n",
+				i,
+				secondsToDuration(int64(r.secondsPerPoint)),
+				r.numberOfPoints,
+				r.offset)
+		}
 	}
 	dataPoints := make([][]dataPoint, len(retentions))
 	for i := 0; i < len(retentions); i++ {

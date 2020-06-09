@@ -29,7 +29,7 @@ func Generate(dest string, retentionDefs string, fill bool, randMax int, textOut
 			rnd, randMax)
 	}
 
-	if err = writeWhisperFileData(textOut, d); err != nil {
+	if err = writeWhisperFileData(textOut, d, true); err != nil {
 		return err
 	}
 

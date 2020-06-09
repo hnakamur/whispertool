@@ -152,6 +152,7 @@ func runViewCmd(args []string) error {
 	until := now
 	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to print (-1 for all retentions)")
+	showHeader := fs.Bool("show-header", true, "whether or not to show header (metadata and reteions)")
 	fs.Parse(args)
 
 	if fs.NArg() != 1 {
@@ -161,7 +162,7 @@ func runViewCmd(args []string) error {
 		return errFromIsAfterUntil
 	}
 
-	return whispertool.View(fs.Arg(0), *raw, now, from, until, *retId)
+	return whispertool.View(fs.Arg(0), *raw, now, from, until, *retId, *showHeader)
 }
 
 const mergeCmdUsage = `Usage: %s merge [options] src.wsp dest.wsp

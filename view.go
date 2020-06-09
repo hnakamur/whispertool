@@ -13,11 +13,11 @@ import (
 
 const RetIdAll = -1
 
-func View(filename string, raw bool, now, from, until time.Time, retId int) error {
+func View(filename string, raw bool, now, from, until time.Time, retId int, showHeader bool) error {
 	if raw {
-		return viewRaw(filename, now, from, until, retId)
+		return viewRaw(filename, now, from, until, retId, showHeader)
 	}
-	return view(filename, now, from, until, retId)
+	return view(filename, now, from, until, retId, showHeader)
 }
 
 type whisperFileData struct {
@@ -128,13 +128,13 @@ func readWhisperDB(db *whisper.Whisper, now, from, until time.Time, retId int) (
 	}, nil
 }
 
-func view(filename string, now, from, until time.Time, retId int) error {
+func view(filename string, now, from, until time.Time, retId int, showHeader bool) error {
 	d, err := readWhisperFile(filename, now, from, until, retId)
 	if err != nil {
 		return err
 	}
 
-	return d.WriteTo(os.Stdout)
+	return d.WriteTo(os.Stdout, showHeader)
 }
 
 func filterTsPointPointersInRange(pts []*whisper.TimeSeriesPoint, from, until int) []*whisper.TimeSeriesPoint {
@@ -151,13 +151,13 @@ func filterTsPointPointersInRange(pts []*whisper.TimeSeriesPoint, from, until in
 	return pts2
 }
 
-func writeWhisperFileData(textOut string, d *whisperFileData) error {
+func writeWhisperFileData(textOut string, d *whisperFileData, showHeader bool) error {
 	if textOut == "" {
 		return nil
 	}
 
 	if textOut == "-" {
-		return d.WriteTo(os.Stdout)
+		return d.WriteTo(os.Stdout, showHeader)
 	}
 
 	file, err := os.Create(textOut)
@@ -166,7 +166,7 @@ func writeWhisperFileData(textOut string, d *whisperFileData) error {
 	}
 	defer file.Close()
 
-	err = d.WriteTo(bufio.NewWriter(file))
+	err = d.WriteTo(bufio.NewWriter(file), showHeader)
 	if err != nil {
 		return err
 	}
@@ -178,24 +178,26 @@ func writeWhisperFileData(textOut string, d *whisperFileData) error {
 	return nil
 }
 
-func (d *whisperFileData) WriteTo(w io.Writer) error {
-	_, err := fmt.Fprintf(w, "aggMethod:%s\tmaxRetention:%s\txFilesFactor:%s\n",
-		d.aggMethod,
-		secondsToDuration(int64(d.maxRetention)),
-		strconv.FormatFloat(float64(d.xFilesFactor), 'f', -1, 32))
-	if err != nil {
-		return err
-	}
-
-	for i, r := range d.retentions {
-		_, err := fmt.Fprintf(w, "retentionDef:%d\tstep:%s\tnumberOfPoints:%d\tsize:%d\n",
-			i,
-			secondsToDuration(int64(r.SecondsPerPoint())),
-			r.NumberOfPoints(),
-			r.Size(),
-		)
+func (d *whisperFileData) WriteTo(w io.Writer, showHeader bool) error {
+	if showHeader {
+		_, err := fmt.Fprintf(w, "aggMethod:%s\tmaxRetention:%s\txFilesFactor:%s\n",
+			d.aggMethod,
+			secondsToDuration(int64(d.maxRetention)),
+			strconv.FormatFloat(float64(d.xFilesFactor), 'f', -1, 32))
 		if err != nil {
 			return err
+		}
+
+		for i, r := range d.retentions {
+			_, err := fmt.Fprintf(w, "retentionDef:%d\tstep:%s\tnumberOfPoints:%d\tsize:%d\n",
+				i,
+				secondsToDuration(int64(r.SecondsPerPoint())),
+				r.NumberOfPoints(),
+				r.Size(),
+			)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return writeTimeSeriesForArchives(w, d.tss)
