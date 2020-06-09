@@ -1,7 +1,9 @@
 package whispertool
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"time"
@@ -88,21 +90,7 @@ func view(filename string, now, from, until time.Time) error {
 		return err
 	}
 
-	fmt.Printf("aggMethod:%s\tmaxRetention:%s\txFilesFactor:%s\n",
-		d.aggMethod,
-		secondsToDuration(int64(d.maxRetention)),
-		strconv.FormatFloat(float64(d.xFilesFactor), 'f', -1, 32))
-
-	for i, r := range d.retentions {
-		fmt.Printf("retentionDef:%d\tstep:%s\tnumberOfPoints:%d\tsize:%d\n",
-			i,
-			secondsToDuration(int64(r.SecondsPerPoint())),
-			r.NumberOfPoints(),
-			r.Size(),
-		)
-	}
-	printTimeSeriesForArchives(d.tss)
-	return nil
+	return d.WriteTo(os.Stdout)
 }
 
 func filterTsPointPointersInRange(pts []*whisper.TimeSeriesPoint, from, until int) []*whisper.TimeSeriesPoint {
@@ -119,13 +107,67 @@ func filterTsPointPointersInRange(pts []*whisper.TimeSeriesPoint, from, until in
 	return pts2
 }
 
-func printTimeSeriesForArchives(tss [][]*whisper.TimeSeriesPoint) {
+func writeWhisperFileData(textOut string, d *whisperFileData) error {
+	if textOut == "" {
+		return nil
+	}
+
+	if textOut == "-" {
+		return d.WriteTo(os.Stdout)
+	}
+
+	file, err := os.Create(textOut)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	err = d.WriteTo(bufio.NewWriter(file))
+	if err != nil {
+		return err
+	}
+
+	err = file.Sync()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *whisperFileData) WriteTo(w io.Writer) error {
+	_, err := fmt.Fprintf(w, "aggMethod:%s\tmaxRetention:%s\txFilesFactor:%s\n",
+		d.aggMethod,
+		secondsToDuration(int64(d.maxRetention)),
+		strconv.FormatFloat(float64(d.xFilesFactor), 'f', -1, 32))
+	if err != nil {
+		return err
+	}
+
+	for i, r := range d.retentions {
+		_, err := fmt.Fprintf(w, "retentionDef:%d\tstep:%s\tnumberOfPoints:%d\tsize:%d\n",
+			i,
+			secondsToDuration(int64(r.SecondsPerPoint())),
+			r.NumberOfPoints(),
+			r.Size(),
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return writeTimeSeriesForArchives(w, d.tss)
+}
+
+func writeTimeSeriesForArchives(w io.Writer, tss [][]*whisper.TimeSeriesPoint) error {
 	for i, ts := range tss {
 		for _, p := range ts {
-			fmt.Printf("retId:%d\tt:%s\tval:%s\n",
+			_, err := fmt.Fprintf(w, "retId:%d\tt:%s\tval:%s\n",
 				i,
 				formatTime(secondsToTime(int64(p.Time))),
 				strconv.FormatFloat(p.Value, 'f', -1, 64))
+			if err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }

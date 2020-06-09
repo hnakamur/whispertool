@@ -9,7 +9,7 @@ import (
 	whisper "github.com/go-graphite/go-whisper"
 )
 
-func Generate(dest string, retentionDefs string, fill bool, randMax int) error {
+func Generate(dest string, retentionDefs string, fill bool, randMax int, textOut string) error {
 	retentions, err := whisper.ParseRetentionDefs(retentionDefs)
 	if err != nil {
 		return err
@@ -27,6 +27,10 @@ func Generate(dest string, retentionDefs string, fill bool, randMax int) error {
 		until := now
 		d.tss = randomTimeSeriesPointsForArchives(retentions, until, now,
 			rnd, randMax)
+	}
+
+	if err = writeWhisperFileData(textOut, d); err != nil {
+		return err
 	}
 
 	return createWhisperFile(dest, d)
