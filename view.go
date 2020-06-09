@@ -11,11 +11,13 @@ import (
 	whisper "github.com/go-graphite/go-whisper"
 )
 
-func View(filename string, raw bool, now, from, until time.Time) error {
+const RetIdAll = -1
+
+func View(filename string, raw bool, now, from, until time.Time, retId int) error {
 	if raw {
-		return viewRaw(filename, now, from, until)
+		return viewRaw(filename, now, from, until, retId)
 	}
-	return view(filename, now, from, until)
+	return view(filename, now, from, until, retId)
 }
 
 type whisperFileData struct {
@@ -26,7 +28,7 @@ type whisperFileData struct {
 	tss          [][]*whisper.TimeSeriesPoint
 }
 
-func readWhisperFile(filename string, now, from, until time.Time) (*whisperFileData, error) {
+func readWhisperFile(filename string, now, from, until time.Time, retId int) (*whisperFileData, error) {
 	oflag := os.O_RDONLY
 	opts := &whisper.Options{OpenFileFlag: &oflag}
 	db, err := whisper.OpenWithOptions(filename, opts)
@@ -35,10 +37,10 @@ func readWhisperFile(filename string, now, from, until time.Time) (*whisperFileD
 	}
 	defer db.Close()
 
-	return readWhisperDB(db, now, from, until)
+	return readWhisperDB(db, now, from, until, retId)
 }
 
-func readWhisperDB(db *whisper.Whisper, now, from, until time.Time) (*whisperFileData, error) {
+func readWhisperDB(db *whisper.Whisper, now, from, until time.Time, retId int) (*whisperFileData, error) {
 	//log.Printf("readWhisperDB start, from=%s, until=%s",
 	//	formatTime(from), formatTime(until))
 	nowUnix := int(now.Unix())
@@ -53,6 +55,9 @@ func readWhisperDB(db *whisper.Whisper, now, from, until time.Time) (*whisperFil
 	tss := make([][]*whisper.TimeSeriesPoint, len(retentions))
 	highMinFrom := nowUnix
 	for i, r := range retentions {
+		if retId != RetIdAll && retId != i {
+			continue
+		}
 		fetchFrom := fromUnix
 		fetchUntil := untilUnix
 		step := r.SecondsPerPoint()
@@ -123,8 +128,8 @@ func readWhisperDB(db *whisper.Whisper, now, from, until time.Time) (*whisperFil
 	}, nil
 }
 
-func view(filename string, now, from, until time.Time) error {
-	d, err := readWhisperFile(filename, now, from, until)
+func view(filename string, now, from, until time.Time, retId int) error {
+	d, err := readWhisperFile(filename, now, from, until, retId)
 	if err != nil {
 		return err
 	}

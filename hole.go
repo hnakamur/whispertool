@@ -11,7 +11,7 @@ import (
 func Hole(src, dest string, emptyRate float64, now, from, until time.Time) error {
 	readFrom := time.Unix(0, 0)
 	readUntil := now
-	d, err := readWhisperFile(src, now, readFrom, readUntil)
+	d, err := readWhisperFile(src, now, readFrom, readUntil, RetIdAll)
 	if err != nil {
 		return err
 	}

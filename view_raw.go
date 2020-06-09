@@ -14,7 +14,7 @@ import (
 
 const UTCTimeLayout = "2006-01-02T15:04:05Z"
 
-func viewRaw(filename string, now, from, until time.Time) error {
+func viewRaw(filename string, now, from, until time.Time, retId int) error {
 	fromUnix := uint32(from.Unix())
 	untilUnix := uint32(until.Unix())
 
@@ -51,6 +51,9 @@ func viewRaw(filename string, now, from, until time.Time) error {
 	}
 	dataPoints := make([][]dataPoint, len(retentions))
 	for i := 0; i < len(retentions); i++ {
+		if retId != RetIdAll && retId != i {
+			continue
+		}
 		dataPoints[i] = make([]dataPoint, retentions[i].numberOfPoints)
 		for j := 0; j < int(retentions[i].numberOfPoints); j++ {
 			err = dataPoints[i][j].readFrom(f)

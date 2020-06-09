@@ -17,7 +17,7 @@ func Merge(src, dest string, recursive bool, now, from, until time.Time) error {
 	readFrom := time.Unix(0, 0)
 	readUntil := now
 
-	srcData, err := readWhisperFile(src, now, readFrom, readUntil)
+	srcData, err := readWhisperFile(src, now, readFrom, readUntil, RetIdAll)
 	if err != nil {
 		return err
 	}
@@ -29,7 +29,7 @@ func Merge(src, dest string, recursive bool, now, from, until time.Time) error {
 	}
 	defer destDB.Close()
 
-	destData, err := readWhisperDB(destDB, now, readFrom, readUntil)
+	destData, err := readWhisperDB(destDB, now, readFrom, readUntil, RetIdAll)
 	if err != nil {
 		return err
 	}

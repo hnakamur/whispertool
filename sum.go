@@ -28,7 +28,7 @@ func Sum(srcPattern, destFilename string) error {
 		i := i
 		srcFilename := srcFilename
 		g.Go(func() error {
-			d, err := readWhisperFile(srcFilename, now, from, until)
+			d, err := readWhisperFile(srcFilename, now, from, until, RetIdAll)
 			if err != nil {
 				return err
 			}
