@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -12,6 +13,8 @@ import (
 )
 
 const RetIdAll = -1
+
+var debug = os.Getenv("DEBUG") != ""
 
 func View(filename string, raw bool, now, from, until time.Time, retId int, showHeader bool) error {
 	if raw {
@@ -41,8 +44,10 @@ func readWhisperFile(filename string, now, from, until time.Time, retId int) (*w
 }
 
 func readWhisperDB(db *whisper.Whisper, now, from, until time.Time, retId int) (*whisperFileData, error) {
-	//log.Printf("readWhisperDB start, from=%s, until=%s",
-	//	formatTime(from), formatTime(until))
+	if debug {
+		log.Printf("readWhisperDB start, from=%s, until=%s",
+			formatTime(from), formatTime(until))
+	}
 	nowUnix := int(now.Unix())
 	fromUnix := int(from.Unix())
 
@@ -54,29 +59,43 @@ func readWhisperDB(db *whisper.Whisper, now, from, until time.Time, retId int) (
 	retentions := db.Retentions()
 	tss := make([][]*whisper.TimeSeriesPoint, len(retentions))
 	highMinFrom := nowUnix
+	if debug {
+		log.Printf("readWhisperDB len(retentions)=%d, retId=%d",
+			len(retentions), retId)
+	}
 	for i, r := range retentions {
+		minFrom := nowUnix - r.MaxRetention()
 		if retId != RetIdAll && retId != i {
+			if debug {
+				log.Printf("readWhisperDB skip retention i=%d", i)
+			}
+			highMinFrom = minFrom
 			continue
 		}
 		fetchFrom := fromUnix
 		fetchUntil := untilUnix
 		step := r.SecondsPerPoint()
-		minFrom := nowUnix - r.MaxRetention()
-		//log.Printf("retentionId=%d, fromUnix=%s, untilUnix=%s, minFrom=%s",
-		//	i,
-		//	formatTime(secondsToTime(int64(fromUnix))),
-		//	formatTime(secondsToTime(int64(untilUnix))),
-		//	formatTime(secondsToTime(int64(minFrom))))
+		if debug {
+			log.Printf("retentionId=%d, fromUnix=%s, untilUnix=%s, minFrom=%s",
+				i,
+				formatTime(secondsToTime(int64(fromUnix))),
+				formatTime(secondsToTime(int64(untilUnix))),
+				formatTime(secondsToTime(int64(minFrom))))
+		}
 		if fetchFrom < minFrom {
-			//log.Printf("adjust fetchFrom to minFrom")
+			if debug {
+				log.Printf("adjust fetchFrom to minFrom")
+			}
 			fetchFrom = minFrom
 		} else if highMinFrom <= fetchFrom {
 			fetchFrom = int(alignUnixTime(int64(highMinFrom), step))
 			if fetchFrom == highMinFrom {
 				fetchFrom -= step
 			}
-			//log.Printf("adjust fetchFrom to %s",
-			//	formatTime(secondsToTime(int64(fetchFrom))))
+			if debug {
+				log.Printf("adjust fetchFrom to %s",
+					formatTime(secondsToTime(int64(fetchFrom))))
+			}
 		} else {
 			// NOTE: We need to adjust from and until by subtracting step
 			// since step is added to from and until in
@@ -92,28 +111,40 @@ func readWhisperDB(db *whisper.Whisper, now, from, until time.Time, retId int) (
 			// the original reason.
 			fetchFrom -= step
 			fetchUntil -= step
+			if debug {
+				log.Printf("adjust time range by subtracting step, fetchFrom=%s",
+					formatTime(secondsToTime(int64(fetchFrom))))
+			}
 		}
 		if fetchFrom <= fetchUntil {
-			//log.Printf("calling db.Fetch with fetchFrom=%s, fetchUntil=%s",
-			//	formatTime(secondsToTime(int64(fetchFrom))),
-			//	formatTime(secondsToTime(int64(fetchUntil))))
+			if debug {
+				log.Printf("calling db.Fetch with fetchFrom=%s, fetchUntil=%s",
+					formatTime(secondsToTime(int64(fetchFrom))),
+					formatTime(secondsToTime(int64(fetchUntil))))
+			}
 			ts, err := db.Fetch(fetchFrom, fetchUntil)
 			if err != nil {
 				return nil, err
 			}
-			//for i, pt := range ts.PointPointers() {
-			//	log.Printf("i=%d, pt.Time=%s, pt.Value=%s",
-			//		i,
-			//		formatTime(secondsToTime(int64(pt.Time))),
-			//		strconv.FormatFloat(pt.Value, 'f', -1, 64))
-			//}
+			if debug {
+				for i, pt := range ts.PointPointers() {
+					log.Printf("i=%d, pt.Time=%s, pt.Value=%s",
+						i,
+						formatTime(secondsToTime(int64(pt.Time))),
+						strconv.FormatFloat(pt.Value, 'f', -1, 64))
+				}
+			}
 			if fetchFrom < fromUnix {
-				//log.Printf("calling filterTsPointPointersInRange with fromUnix=%s, untilUnix=%s",
-				//	formatTime(secondsToTime(int64(fromUnix))),
-				//	formatTime(secondsToTime(int64(untilUnix))))
+				if debug {
+					log.Printf("calling filterTsPointPointersInRange with fromUnix=%s, untilUnix=%s",
+						formatTime(secondsToTime(int64(fromUnix))),
+						formatTime(secondsToTime(int64(untilUnix))))
+				}
 				tss[i] = filterTsPointPointersInRange(ts.PointPointers(), fromUnix, untilUnix)
 			} else {
-				//log.Printf("use ts.PointPointers as is")
+				if debug {
+					log.Printf("use ts.PointPointers as is")
+				}
 				tss[i] = ts.PointPointers()
 			}
 		}
