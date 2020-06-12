@@ -44,7 +44,14 @@ func Sum(srcPattern, destFilename string) error {
 	for i := 1; i < len(srcDatas); i++ {
 		if !retentionsEqual(srcDatas[0].retentions, srcDatas[i].retentions) {
 			return fmt.Errorf("%s and %s archive confiugrations are unalike. "+
-				"Resize the input before diffing", srcFilenames[0], srcFilenames[i])
+				"Resize the input before summing", srcFilenames[0], srcFilenames[i])
+		}
+	}
+
+	for i := 1; i < len(srcDatas); i++ {
+		if !timeEqualMultiTimeSeriesPointsPointers(srcDatas[0].tss, srcDatas[i].tss) {
+			return fmt.Errorf("%s and %s archive time values are unalike. "+
+				"Resize the input before summing", srcFilenames[0], srcFilenames[i])
 		}
 	}
 
