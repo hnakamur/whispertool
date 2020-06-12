@@ -3,6 +3,7 @@ package whispertool
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"strconv"
 	"time"
@@ -13,6 +14,7 @@ import (
 var ErrDiffFound = errors.New("diff found")
 
 func Diff(src, dest string, recursive, ignoreSrcEmpty, showAll bool, now, from, until time.Time) error {
+retry:
 	if recursive {
 		return errors.New("recursive option not implemented yet")
 	}
@@ -32,9 +34,10 @@ func Diff(src, dest string, recursive, ignoreSrcEmpty, showAll bool, now, from, 
 			"Resize the input before diffing", src, dest)
 	}
 
-	if !timeEqualMultiTimeSeriesPointsPointers(srcData.tss, destData.tss) {
-		return fmt.Errorf("%s and %s archive time values are unalike. "+
-			"Resize the input before diffing", src, dest)
+	if err := timeDiffMultiTimeSeriesPointsPointers(srcData.tss, destData.tss); err != nil {
+		log.Printf("diff failed since %s and %s archive time values are unalike: %s",
+			src, dest, err.Error())
+		goto retry
 	}
 
 	iss := valueDiffIndexesMultiTimeSeriesPointsPointers(srcData.tss, destData.tss, ignoreSrcEmpty)

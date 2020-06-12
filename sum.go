@@ -52,7 +52,7 @@ retry:
 
 	for i := 1; i < len(srcDatas); i++ {
 		if err := timeDiffMultiTimeSeriesPointsPointers(srcDatas[0].tss, srcDatas[i].tss); err != nil {
-			log.Printf("%s and %s archive time values are unalike: %s",
+			log.Printf("sum failed since %s and %s archive time values are unalike: %s",
 				srcFilenames[0], srcFilenames[i], err.Error())
 			goto retry
 		}
