@@ -2,6 +2,7 @@ package whispertool
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"path/filepath"
 	"time"
@@ -11,6 +12,7 @@ import (
 )
 
 func Sum(srcPattern, destFilename string) error {
+retry:
 	srcFilenames, err := filepath.Glob(srcPattern)
 	if err != nil {
 		return err
@@ -49,9 +51,10 @@ func Sum(srcPattern, destFilename string) error {
 	}
 
 	for i := 1; i < len(srcDatas); i++ {
-		if !timeEqualMultiTimeSeriesPointsPointers(srcDatas[0].tss, srcDatas[i].tss) {
-			return fmt.Errorf("%s and %s archive time values are unalike. "+
-				"Resize the input before summing", srcFilenames[0], srcFilenames[i])
+		if err := timeDiffMultiTimeSeriesPointsPointers(srcDatas[0].tss, srcDatas[i].tss); err != nil {
+			log.Printf("%s and %s archive time values are unalike: %s",
+				srcFilenames[0], srcFilenames[i], err.Error())
+			goto retry
 		}
 	}
 

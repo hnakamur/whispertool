@@ -163,3 +163,41 @@ func timeEqualMultiTimeSeriesPointsPointers(src, dest [][]*whisper.TimeSeriesPoi
 
 	return true
 }
+
+func timeDiffTimeSeriesPointsPointers(src, dest []*whisper.TimeSeriesPoint) error {
+	if len(src) != len(dest) {
+		return fmt.Errorf("point count unmatch, src=%d, dest=%d", len(src), len(dest))
+	}
+
+	for i, srcPt := range src {
+		destPt := dest[i]
+		if srcPt == nil {
+			return fmt.Errorf("srcPt %d not exist", i)
+		}
+		if destPt == nil {
+			return fmt.Errorf("destPt %d not exist", i)
+		}
+		if srcPt.Time != destPt.Time {
+			return fmt.Errorf("point %d time unmatch src=%s, dest=%s",
+				i,
+				formatTime(secondsToTime(int64(srcPt.Time))),
+				formatTime(secondsToTime(int64(destPt.Time))))
+		}
+	}
+
+	return nil
+}
+
+func timeDiffMultiTimeSeriesPointsPointers(src, dest [][]*whisper.TimeSeriesPoint) error {
+	if len(src) != len(dest) {
+		return fmt.Errorf("retention count unmatch, src=%d, dest=%d", len(src), len(dest))
+	}
+
+	for i, srcTs := range src {
+		if err := timeDiffTimeSeriesPointsPointers(srcTs, dest[i]); err != nil {
+			return fmt.Errorf("timestamps unmatch for retention=%d: %s", i, err)
+		}
+	}
+
+	return nil
+}
