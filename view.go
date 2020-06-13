@@ -2,6 +2,7 @@ package whispertool
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -10,11 +11,13 @@ import (
 	"time"
 
 	whisper "github.com/go-graphite/go-whisper"
+	"golang.org/x/sync/errgroup"
 )
 
 const RetIdAll = -1
 
 var debug = os.Getenv("DEBUG") != ""
+var errRetIdOufOfRange = errors.New("retention id is out of range")
 
 func View(filename string, raw bool, now, from, until time.Time, retId int, showHeader bool) error {
 	if raw {
@@ -40,14 +43,53 @@ func readWhisperFile(filename string, now, from, until time.Time, retId int) (*w
 	}
 	defer db.Close()
 
-	return readWhisperDB(db, now, from, until, retId)
+	return readWhisperDB(db, now, from, until, retId, filename)
 }
 
-func readWhisperDB(db *whisper.Whisper, now, from, until time.Time, retId int) (*whisperFileData, error) {
+func readWhisperDB(db *whisper.Whisper, now, from, until time.Time, retId int, filename string) (*whisperFileData, error) {
 	if debug {
-		log.Printf("readWhisperDB start, from=%s, until=%s",
-			formatTime(from), formatTime(until))
+		log.Printf("readWhisperDB start, filename=%s, from=%s, until=%s, retId=%d",
+			filename, formatTime(from), formatTime(until), retId)
 	}
+
+	retentions := db.Retentions()
+	tss := make([][]*whisper.TimeSeriesPoint, len(retentions))
+	if retId == RetIdAll {
+		var g errgroup.Group
+		for i := range retentions {
+			i := i
+			g.Go(func() error {
+				ts, err := readWhisperSingleArchive(db, now, from, until, i, filename)
+				if err != nil {
+					return err
+				}
+				tss[i] = ts
+				return nil
+			})
+			if err := g.Wait(); err != nil {
+				return nil, err
+			}
+		}
+	} else if 0 <= retId && retId < len(retentions) {
+		ts, err := readWhisperSingleArchive(db, now, from, until, retId, filename)
+		if err != nil {
+			return nil, err
+		}
+		tss[retId] = ts
+	} else {
+		return nil, errRetIdOufOfRange
+	}
+
+	return &whisperFileData{
+		aggMethod:    db.AggregationMethod(),
+		maxRetention: db.MaxRetention(),
+		xFilesFactor: db.XFilesFactor(),
+		retentions:   retentions,
+		tss:          tss,
+	}, nil
+}
+
+func readWhisperSingleArchive(db *whisper.Whisper, now, from, until time.Time, retId int, filename string) ([]*whisper.TimeSeriesPoint, error) {
 	nowUnix := int(now.Unix())
 	fromUnix := int(from.Unix())
 
@@ -56,107 +98,130 @@ func readWhisperDB(db *whisper.Whisper, now, from, until time.Time, retId int) (
 		untilUnix = nowUnix
 	}
 
+	fetchFrom := fromUnix
+	fetchUntil := untilUnix
+
 	retentions := db.Retentions()
-	tss := make([][]*whisper.TimeSeriesPoint, len(retentions))
-	highMinFrom := nowUnix
+	r := retentions[retId]
+	minFrom := nowUnix - r.MaxRetention()
+	step := r.SecondsPerPoint()
+
+	var highMinFrom int
+	if retId > 0 {
+		highMinFrom = nowUnix - retentions[retId-1].MaxRetention()
+	} else {
+		highMinFrom = nowUnix
+	}
+
 	if debug {
-		log.Printf("readWhisperDB len(retentions)=%d, retId=%d",
-			len(retentions), retId)
+		log.Printf("readWhisperSingleArchive retId=%d, fromUnix=%s, untilUnix=%s, minFrom=%s, highMinFrom=%s",
+			retId,
+			formatTime(secondsToTime(int64(fromUnix))),
+			formatTime(secondsToTime(int64(untilUnix))),
+			formatTime(secondsToTime(int64(minFrom))),
+			formatTime(secondsToTime(int64(highMinFrom))))
 	}
-	for i, r := range retentions {
-		minFrom := nowUnix - r.MaxRetention()
-		if retId != RetIdAll && retId != i {
-			if debug {
-				log.Printf("readWhisperDB skip retention i=%d", i)
-			}
-			highMinFrom = minFrom
-			continue
-		}
-		fetchFrom := fromUnix
-		fetchUntil := untilUnix
-		step := r.SecondsPerPoint()
+	if fetchFrom < minFrom {
 		if debug {
-			log.Printf("retentionId=%d, fromUnix=%s, untilUnix=%s, minFrom=%s",
-				i,
-				formatTime(secondsToTime(int64(fromUnix))),
-				formatTime(secondsToTime(int64(untilUnix))),
-				formatTime(secondsToTime(int64(minFrom))))
+			log.Printf("adjust fetchFrom to minFrom")
 		}
-		if fetchFrom < minFrom {
-			if debug {
-				log.Printf("adjust fetchFrom to minFrom")
-			}
-			fetchFrom = minFrom
-		} else if highMinFrom <= fetchFrom {
-			fetchFrom = int(alignUnixTime(int64(highMinFrom), step))
-			if fetchFrom == highMinFrom {
-				fetchFrom -= step
-			}
-			if debug {
-				log.Printf("adjust fetchFrom to %s",
-					formatTime(secondsToTime(int64(fetchFrom))))
-			}
-		} else {
-			// NOTE: We need to adjust from and until by subtracting step
-			// since step is added to from and until in
-			// go-whisper archiveInfo.Interval method.
-			// https://github.com/go-graphite/go-whisper/blob/e5e7d31ca75557a461f9883667028ddc44713481/whisper.go#L1411
-			//
-			// I suppose archiveInfo.Interval follows
-			// __archive_fetch in original graphite-project/whisper.
-			// https://github.com/graphite-project/whisper/blob/master/whisper.py#L970-L972
-			// I asked why step is added at
-			// https://answers.launchpad.net/graphite/+question/294817
-			// but no answer from the person who only knows
-			// the original reason.
+		fetchFrom = minFrom
+	} else if highMinFrom <= fetchFrom {
+		fetchFrom = int(alignUnixTime(int64(highMinFrom), step))
+		if fetchFrom == highMinFrom {
 			fetchFrom -= step
-			fetchUntil -= step
-			if debug {
-				log.Printf("adjust time range by subtracting step, fetchFrom=%s",
-					formatTime(secondsToTime(int64(fetchFrom))))
-			}
 		}
-		if fetchFrom <= fetchUntil {
-			if debug {
-				log.Printf("calling db.Fetch with fetchFrom=%s, fetchUntil=%s",
-					formatTime(secondsToTime(int64(fetchFrom))),
-					formatTime(secondsToTime(int64(fetchUntil))))
-			}
-			ts, err := db.Fetch(fetchFrom, fetchUntil)
-			if err != nil {
-				return nil, err
-			}
-			if debug {
-				for i, pt := range ts.PointPointers() {
-					log.Printf("i=%d, pt.Time=%s, pt.Value=%s",
-						i,
-						formatTime(secondsToTime(int64(pt.Time))),
-						strconv.FormatFloat(pt.Value, 'f', -1, 64))
-				}
-			}
-			if fetchFrom < fromUnix {
-				if debug {
-					log.Printf("calling filterTsPointPointersInRange with fromUnix=%s, untilUnix=%s",
-						formatTime(secondsToTime(int64(fromUnix))),
-						formatTime(secondsToTime(int64(untilUnix))))
-				}
-				tss[i] = filterTsPointPointersInRange(ts.PointPointers(), fromUnix, untilUnix)
-			} else {
-				if debug {
-					log.Printf("use ts.PointPointers as is")
-				}
-				tss[i] = ts.PointPointers()
-			}
+		if debug {
+			log.Printf("adjust fetchFrom to %s",
+				formatTime(secondsToTime(int64(fetchFrom))))
 		}
-		highMinFrom = minFrom
+	} else {
+		// NOTE: We need to adjust from and until by subtracting step
+		// since step is added to from and until in
+		// go-whisper archiveInfo.Interval method.
+		// https://github.com/go-graphite/go-whisper/blob/e5e7d31ca75557a461f9883667028ddc44713481/whisper.go#L1411
+		//
+		// I suppose archiveInfo.Interval follows
+		// __archive_fetch in original graphite-project/whisper.
+		// https://github.com/graphite-project/whisper/blob/master/whisper.py#L970-L972
+		// I asked why step is added at
+		// https://answers.launchpad.net/graphite/+question/294817
+		// but no answer from the person who only knows
+		// the original reason.
+		fetchFrom -= step
+		fetchUntil -= step
+		if debug {
+			log.Printf("adjust time range by subtracting step, fetchFrom=%s",
+				formatTime(secondsToTime(int64(fetchFrom))))
+		}
 	}
-	return &whisperFileData{
-		aggMethod:    db.AggregationMethod(),
-		maxRetention: db.MaxRetention(),
-		xFilesFactor: db.XFilesFactor(),
-		retentions:   retentions,
-		tss:          tss,
-	}, nil
+
+	if fetchUntil < fetchFrom {
+		return nil, nil
+	}
+
+	exptectedPtsLen := (fetchUntil - fetchFrom) / step
+	if exptectedPtsLen == 0 {
+		exptectedPtsLen = 1
+	}
+
+retry:
+	if debug {
+		log.Printf("calling db.Fetch with fetchFrom=%s, fetchUntil=%s",
+			formatTime(secondsToTime(int64(fetchFrom))),
+			formatTime(secondsToTime(int64(fetchUntil))))
+	}
+	ts, err := db.Fetch(fetchFrom, fetchUntil)
+	if err != nil {
+		return nil, err
+	}
+	if debug {
+		for i, pt := range ts.PointPointers() {
+			log.Printf("i=%d, pt.Time=%s, pt.Value=%s",
+				i,
+				formatTime(secondsToTime(int64(pt.Time))),
+				strconv.FormatFloat(pt.Value, 'f', -1, 64))
+		}
+	}
+
+	pts := ts.PointPointers()
+	if len(pts) != exptectedPtsLen {
+		log.Printf("unexpected points length, filename=%s, retId=%d, fetchFrom=%s, fetchUntil=%s, minFrom=%s, highMinFrom=%s, got=%d, want=%d, will retry.",
+			filename,
+			retId,
+			formatTime(secondsToTime(int64(fetchFrom))),
+			formatTime(secondsToTime(int64(fetchUntil))),
+			formatTime(secondsToTime(int64(minFrom))),
+			formatTime(secondsToTime(int64(highMinFrom))),
+			len(pts),
+			exptectedPtsLen)
+		goto retry
+	} else if len(pts) > 1 && pts[1].Time-pts[0].Time != step {
+		log.Printf("unexpected step, filename=%s, retId=%d, fetchFrom=%s, fetchUntil=%s, minFrom=%s, highMinFrom=%s, got=%d, want=%d, will retry.",
+			filename,
+			retId,
+			formatTime(secondsToTime(int64(fetchFrom))),
+			formatTime(secondsToTime(int64(fetchUntil))),
+			formatTime(secondsToTime(int64(minFrom))),
+			formatTime(secondsToTime(int64(highMinFrom))),
+			pts[1].Time-pts[0].Time,
+			step)
+		goto retry
+	}
+
+	if fetchFrom < fromUnix {
+		if debug {
+			log.Printf("calling filterTsPointPointersInRange with fromUnix=%s, untilUnix=%s",
+				formatTime(secondsToTime(int64(fromUnix))),
+				formatTime(secondsToTime(int64(untilUnix))))
+		}
+		pts = filterTsPointPointersInRange(pts, fromUnix, untilUnix)
+	} else {
+		if debug {
+			log.Printf("use ts.PointPointers as is")
+		}
+	}
+	return pts, nil
 }
 
 func view(filename string, now, from, until time.Time, retId int, showHeader bool) error {
