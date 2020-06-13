@@ -163,7 +163,7 @@ func TestMerge(t *testing.T) {
 			const retentionDefs = "1m:2h,1h:2d,1d:30d"
 			const fill = true
 			randMax := tc.randMax
-			err = whispertool.Generate(srcFilename, retentionDefs, fill, randMax)
+			err = whispertool.Generate(srcFilename, retentionDefs, fill, randMax, "")
 			if err != nil {
 				t.Fatal(err)
 			}

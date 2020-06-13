@@ -1,4 +1,6 @@
 github.com/go-graphite/go-whisper v0.0.0-20200420141052-f2ba40d1bfdc h1:cZa1Uo3RXnu8eSbf8BQoH/4e2CrRUBbrjHQn/zEK2jc=
 github.com/go-graphite/go-whisper v0.0.0-20200420141052-f2ba40d1bfdc/go.mod h1:XnU8q9X8C3OhD8R7gAlRLI6VXU2KMwqgTO9Tshub2qE=
+github.com/hnakamur/timestamp v0.1.0 h1:BW9QgHnUGkYga0JSd9aL6T9sbRqB06oAXUhxuQH+Imo=
+github.com/hnakamur/timestamp v0.1.0/go.mod h1:ms4Qt1ZxxF8z3QSk7ab8l8yj7/QVNuS+HPYyVlG9qx8=
 golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a h1:WXEvlFVvvGxCJLG6REjsT03iWnKLEWinaScsxF2Vm2o=
 golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
