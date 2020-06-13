@@ -2,6 +2,7 @@ package whispertool
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	"math"
 	"os"
@@ -81,7 +82,7 @@ func (w *Whisper) Fetch(retentionID int, from, until timestamp.Second) ([]Point,
 }
 
 func (w *Whisper) uint32At(offset uintptr) uint32 {
-	return ntohl(*(*uint32)(unsafe.Pointer(&w.buf.Bytes()[offset])))
+	return binary.BigEndian.Uint32(w.buf.Bytes()[offset:])
 }
 
 func (w *Whisper) float32At(offset uintptr) float32 {
