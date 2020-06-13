@@ -262,13 +262,14 @@ func writeWhisperFileData(textOut string, d *whisperFileData, showHeader bool) e
 	}
 	defer file.Close()
 
-	err = d.WriteTo(bufio.NewWriter(file), showHeader)
-	if err != nil {
+	w := bufio.NewWriter(file)
+	if err = d.WriteTo(w, showHeader); err != nil {
 		return err
 	}
-
-	err = file.Sync()
-	if err != nil {
+	if err = w.Flush(); err != nil {
+		return err
+	}
+	if err = file.Sync(); err != nil {
 		return err
 	}
 	return nil

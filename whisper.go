@@ -1,23 +1,31 @@
 package whispertool
 
 import (
-	"bytes"
 	"encoding/binary"
 	"io"
+	"log"
 	"math"
 	"os"
-	"sync"
-	"unsafe"
 
 	"github.com/hnakamur/timestamp"
 )
+
+type pageID uint64
 
 type Whisper struct {
 	Meta       Meta
 	Retentions []Retention
 
-	file          *os.File
-	buf           *bytes.Buffer
+	bufPool  *BufferPool
+	pageSize int64
+
+	file         *os.File
+	fileSize     int64
+	lastPageID   pageID
+	lastPageSize int64
+
+	pages map[pageID][]byte
+
 	baseIntervals []timestamp.Second
 }
 
@@ -39,38 +47,62 @@ type Point struct {
 	Value float64
 }
 
-var uint32Size uintptr = unsafe.Sizeof(uint32(0))
-var metaSize uintptr = unsafe.Sizeof(Meta{})
-var retentionSize uintptr = unsafe.Sizeof(Retention{})
-var pointSize uintptr = unsafe.Sizeof(Point{})
+// These are sizes in whisper files.
+// NOTE: The size of type Point is different from the size of
+// point in file since timestamp.Seconds is int64, not uint32.
+const (
+	uint32Size    = 4
+	uint64Size    = 8
+	float32Size   = 4
+	float64Size   = 8
+	metaSize      = 3*uint32Size + float32Size
+	retentionSize = 3 * uint32Size
+	pointSize     = uint32Size + float64Size
+)
 
-func Open(filename string) (*Whisper, error) {
+func Open(filename string, bufPool *BufferPool) (*Whisper, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
-	w := &Whisper{file: file}
-	if err := w.readFull(); err != nil {
+
+	st, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	pageSize := int64(bufPool.BufferSize())
+	fileSize := st.Size()
+	lastPageID := pageID(fileSize / pageSize)
+	lastPageSize := fileSize % pageSize
+
+	w := &Whisper{
+		file:         file,
+		bufPool:      bufPool,
+		pageSize:     pageSize,
+		fileSize:     fileSize,
+		lastPageID:   lastPageID,
+		lastPageSize: lastPageSize,
+		pages:        make(map[pageID][]byte),
+	}
+	if err := w.readMeta(); err != nil {
+		return nil, err
+	}
+	if err := w.readRetentions(); err != nil {
 		return nil, err
 	}
 	return w, nil
 }
 
 func (w *Whisper) Close() error {
-	if w.buf != nil {
-		putBuf(w.buf)
+	for _, page := range w.pages {
+		w.bufPool.Put(page)
 	}
 	return w.file.Close()
 }
 
-func (w *Whisper) readFull() error {
-	st, err := w.file.Stat()
-	if err != nil {
-		return err
-	}
-
-	w.buf = getBuf(int(st.Size()))
-	if _, err := io.Copy(w.buf, w.file); err != nil {
+func (w *Whisper) readMeta() error {
+	if err := w.readPagesIfNeeded(0, 0); err != nil {
 		return err
 	}
 
@@ -78,12 +110,90 @@ func (w *Whisper) readFull() error {
 	w.Meta.MaxRetention = w.uint32At(uint32Size)
 	w.Meta.XFilesFactor = w.float32At(2 * uint32Size)
 	w.Meta.RetentionCount = w.uint32At(3 * uint32Size)
-	w.Retentions = make([]Retention, w.Meta.RetentionCount)
-	for i := uint32(0); i < w.Meta.RetentionCount; i++ {
-		w.Retentions[i] = w.retentionAt(metaSize + uintptr(i)*retentionSize)
+	return nil
+}
+
+func (w *Whisper) readRetentions() error {
+	nRet := int64(w.Meta.RetentionCount)
+	off := metaSize + nRet*retentionSize
+	until := pageID(off / w.pageSize)
+	if err := w.readPagesIfNeeded(0, until); err != nil {
+		return err
 	}
 
+	w.Retentions = make([]Retention, nRet)
+	for i := int64(0); i < nRet; i++ {
+		off := metaSize + i*retentionSize
+		w.Retentions[i] = w.retentionAt(off)
+	}
 	return nil
+}
+
+func (w *Whisper) readPagesIfNeeded(from, until pageID) error {
+	log.Printf("readPagesIfNeeded start, from=%d, until=%d", from, until)
+	for from <= until {
+		for from <= until {
+			if _, ok := w.pages[from]; ok {
+				from++
+			} else {
+				break
+			}
+		}
+		if from > until {
+			return nil
+		}
+
+		iovs := [][]byte{w.allocBuf(from)}
+		pid := from + 1
+		for pid <= until {
+			if _, ok := w.pages[pid]; !ok {
+				iovs = append(iovs, w.allocBuf(pid))
+				pid++
+			} else {
+				break
+			}
+		}
+
+		off := int64(from) * w.pageSize
+		log.Printf("readPagesIfNeeded readv from=%d, to=%d", from, pid-1)
+		_, err := preadvFull(w.file, iovs, off)
+		if err != nil {
+			return err
+		}
+
+		for ; from < pid; from++ {
+			w.pages[from] = iovs[0]
+			iovs = iovs[1:]
+		}
+	}
+	return nil
+}
+
+func (w *Whisper) allocBuf(pid pageID) []byte {
+	b := w.bufPool.Get()
+	if pid == w.lastPageID {
+		b = b[:w.lastPageSize]
+	}
+	return b
+}
+
+func (w *Whisper) pageAt(id pageID) ([]byte, error) {
+	p := w.pages[id]
+	if p != nil {
+		return p, nil
+	}
+
+	b := w.bufPool.Get()
+	off := int64(id) * int64(w.bufPool.BufferSize())
+	n, err := w.file.ReadAt(b, off)
+	if err != nil {
+		if err != io.EOF {
+			return nil, err
+		}
+		b = b[:n]
+	}
+	w.pages[id] = b
+	return b, nil
 }
 
 func (w *Whisper) FetchFromArchive(retentionID int, from, until timestamp.Second) ([]Point, error) {
@@ -109,7 +219,7 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until timestamp.Second
 
 func (w *Whisper) GetRawPoints(retentionID int) []Point {
 	r := w.Retentions[retentionID]
-	off := uintptr(r.Offset)
+	off := int64(r.Offset)
 	p := make([]Point, r.NumberOfPoints)
 	for i := uint32(0); i < r.NumberOfPoints; i++ {
 		p[i].Time = w.timestampAt(off)
@@ -119,23 +229,42 @@ func (w *Whisper) GetRawPoints(retentionID int) []Point {
 	return p
 }
 
-func (w *Whisper) uint32At(offset uintptr) uint32 {
-	return binary.BigEndian.Uint32(w.buf.Bytes()[offset:])
+func (w *Whisper) uint32At(offset int64) uint32 {
+	buf := w.bufForValue(offset, uint32Size)
+	return binary.BigEndian.Uint32(buf)
 }
 
-func (w *Whisper) uint64At(offset uintptr) uint64 {
-	return binary.BigEndian.Uint64(w.buf.Bytes()[offset:])
+func (w *Whisper) uint64At(offset int64) uint64 {
+	buf := w.bufForValue(offset, uint64Size)
+	return binary.BigEndian.Uint64(buf)
 }
 
-func (w *Whisper) float32At(offset uintptr) float32 {
+func (w *Whisper) float32At(offset int64) float32 {
 	return math.Float32frombits(w.uint32At(offset))
 }
 
-func (w *Whisper) float64At(offset uintptr) float64 {
+func (w *Whisper) float64At(offset int64) float64 {
 	return math.Float64frombits(w.uint64At(offset))
 }
 
-func (w *Whisper) retentionAt(offset uintptr) Retention {
+func (w *Whisper) bufForValue(offset, size int64) []byte {
+	pgID := pageID(offset / w.pageSize)
+	offInPg := offset % w.pageSize
+	overflow := offInPg + size - w.pageSize
+	if overflow <= 0 {
+		p := w.pages[pgID]
+		return p[offInPg : offInPg+size]
+	}
+
+	buf := make([]byte, size)
+	p0 := w.pages[pgID]
+	p1 := w.pages[pgID+1]
+	copy(buf, p0[offInPg:])
+	copy(buf[offInPg:], p1[:overflow])
+	return buf
+}
+
+func (w *Whisper) retentionAt(offset int64) Retention {
 	return Retention{
 		Offset:          w.uint32At(offset),
 		SecondsPerPoint: w.uint32At(offset + uint32Size),
@@ -143,12 +272,12 @@ func (w *Whisper) retentionAt(offset uintptr) Retention {
 	}
 }
 
-func (w *Whisper) timestampAt(offset uintptr) timestamp.Second {
+func (w *Whisper) timestampAt(offset int64) timestamp.Second {
 	return timestamp.Second(w.uint32At(offset))
 }
 
 func (w *Whisper) baseInterval(r *Retention) timestamp.Second {
-	return w.timestampAt(uintptr(r.Offset))
+	return w.timestampAt(int64(r.Offset))
 }
 
 func (r *Retention) pointIndex(baseInterval, interval timestamp.Second) int {
@@ -163,23 +292,4 @@ func (r *Retention) pointOffsetAt(index int) uintptr {
 func (r *Retention) Interval(t timestamp.Second) timestamp.Second {
 	step := int64(r.SecondsPerPoint)
 	return timestamp.Second(int64(t) - floorMod(int64(t), step) + step)
-}
-
-var bufPool = sync.Pool{
-	New: func() interface{} {
-		return new(bytes.Buffer)
-	},
-}
-
-func getBuf(size int) *bytes.Buffer {
-	b := bufPool.Get().(*bytes.Buffer)
-	b.Reset()
-	if b.Len() < size {
-		b.Grow(size - b.Len())
-	}
-	return b
-}
-
-func putBuf(b *bytes.Buffer) {
-	bufPool.Put(b)
 }
