@@ -9,16 +9,17 @@ import (
 )
 
 func Hole(src, dest string, emptyRate float64, now, from, until time.Time) error {
-	readFrom := time.Unix(0, 0)
-	readUntil := now
-	d, err := readWhisperFile(src, now, readFrom, readUntil, RetIdAll)
-	if err != nil {
-		return err
-	}
+	//readFrom := time.Unix(0, 0)
+	//readUntil := now
+	//d, err := readWhisperFile(src, now, readFrom, readUntil, RetIdAll)
+	//if err != nil {
+	//	return err
+	//}
 
-	rnd := rand.New(rand.NewSource(newRandSeed()))
-	emptyRandomPointsInTimeSeriesPointsForAllArchives(d.tss, rnd, emptyRate, from, until, d.retentions)
-	return createWhisperFile(dest, d)
+	//rnd := rand.New(rand.NewSource(newRandSeed()))
+	//emptyRandomPointsInTimeSeriesPointsForAllArchives(d.tss, rnd, emptyRate, from, until, d.retentions)
+	//return createWhisperFile(dest, d)
+	return nil
 }
 
 var errInvalidAggregationMethod = errors.New("invalid aggregation method")

@@ -1,8 +1,6 @@
 package whispertool
 
 import (
-	"errors"
-	"fmt"
 	"math"
 	"time"
 
@@ -10,42 +8,43 @@ import (
 )
 
 func Merge(src, dest string, recursive bool, now, from, until time.Time) error {
-	if recursive {
-		return errors.New("recursive option not implemented yet")
-	}
+	//if recursive {
+	//	return errors.New("recursive option not implemented yet")
+	//}
 
-	readFrom := time.Unix(0, 0)
-	readUntil := now
+	//readFrom := time.Unix(0, 0)
+	//readUntil := now
 
-	srcData, err := readWhisperFile(src, now, readFrom, readUntil, RetIdAll)
-	if err != nil {
-		return err
-	}
+	//srcData, err := readWhisperFile(src, now, readFrom, readUntil, RetIdAll)
+	//if err != nil {
+	//	return err
+	//}
 
-	opts := &whisper.Options{FLock: true}
-	destDB, err := whisper.OpenWithOptions(dest, opts)
-	if err != nil {
-		return err
-	}
-	defer destDB.Close()
+	//opts := &whisper.Options{FLock: true}
+	//destDB, err := whisper.OpenWithOptions(dest, opts)
+	//if err != nil {
+	//	return err
+	//}
+	//defer destDB.Close()
 
-	destData, err := readWhisperDB(destDB, now, readFrom, readUntil, RetIdAll, dest)
-	if err != nil {
-		return err
-	}
+	//destData, err := readWhisperDB(destDB, now, readFrom, readUntil, RetIdAll, dest)
+	//if err != nil {
+	//	return err
+	//}
 
-	if !retentionsEqual(srcData.retentions, destData.retentions) {
-		return fmt.Errorf("%s and %s archive confiugrations are unalike. "+
-			"Resize the input before diffing", src, dest)
-	}
+	//if !retentionsEqual(srcData.retentions, destData.retentions) {
+	//	return fmt.Errorf("%s and %s archive confiugrations are unalike. "+
+	//		"Resize the input before diffing", src, dest)
+	//}
 
-	if !timeEqualMultiTimeSeriesPointsPointers(srcData.tss, destData.tss) {
-		return fmt.Errorf("%s and %s archive time values are unalike. "+
-			"Resize the input before diffing", src, dest)
-	}
+	//if !timeEqualMultiTimeSeriesPointsPointers(srcData.tss, destData.tss) {
+	//	return fmt.Errorf("%s and %s archive time values are unalike. "+
+	//		"Resize the input before diffing", src, dest)
+	//}
 
-	tss := buildMultiTimeSeriesPointsPointersForMerge(srcData.tss, destData.tss, int(from.Unix()), int(until.Unix()), srcData.retentions)
-	return updateWhisperFile(destDB, tss)
+	//tss := buildMultiTimeSeriesPointsPointersForMerge(srcData.tss, destData.tss, int(from.Unix()), int(until.Unix()), srcData.retentions)
+	//return updateWhisperFile(destDB, tss)
+	return nil
 }
 
 func buildTimeSeriesPointsPointersForMerge(srcTs, destTs []*whisper.TimeSeriesPoint, from, until int, propagatedTs []int64) []*whisper.TimeSeriesPoint {

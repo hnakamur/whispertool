@@ -10,30 +10,31 @@ import (
 )
 
 func Generate(dest string, retentionDefs string, fill bool, randMax int, textOut string) error {
-	retentions, err := whisper.ParseRetentionDefs(retentionDefs)
-	if err != nil {
-		return err
-	}
+	//retentions, err := whisper.ParseRetentionDefs(retentionDefs)
+	//if err != nil {
+	//	return err
+	//}
 
-	d := &whisperFileData{
-		retentions:   retentionsToRetentionSlice(retentions),
-		aggMethod:    "Sum",
-		xFilesFactor: 0,
-	}
+	//d := &whisperFileData{
+	//	retentions:   retentionsToRetentionSlice(retentions),
+	//	aggMethod:    "Sum",
+	//	xFilesFactor: 0,
+	//}
 
-	if fill {
-		rnd := rand.New(rand.NewSource(newRandSeed()))
-		now := time.Now()
-		until := now
-		d.tss = randomTimeSeriesPointsForArchives(retentions, until, now,
-			rnd, randMax)
-	}
+	//if fill {
+	//	rnd := rand.New(rand.NewSource(newRandSeed()))
+	//	now := time.Now()
+	//	until := now
+	//	d.tss = randomTimeSeriesPointsForArchives(retentions, until, now,
+	//		rnd, randMax)
+	//}
 
-	if err = writeWhisperFileData(textOut, d, true); err != nil {
-		return err
-	}
+	//if err = writeWhisperFileData(textOut, d, true); err != nil {
+	//	return err
+	//}
 
-	return createWhisperFile(dest, d)
+	//return createWhisperFile(dest, d)
+	return nil
 }
 
 func newRandSeed() int64 {
@@ -44,23 +45,23 @@ func newRandSeed() int64 {
 	return int64(binary.BigEndian.Uint64(b[:]))
 }
 
-func retentionsToRetentionSlice(retentions whisper.Retentions) []whisper.Retention {
-	retentions2 := make([]whisper.Retention, len(retentions))
-	for i, r := range retentions {
-		retentions2[i] = whisper.NewRetention(
-			r.SecondsPerPoint(),
-			r.NumberOfPoints())
-	}
-	return retentions2
-}
-
-func retentionSliceToRetentions(retentions []whisper.Retention) whisper.Retentions {
-	retentions2 := make([]*whisper.Retention, len(retentions))
-	for i := range retentions {
-		retentions2[i] = &retentions[i]
-	}
-	return retentions2
-}
+//func retentionsToRetentionSlice(retentions whisper.Retentions) []Retention {
+//	retentions2 := make([]whisper.Retention, len(retentions))
+//	for i, r := range retentions {
+//		retentions2[i] = whisper.NewRetention(
+//			r.SecondsPerPoint(),
+//			r.NumberOfPoints())
+//	}
+//	return retentions2
+//}
+//
+//func retentionSliceToRetentions(retentions []whisper.Retention) whisper.Retentions {
+//	retentions2 := make([]*whisper.Retention, len(retentions))
+//	for i := range retentions {
+//		retentions2[i] = &retentions[i]
+//	}
+//	return retentions2
+//}
 
 func alignUnixTime(t int64, secondsPerPoint int) int64 {
 	return t - t%int64(secondsPerPoint)
@@ -146,23 +147,23 @@ func randomTimeSeriesPointsForArchives(retentions []*whisper.Retention, until, n
 	return tss
 }
 
-func createWhisperFile(filename string, d *whisperFileData) error {
-	aggMethod, err := stringToAggregationMethod(d.aggMethod)
-	if err != nil {
-		return err
-	}
-
-	db, err := whisper.Create(filename,
-		retentionSliceToRetentions(d.retentions),
-		aggMethod,
-		d.xFilesFactor)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	return updateWhisperFile(db, d.tss)
-}
+//func createWhisperFile(filename string, d *whisperFileData) error {
+//	aggMethod, err := stringToAggregationMethod(d.aggMethod)
+//	if err != nil {
+//		return err
+//	}
+//
+//	db, err := whisper.Create(filename,
+//		retentionSliceToRetentions(d.retentions),
+//		aggMethod,
+//		d.xFilesFactor)
+//	if err != nil {
+//		return err
+//	}
+//	defer db.Close()
+//
+//	return updateWhisperFile(db, d.tss)
+//}
 
 func updateWhisperFile(db *whisper.Whisper, tss [][]*whisper.TimeSeriesPoint) error {
 	if tss == nil {

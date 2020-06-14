@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/hnakamur/timestamp"
@@ -208,6 +209,10 @@ func (w *Whisper) allocBuf(pid pageID) []byte {
 
 func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until timestamp.Second) ([]Point, error) {
 	now := timestamp.FromTimeToSecond(time.Now())
+	log.Printf("FetchFromSpecifiedArchive start, from=%s, until=%s, now=%s",
+		formatTime(secondsToTime(int64(from))),
+		formatTime(secondsToTime(int64(until))),
+		formatTime(secondsToTime(int64(now))))
 	if from > until {
 		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
 	}
@@ -226,12 +231,18 @@ func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until timesta
 	if until > now {
 		until = now
 	}
+	log.Printf("FetchFromSpecifiedArchive adjusted, from=%s, until=%s, now=%s",
+		formatTime(secondsToTime(int64(from))),
+		formatTime(secondsToTime(int64(until))),
+		formatTime(secondsToTime(int64(now))))
 
 	if retentionID < 0 || len(w.Retentions)-1 < retentionID {
 		return nil, ErrRetentionIDOutOfRange
 	}
 
 	baseInterval, err := w.baseInterval(retentionID)
+	log.Printf("FetchFromSpecifiedArchive baseInterval=%s, err=%v",
+		formatTime(secondsToTime(int64(baseInterval))), err)
 	if err != nil {
 		return nil, err
 	}
@@ -261,6 +272,12 @@ func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until timesta
 	if err != nil {
 		return nil, err
 	}
+	for i, pt := range points {
+		log.Printf("rawPoint i=%d, time=%s, value=%s",
+			i,
+			formatTime(secondsToTime(int64(pt.Time))),
+			strconv.FormatFloat(pt.Value, 'f', -1, 64))
+	}
 	clearOldPoints(points, fromInterval, step)
 
 	return points, nil
@@ -272,9 +289,16 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval timestamp.Second, r
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("fetchRawPoints, baseInterval=%s, fromInterval=%s, untilInterval=%s",
+		formatTime(secondsToTime(int64(baseInterval))),
+		formatTime(secondsToTime(int64(fromInterval))),
+		formatTime(secondsToTime(int64(untilInterval))))
 
 	fromOffset := r.pointOffsetAt(r.pointIndex(baseInterval, fromInterval))
 	untilOffset := r.pointOffsetAt(r.pointIndex(baseInterval, untilInterval))
+	log.Printf("fetchRawPoints, fromOffset=%d, untilOffset=%d",
+		fromOffset, untilOffset)
+
 	if fromOffset < untilOffset {
 		fromPg := pageID(fromOffset / w.pageSize)
 		untilPg := pageID(untilOffset / w.pageSize)
@@ -286,7 +310,7 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval timestamp.Second, r
 		offset := fromOffset
 		for i := range points {
 			points[i].Time = w.timestampAt(offset)
-			points[i].Value = w.float64At(offset + float64Size)
+			points[i].Value = w.float64At(offset + uint32Size)
 			offset += pointSize
 		}
 		return points, nil
@@ -297,6 +321,8 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval timestamp.Second, r
 
 	retentionStartOffset := int64(r.Offset)
 	retentionEndOffset := retentionStartOffset + int64(r.NumberOfPoints)*pointSize
+	log.Printf("fetchRawPoints, retentionStartOffset=%d, retentionEndOffset=%d, numberOfPoints=%d",
+		retentionStartOffset, retentionEndOffset, r.NumberOfPoints)
 
 	fromPg := pageID(fromOffset / w.pageSize)
 	retentinoEndPg := pageID(retentionEndOffset / w.pageSize)
@@ -316,14 +342,16 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval timestamp.Second, r
 	i := 0
 	for offset < retentionEndOffset {
 		points[i].Time = w.timestampAt(offset)
-		points[i].Value = w.float64At(offset + float64Size)
+		points[i].Value = w.float64At(offset + uint32Size)
 		offset += pointSize
+		i++
 	}
 	offset = retentionStartOffset
 	for offset < untilOffset {
 		points[i].Time = w.timestampAt(offset)
-		points[i].Value = w.float64At(offset + float64Size)
+		points[i].Value = w.float64At(offset + uint32Size)
 		offset += pointSize
+		i++
 	}
 	return points, nil
 }
@@ -353,12 +381,16 @@ func (w *Whisper) GetRawPoints(retentionID int) []Point {
 
 func (w *Whisper) uint32At(offset int64) uint32 {
 	buf := w.bufForValue(offset, uint32Size)
-	return binary.BigEndian.Uint32(buf)
+	v := binary.BigEndian.Uint32(buf)
+	//log.Printf("uint32At offset=%d, buf=%v, v=%d, 0x%08x", offset, buf, v, v)
+	return v
 }
 
 func (w *Whisper) uint64At(offset int64) uint64 {
 	buf := w.bufForValue(offset, uint64Size)
-	return binary.BigEndian.Uint64(buf)
+	v := binary.BigEndian.Uint64(buf)
+	//log.Printf("uint64At offset=%d, buf=%v, v=%d, 0x%016x", offset, buf, v, v)
+	return v
 }
 
 func (w *Whisper) float32At(offset int64) float32 {
@@ -366,7 +398,9 @@ func (w *Whisper) float32At(offset int64) float32 {
 }
 
 func (w *Whisper) float64At(offset int64) float64 {
-	return math.Float64frombits(w.uint64At(offset))
+	v := math.Float64frombits(w.uint64At(offset))
+	//log.Printf("float64At offset=%d, v=%s", offset, strconv.FormatFloat(v, 'f', -1, 64))
+	return v
 }
 
 func (w *Whisper) bufForValue(offset, size int64) []byte {
@@ -382,7 +416,7 @@ func (w *Whisper) bufForValue(offset, size int64) []byte {
 	p0 := w.pages[pgID]
 	p1 := w.pages[pgID+1]
 	copy(buf, p0[offInPg:])
-	copy(buf[offInPg:], p1[:overflow])
+	copy(buf[size-overflow:], p1[:overflow])
 	return buf
 }
 
@@ -395,12 +429,18 @@ func (w *Whisper) retentionAt(offset int64) Retention {
 }
 
 func (w *Whisper) timestampAt(offset int64) timestamp.Second {
-	return timestamp.Second(w.uint32At(offset))
+	t := timestamp.Second(w.uint32At(offset))
+	//log.Printf("timestampAt offset=%d, t=%s", offset, formatTime(secondsToTime(int64(t))))
+	return t
 }
 
 func (r *Retention) pointIndex(baseInterval, interval timestamp.Second) int {
 	pointDistance := int64(interval-baseInterval) / int64(r.SecondsPerPoint)
 	return int(floorMod(pointDistance, int64(r.NumberOfPoints)))
+}
+
+func (r *Retention) MaxRetention() uint64 {
+	return uint64(r.SecondsPerPoint) * uint64(r.NumberOfPoints)
 }
 
 func (r *Retention) pointOffsetAt(index int) int64 {

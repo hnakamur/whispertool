@@ -154,7 +154,9 @@ func readFloat64From(r io.Reader) (float64, error) {
 	if err != nil {
 		return math.NaN(), err
 	}
-	return math.Float64frombits(intVal), nil
+	v := math.Float64frombits(intVal)
+	//log.Printf("readFloat64From intVal=0x%016x, v=%s", intVal, strconv.FormatFloat(v, 'f', -1, 64))
+	return v, nil
 }
 
 func secondsToDuration(d int64) time.Duration {

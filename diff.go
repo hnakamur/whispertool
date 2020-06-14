@@ -7,8 +7,6 @@ import (
 	"math"
 	"strconv"
 	"time"
-
-	whisper "github.com/go-graphite/go-whisper"
 )
 
 var ErrDiffFound = errors.New("diff found")
@@ -84,19 +82,20 @@ retry:
 	return ErrDiffFound
 }
 
-func retentionsEqual(rr1, rr2 []whisper.Retention) bool {
+func retentionsEqual(rr1, rr2 []Retention) bool {
 	if len(rr1) != len(rr2) {
 		return false
 	}
 	for i, r1 := range rr1 {
-		if r1.String() != rr2[i].String() {
+		r2 := rr2[i]
+		if r1.SecondsPerPoint != r2.SecondsPerPoint || r1.NumberOfPoints != r2.NumberOfPoints {
 			return false
 		}
 	}
 	return true
 }
 
-func valueEqualTimeSeriesPoint(src, dest *whisper.TimeSeriesPoint, ignoreSrcEmpty bool) bool {
+func valueEqualTimeSeriesPoint(src, dest Point, ignoreSrcEmpty bool) bool {
 	srcVal := src.Value
 	srcIsNaN := math.IsNaN(srcVal)
 	if srcIsNaN && ignoreSrcEmpty {
@@ -109,7 +108,7 @@ func valueEqualTimeSeriesPoint(src, dest *whisper.TimeSeriesPoint, ignoreSrcEmpt
 		(!srcIsNaN && !destIsNaN && srcVal == destVal)
 }
 
-func valueDiffIndexesTimeSeriesPointsPointers(src, dest []*whisper.TimeSeriesPoint, ignoreSrcEmpty bool) []int {
+func valueDiffIndexesTimeSeriesPointsPointers(src, dest []Point, ignoreSrcEmpty bool) []int {
 	var is []int
 	for i, srcPt := range src {
 		destPt := dest[i]
@@ -120,7 +119,7 @@ func valueDiffIndexesTimeSeriesPointsPointers(src, dest []*whisper.TimeSeriesPoi
 	return is
 }
 
-func valueDiffIndexesMultiTimeSeriesPointsPointers(src, dest [][]*whisper.TimeSeriesPoint, ignoreSrcEmpty bool) [][]int {
+func valueDiffIndexesMultiTimeSeriesPointsPointers(src, dest [][]Point, ignoreSrcEmpty bool) [][]int {
 	iss := make([][]int, len(src))
 	for i, srcTs := range src {
 		destTs := dest[i]
@@ -138,14 +137,14 @@ func diffIndexesEmpty(iss [][]int) bool {
 	return true
 }
 
-func timeEqualTimeSeriesPointsPointers(src, dest []*whisper.TimeSeriesPoint) bool {
+func timeEqualTimeSeriesPointsPointers(src, dest []Point) bool {
 	if len(src) != len(dest) {
 		return false
 	}
 
 	for i, srcPt := range src {
 		destPt := dest[i]
-		if srcPt == nil || destPt == nil || srcPt.Time != destPt.Time {
+		if srcPt.Time != destPt.Time {
 			return false
 		}
 	}
@@ -153,7 +152,7 @@ func timeEqualTimeSeriesPointsPointers(src, dest []*whisper.TimeSeriesPoint) boo
 	return true
 }
 
-func timeEqualMultiTimeSeriesPointsPointers(src, dest [][]*whisper.TimeSeriesPoint) bool {
+func timeEqualMultiTimeSeriesPointsPointers(src, dest [][]Point) bool {
 	if len(src) != len(dest) {
 		return false
 	}
@@ -167,19 +166,13 @@ func timeEqualMultiTimeSeriesPointsPointers(src, dest [][]*whisper.TimeSeriesPoi
 	return true
 }
 
-func timeDiffTimeSeriesPointsPointers(src, dest []*whisper.TimeSeriesPoint) error {
+func timeDiffTimeSeriesPointsPointers(src, dest []Point) error {
 	if len(src) != len(dest) {
 		return fmt.Errorf("point count unmatch, src=%d, dest=%d", len(src), len(dest))
 	}
 
 	for i, srcPt := range src {
 		destPt := dest[i]
-		if srcPt == nil {
-			return fmt.Errorf("srcPt %d not exist", i)
-		}
-		if destPt == nil {
-			return fmt.Errorf("destPt %d not exist", i)
-		}
 		if srcPt.Time != destPt.Time {
 			return fmt.Errorf("point %d time unmatch src=%s, dest=%s",
 				i,
@@ -191,7 +184,7 @@ func timeDiffTimeSeriesPointsPointers(src, dest []*whisper.TimeSeriesPoint) erro
 	return nil
 }
 
-func timeDiffMultiTimeSeriesPointsPointers(src, dest [][]*whisper.TimeSeriesPoint) error {
+func timeDiffMultiTimeSeriesPointsPointers(src, dest [][]Point) error {
 	if len(src) != len(dest) {
 		return fmt.Errorf("retention count unmatch, src=%d, dest=%d", len(src), len(dest))
 	}
