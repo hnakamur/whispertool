@@ -2,10 +2,12 @@ package whispertool
 
 import (
 	"encoding/binary"
-	"io"
+	"errors"
+	"fmt"
 	"log"
 	"math"
 	"os"
+	"time"
 
 	"github.com/hnakamur/timestamp"
 )
@@ -60,6 +62,8 @@ const (
 	pointSize     = uint32Size + float64Size
 )
 
+var ErrRetentionIDOutOfRange = errors.New("retention is ID out of range")
+
 func Open(filename string, bufPool *BufferPool) (*Whisper, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -91,6 +95,7 @@ func Open(filename string, bufPool *BufferPool) (*Whisper, error) {
 	if err := w.readRetentions(); err != nil {
 		return nil, err
 	}
+	w.initBaseIntervals()
 	return w, nil
 }
 
@@ -127,6 +132,30 @@ func (w *Whisper) readRetentions() error {
 		w.Retentions[i] = w.retentionAt(off)
 	}
 	return nil
+}
+
+func (w *Whisper) initBaseIntervals() {
+	w.baseIntervals = make([]timestamp.Second, len(w.Retentions))
+	for i := range w.baseIntervals {
+		w.baseIntervals[i] = -1
+	}
+}
+
+func (w *Whisper) baseInterval(retentionID int) (timestamp.Second, error) {
+	interval := w.baseIntervals[retentionID]
+	if interval != -1 {
+		return interval, nil
+	}
+
+	r := w.Retentions[retentionID]
+	off := int64(r.Offset)
+	fromPg := pageID(off / w.pageSize)
+	untilPg := pageID((off + uint32Size) / w.pageSize)
+	if err := w.readPagesIfNeeded(fromPg, untilPg); err != nil {
+		return 0, fmt.Errorf("cannot read page from %d to %d for baseInterval: %s",
+			fromPg, untilPg, err)
+	}
+	return w.timestampAt(off), nil
 }
 
 func (w *Whisper) readPagesIfNeeded(from, until pageID) error {
@@ -177,44 +206,137 @@ func (w *Whisper) allocBuf(pid pageID) []byte {
 	return b
 }
 
-func (w *Whisper) pageAt(id pageID) ([]byte, error) {
-	p := w.pages[id]
-	if p != nil {
-		return p, nil
+func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until timestamp.Second) ([]Point, error) {
+	now := timestamp.FromTimeToSecond(time.Now())
+	if from > until {
+		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
+	}
+	oldest := now - timestamp.Second(w.Meta.MaxRetention)
+	// range is in the future
+	if from > now {
+		return nil, nil
+	}
+	// range is beyond retention
+	if until < oldest {
+		return nil, nil
+	}
+	if from < oldest {
+		from = oldest
+	}
+	if until > now {
+		until = now
 	}
 
-	b := w.bufPool.Get()
-	off := int64(id) * int64(w.bufPool.BufferSize())
-	n, err := w.file.ReadAt(b, off)
-	if err != nil {
-		if err != io.EOF {
-			return nil, err
-		}
-		b = b[:n]
+	if retentionID < 0 || len(w.Retentions)-1 < retentionID {
+		return nil, ErrRetentionIDOutOfRange
 	}
-	w.pages[id] = b
-	return b, nil
+
+	baseInterval, err := w.baseInterval(retentionID)
+	if err != nil {
+		return nil, err
+	}
+
+	r := &w.Retentions[retentionID]
+	fromInterval := r.Interval(from)
+	untilInterval := r.Interval(until)
+	step := timestamp.Second(r.SecondsPerPoint)
+
+	if baseInterval == 0 {
+		points := make([]Point, (untilInterval-fromInterval)/step)
+		t := fromInterval
+		for i := range points {
+			points[i].Time = t
+			points[i].Value = math.NaN()
+			t += step
+		}
+		return points, nil
+	}
+
+	// Zero-length time range: always include the next point
+	if fromInterval == untilInterval {
+		untilInterval += step
+	}
+
+	points, err := w.fetchRawPoints(fromInterval, untilInterval, retentionID)
+	if err != nil {
+		return nil, err
+	}
+	clearOldPoints(points, fromInterval, step)
+
+	return points, nil
 }
 
-func (w *Whisper) FetchFromArchive(retentionID int, from, until timestamp.Second) ([]Point, error) {
-	//now := timestamp.FromTimeToSecond(time.Now())
+func (w *Whisper) fetchRawPoints(fromInterval, untilInterval timestamp.Second, retentionID int) ([]Point, error) {
+	r := &w.Retentions[retentionID]
+	baseInterval, err := w.baseInterval(retentionID)
+	if err != nil {
+		return nil, err
+	}
 
-	//r := w.Retentions[retentionID]
-	//tNow := r.alignTime(now)
-	//if now < until {
-	//	until = now
-	//} else {
-	//	until = r.alignTime(until)
-	//}
+	fromOffset := r.pointOffsetAt(r.pointIndex(baseInterval, fromInterval))
+	untilOffset := r.pointOffsetAt(r.pointIndex(baseInterval, untilInterval))
+	if fromOffset < untilOffset {
+		fromPg := pageID(fromOffset / w.pageSize)
+		untilPg := pageID(untilOffset / w.pageSize)
+		if err := w.readPagesIfNeeded(fromPg, untilPg); err != nil {
+			return nil, fmt.Errorf("cannot read page from %d to %d for points: %s",
+				fromPg, untilPg, err)
+		}
+		points := make([]Point, (untilOffset-fromOffset)/pointSize)
+		offset := fromOffset
+		for i := range points {
+			points[i].Time = w.timestampAt(offset)
+			points[i].Value = w.float64At(offset + float64Size)
+			offset += pointSize
+		}
+		return points, nil
+	}
 
-	//tMin := tNow - timestamp.Second(r.NumberOfPoints*r.SecondsPerPoint)
-	//if from < tMin {
-	//	from = tMin
-	//} else {
-	//	from = r.alignTime(from)
-	//}
+	step := timestamp.Second(r.SecondsPerPoint)
+	points := make([]Point, (untilInterval-fromInterval)/step)
 
-	return nil, nil
+	retentionStartOffset := int64(r.Offset)
+	retentionEndOffset := retentionStartOffset + int64(r.NumberOfPoints)*pointSize
+
+	fromPg := pageID(fromOffset / w.pageSize)
+	retentinoEndPg := pageID(retentionEndOffset / w.pageSize)
+	if err := w.readPagesIfNeeded(fromPg, retentinoEndPg); err != nil {
+		return nil, fmt.Errorf("cannot read page from %d to %d for points: %s",
+			fromPg, retentinoEndPg, err)
+	}
+
+	retentinoStartPg := pageID(retentionStartOffset / w.pageSize)
+	untilPg := pageID(untilOffset / w.pageSize)
+	if err := w.readPagesIfNeeded(retentinoStartPg, untilPg); err != nil {
+		return nil, fmt.Errorf("cannot read page from %d to %d for points: %s",
+			retentinoStartPg, untilPg, err)
+	}
+
+	offset := fromOffset
+	i := 0
+	for offset < retentionEndOffset {
+		points[i].Time = w.timestampAt(offset)
+		points[i].Value = w.float64At(offset + float64Size)
+		offset += pointSize
+	}
+	offset = retentionStartOffset
+	for offset < untilOffset {
+		points[i].Time = w.timestampAt(offset)
+		points[i].Value = w.float64At(offset + float64Size)
+		offset += pointSize
+	}
+	return points, nil
+}
+
+func clearOldPoints(points []Point, fromInterval, step timestamp.Second) {
+	currentInterval := fromInterval
+	for i := range points {
+		if points[i].Time != currentInterval {
+			points[i].Time = currentInterval
+			points[i].Value = math.NaN()
+		}
+		currentInterval += step
+	}
 }
 
 func (w *Whisper) GetRawPoints(retentionID int) []Point {
@@ -276,17 +398,13 @@ func (w *Whisper) timestampAt(offset int64) timestamp.Second {
 	return timestamp.Second(w.uint32At(offset))
 }
 
-func (w *Whisper) baseInterval(r *Retention) timestamp.Second {
-	return w.timestampAt(int64(r.Offset))
-}
-
 func (r *Retention) pointIndex(baseInterval, interval timestamp.Second) int {
 	pointDistance := int64(interval-baseInterval) / int64(r.SecondsPerPoint)
 	return int(floorMod(pointDistance, int64(r.NumberOfPoints)))
 }
 
-func (r *Retention) pointOffsetAt(index int) uintptr {
-	return uintptr(r.Offset) + uintptr(index)*pointSize
+func (r *Retention) pointOffsetAt(index int) int64 {
+	return int64(r.Offset) + int64(index)*pointSize
 }
 
 func (r *Retention) Interval(t timestamp.Second) timestamp.Second {
