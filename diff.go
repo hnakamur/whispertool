@@ -11,22 +11,22 @@ import (
 
 var ErrDiffFound = errors.New("diff found")
 
-func Diff(src, dest string, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, now, from, until time.Time) error {
+func Diff(src, dest string, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, now, from, until time.Time, retId int) error {
 	if recursive {
 		return errors.New("recursive option not implemented yet")
 	}
 
-	srcData, err := readWhisperFile(src, now, from, until, RetIdAll)
+	srcData, err := readWhisperFile(src, now, from, until, retId)
 	if err != nil {
 		return err
 	}
 
-	destData, err := readWhisperFile(dest, now, from, until, RetIdAll)
+	destData, err := readWhisperFile(dest, now, from, until, retId)
 	if err != nil {
 		return err
 	}
 
-	iss, err := diffIndexesWhisperFileData(srcData, destData, ignoreSrcEmpty, ignoreDestEmpty, showAll)
+	iss, err := diffIndexesWhisperFileData(srcData, destData, ignoreSrcEmpty, ignoreDestEmpty, showAll, retId)
 	if err != nil {
 		return err
 	}
@@ -38,7 +38,7 @@ func Diff(src, dest string, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll 
 	return ErrDiffFound
 }
 
-func diffIndexesWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, ignoreDestEmpty, showAll bool) ([][]int, error) {
+func diffIndexesWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, retId int) ([][]int, error) {
 	if !retentionsEqual(src.retentions, dest.retentions) {
 		return nil, fmt.Errorf("%s and %s archive confiugrations are unalike. "+
 			"Resize the input before diffing", src.filename, dest.filename)

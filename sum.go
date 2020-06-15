@@ -11,7 +11,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func RunSum(srcPattern, destFilename, textOut string) error {
+func RunSum(srcPattern, destFilename, textOut string, retId int) error {
 	if destFilename != "" {
 		return errors.New("writing sum to whisperfile is not implemented yet")
 	}
@@ -27,7 +27,7 @@ func RunSum(srcPattern, destFilename, textOut string) error {
 	now := time.Now()
 	from := time.Unix(0, 0)
 	until := now
-	sumData, err := sumWhisperFile(srcFilenames, now, from, until)
+	sumData, err := sumWhisperFile(srcFilenames, now, from, until, retId)
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func RunSum(srcPattern, destFilename, textOut string) error {
 	return nil
 }
 
-func sumWhisperFile(srcFilenames []string, now, from, until time.Time) (*whisperFileData, error) {
+func sumWhisperFile(srcFilenames []string, now, from, until time.Time, retId int) (*whisperFileData, error) {
 retry:
 	srcDatas := make([]*whisperFileData, len(srcFilenames))
 	var g errgroup.Group
@@ -47,7 +47,7 @@ retry:
 		i := i
 		srcFilename := srcFilename
 		g.Go(func() error {
-			d, err := readWhisperFile(srcFilename, now, from, until, RetIdAll)
+			d, err := readWhisperFile(srcFilename, now, from, until, retId)
 			if err != nil {
 				return err
 			}
