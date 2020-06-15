@@ -27,11 +27,11 @@ func View(filename string, raw bool, now, from, until time.Time, retId int, show
 }
 
 type whisperFileData struct {
-	//aggMethod    string
-	maxRetention uint32
-	xFilesFactor float32
-	retentions   []Retention
-	tss          [][]Point
+	aggregationMethod AggregationMethod
+	maxRetention      uint32
+	xFilesFactor      float32
+	retentions        []Retention
+	tss               [][]Point
 }
 
 func readWhisperFile(filename string, now, from, until time.Time, retId int) (*whisperFileData, error) {
@@ -80,11 +80,11 @@ func readWhisperDB(db *Whisper, now, from, until time.Time, retId int, filename 
 	}
 
 	return &whisperFileData{
-		//aggMethod:    db.Meta.AggregationMethod,
-		maxRetention: db.Meta.MaxRetention,
-		xFilesFactor: db.Meta.XFilesFactor,
-		retentions:   retentions,
-		tss:          tss,
+		aggregationMethod: db.Meta.AggregationMethod,
+		maxRetention:      db.Meta.MaxRetention,
+		xFilesFactor:      db.Meta.XFilesFactor,
+		retentions:        retentions,
+		tss:               tss,
 	}, nil
 }
 
@@ -207,7 +207,7 @@ func writeWhisperFileData(textOut string, d *whisperFileData, showHeader bool) e
 func (d *whisperFileData) WriteTo(w io.Writer, showHeader bool) error {
 	if showHeader {
 		_, err := fmt.Fprintf(w, "aggMethod:%s\tmaxRetention:%s\txFilesFactor:%s\n",
-			"", //d.aggMethod,
+			d.aggregationMethod,
 			secondsToDuration(int64(d.maxRetention)),
 			strconv.FormatFloat(float64(d.xFilesFactor), 'f', -1, 32))
 		if err != nil {

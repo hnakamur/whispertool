@@ -1,6 +1,6 @@
 package whispertool
 
-func Sum(srcPattern, destFilename string) error {
+func RunSum(srcPattern, destFilename string) error {
 	//retry:
 	//	srcFilenames, err := filepath.Glob(srcPattern)
 	//	if err != nil {

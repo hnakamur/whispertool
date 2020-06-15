@@ -33,10 +33,10 @@ type Whisper struct {
 }
 
 type Meta struct {
-	AggType        uint32
-	MaxRetention   uint32
-	XFilesFactor   float32
-	RetentionCount uint32
+	AggregationMethod AggregationMethod
+	MaxRetention      uint32
+	XFilesFactor      float32
+	RetentionCount    uint32
 }
 
 type Retention struct {
@@ -112,7 +112,7 @@ func (w *Whisper) readMeta() error {
 		return err
 	}
 
-	w.Meta.AggType = w.uint32At(0)
+	w.Meta.AggregationMethod = AggregationMethod(w.uint32At(0))
 	w.Meta.MaxRetention = w.uint32At(uint32Size)
 	w.Meta.XFilesFactor = w.float32At(2 * uint32Size)
 	w.Meta.RetentionCount = w.uint32At(3 * uint32Size)

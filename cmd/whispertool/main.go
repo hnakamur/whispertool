@@ -228,7 +228,7 @@ func runSumCmd(args []string) error {
 		return newRequiredOptionError(fs, "dest")
 	}
 
-	return whispertool.Sum(*src, *dest)
+	return whispertool.RunSum(*src, *dest)
 }
 
 const holeCmdUsage = `Usage: %s hole [options] src.wsp dest.wsp
