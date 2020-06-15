@@ -38,6 +38,7 @@ subcommands:
   generate            Generate random whisper file.
   merge               Update empty points with value from src whisper file.
   sum                 Sum value of whisper files.
+  sum-diff            Sum value of whisper files and compare to another whisper file.
   view                View raw content of whisper file.
   version             Show version
 
@@ -101,6 +102,8 @@ func run() int {
 		err = runMergeCmd(args[1:])
 	case "sum":
 		err = runSumCmd(args[1:])
+	case "sum-diff":
+		err = runSumDiffCmd(args[1:])
 	case "view":
 		err = runViewCmd(args[1:])
 	case "version":
@@ -219,8 +222,38 @@ func runSumCmd(args []string) error {
 
 	src := fs.String("src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
 	dest := fs.String("dest", "", "dest whisper filename (ex. dest.wsp).")
+	textOut := fs.String("text-out", "", "text output. empty means no output, - means stdout, other means output file.")
 	fs.Parse(args)
 
+	if *src == "" {
+		return newRequiredOptionError(fs, "src")
+	}
+
+	return whispertool.RunSum(*src, *dest, *textOut)
+}
+
+const sumDiffCmdUsage = `Usage: %s sum-diff -item <pattern> -src <pattern> -dest <destname>
+
+Example: %s sum-diff -item '/var/lib/graphite/whisper/test/*/*' -src 'sv*.wsp' -dest 'sum.wsp'
+
+options:
+`
+
+func runSumDiffCmd(args []string) error {
+	fs := flag.NewFlagSet("sum-diff", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), sumDiffCmdUsage, cmdName, cmdName)
+		fs.PrintDefaults()
+	}
+
+	item := fs.String("item", "", "glob pattern of whisper directory")
+	src := fs.String("src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
+	dest := fs.String("dest", "", "dest whisper filename (ex. dest.wsp).")
+	fs.Parse(args)
+
+	if *item == "" {
+		return newRequiredOptionError(fs, "item")
+	}
 	if *src == "" {
 		return newRequiredOptionError(fs, "src")
 	}
@@ -228,7 +261,7 @@ func runSumCmd(args []string) error {
 		return newRequiredOptionError(fs, "dest")
 	}
 
-	return whispertool.RunSum(*src, *dest)
+	return whispertool.SumDiff(*item, *src, *dest)
 }
 
 const holeCmdUsage = `Usage: %s hole [options] src.wsp dest.wsp
