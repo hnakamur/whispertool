@@ -253,6 +253,9 @@ func runSumDiffCmd(args []string) error {
 	dest := fs.String("dest", "", "dest whisper filename (ex. dest.wsp).")
 	ignoreSrcEmpty := fs.Bool("ignore-src-empty", false, "ignore diff when source point is empty.")
 	showAll := fs.Bool("show-all", false, "print all points when diff exists.")
+	interval := fs.Duration("interval", time.Minute, "run interval")
+	intervalOffset := fs.Duration("interval-offset", 7*time.Second, "run interval offset")
+
 	fs.Parse(args)
 
 	if *item == "" {
@@ -271,7 +274,7 @@ func runSumDiffCmd(args []string) error {
 		return newRequiredOptionError(fs, "dest")
 	}
 
-	return whispertool.SumDiff(*srcBase, *destBase, *item, *src, *dest, *ignoreSrcEmpty, *showAll)
+	return whispertool.SumDiff(*srcBase, *destBase, *item, *src, *dest, *ignoreSrcEmpty, *showAll, *interval, *intervalOffset)
 }
 
 const holeCmdUsage = `Usage: %s hole [options] src.wsp dest.wsp

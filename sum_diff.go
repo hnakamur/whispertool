@@ -2,13 +2,34 @@ package whispertool
 
 import (
 	"fmt"
-	"log"
 	"path/filepath"
 	"time"
 )
 
-func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcEmpty, showAll bool) error {
-	log.Printf("SumDiff start srcBase=%s, destBase=%s, itemPattern=%s, srcPattern=%s, dest=%s", srcBase, destBase, itemPattern, srcPattern, dest)
+func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcEmpty, showAll bool, interval, intervalOffset time.Duration) error {
+	//log.Printf("SumDiff start srcBase=%s, destBase=%s, itemPattern=%s, srcPattern=%s, dest=%s", srcBase, destBase, itemPattern, srcPattern, dest)
+	if interval == 0 {
+		err := sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest, ignoreSrcEmpty, showAll)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	for {
+		now := time.Now()
+		targetTime := now.Truncate(interval).Add(interval).Add(intervalOffset)
+		time.Sleep(targetTime.Sub(now))
+
+		err := sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest, ignoreSrcEmpty, showAll)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcEmpty, showAll bool) error {
 	itemDirnames, err := filepath.Glob(filepath.Join(srcBase, itemPattern))
 	if err != nil {
 		return err
