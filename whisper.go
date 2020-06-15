@@ -4,10 +4,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"log"
 	"math"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/hnakamur/timestamp"
@@ -160,7 +158,7 @@ func (w *Whisper) baseInterval(retentionID int) (timestamp.Second, error) {
 }
 
 func (w *Whisper) readPagesIfNeeded(from, until pageID) error {
-	log.Printf("readPagesIfNeeded start, from=%d, until=%d", from, until)
+	//log.Printf("readPagesIfNeeded start, from=%d, until=%d", from, until)
 	for from <= until {
 		for from <= until {
 			if _, ok := w.pages[from]; ok {
@@ -185,7 +183,7 @@ func (w *Whisper) readPagesIfNeeded(from, until pageID) error {
 		}
 
 		off := int64(from) * w.pageSize
-		log.Printf("readPagesIfNeeded readv from=%d, to=%d", from, pid-1)
+		//log.Printf("readPagesIfNeeded readv from=%d, to=%d", from, pid-1)
 		_, err := preadvFull(w.file, iovs, off)
 		if err != nil {
 			return err
@@ -209,10 +207,10 @@ func (w *Whisper) allocBuf(pid pageID) []byte {
 
 func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until timestamp.Second) ([]Point, error) {
 	now := timestamp.FromTimeToSecond(time.Now())
-	log.Printf("FetchFromSpecifiedArchive start, from=%s, until=%s, now=%s",
-		formatTime(secondsToTime(int64(from))),
-		formatTime(secondsToTime(int64(until))),
-		formatTime(secondsToTime(int64(now))))
+	//log.Printf("FetchFromSpecifiedArchive start, from=%s, until=%s, now=%s",
+	//	formatTime(secondsToTime(int64(from))),
+	//	formatTime(secondsToTime(int64(until))),
+	//	formatTime(secondsToTime(int64(now))))
 	if from > until {
 		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
 	}
@@ -231,18 +229,18 @@ func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until timesta
 	if until > now {
 		until = now
 	}
-	log.Printf("FetchFromSpecifiedArchive adjusted, from=%s, until=%s, now=%s",
-		formatTime(secondsToTime(int64(from))),
-		formatTime(secondsToTime(int64(until))),
-		formatTime(secondsToTime(int64(now))))
+	//log.Printf("FetchFromSpecifiedArchive adjusted, from=%s, until=%s, now=%s",
+	//	formatTime(secondsToTime(int64(from))),
+	//	formatTime(secondsToTime(int64(until))),
+	//	formatTime(secondsToTime(int64(now))))
 
 	if retentionID < 0 || len(w.Retentions)-1 < retentionID {
 		return nil, ErrRetentionIDOutOfRange
 	}
 
 	baseInterval, err := w.baseInterval(retentionID)
-	log.Printf("FetchFromSpecifiedArchive baseInterval=%s, err=%v",
-		formatTime(secondsToTime(int64(baseInterval))), err)
+	//log.Printf("FetchFromSpecifiedArchive baseInterval=%s, err=%v",
+	//	formatTime(secondsToTime(int64(baseInterval))), err)
 	if err != nil {
 		return nil, err
 	}
@@ -272,12 +270,12 @@ func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until timesta
 	if err != nil {
 		return nil, err
 	}
-	for i, pt := range points {
-		log.Printf("rawPoint i=%d, time=%s, value=%s",
-			i,
-			formatTime(secondsToTime(int64(pt.Time))),
-			strconv.FormatFloat(pt.Value, 'f', -1, 64))
-	}
+	//for i, pt := range points {
+	//	log.Printf("rawPoint i=%d, time=%s, value=%s",
+	//		i,
+	//		formatTime(secondsToTime(int64(pt.Time))),
+	//		strconv.FormatFloat(pt.Value, 'f', -1, 64))
+	//}
 	clearOldPoints(points, fromInterval, step)
 
 	return points, nil
@@ -289,15 +287,15 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval timestamp.Second, r
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("fetchRawPoints, baseInterval=%s, fromInterval=%s, untilInterval=%s",
-		formatTime(secondsToTime(int64(baseInterval))),
-		formatTime(secondsToTime(int64(fromInterval))),
-		formatTime(secondsToTime(int64(untilInterval))))
+	//log.Printf("fetchRawPoints, baseInterval=%s, fromInterval=%s, untilInterval=%s",
+	//	formatTime(secondsToTime(int64(baseInterval))),
+	//	formatTime(secondsToTime(int64(fromInterval))),
+	//	formatTime(secondsToTime(int64(untilInterval))))
 
 	fromOffset := r.pointOffsetAt(r.pointIndex(baseInterval, fromInterval))
 	untilOffset := r.pointOffsetAt(r.pointIndex(baseInterval, untilInterval))
-	log.Printf("fetchRawPoints, fromOffset=%d, untilOffset=%d",
-		fromOffset, untilOffset)
+	//log.Printf("fetchRawPoints, fromOffset=%d, untilOffset=%d",
+	//	fromOffset, untilOffset)
 
 	if fromOffset < untilOffset {
 		fromPg := pageID(fromOffset / w.pageSize)
@@ -321,8 +319,8 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval timestamp.Second, r
 
 	retentionStartOffset := int64(r.Offset)
 	retentionEndOffset := retentionStartOffset + int64(r.NumberOfPoints)*pointSize
-	log.Printf("fetchRawPoints, retentionStartOffset=%d, retentionEndOffset=%d, numberOfPoints=%d",
-		retentionStartOffset, retentionEndOffset, r.NumberOfPoints)
+	//log.Printf("fetchRawPoints, retentionStartOffset=%d, retentionEndOffset=%d, numberOfPoints=%d",
+	//	retentionStartOffset, retentionEndOffset, r.NumberOfPoints)
 
 	fromPg := pageID(fromOffset / w.pageSize)
 	retentinoEndPg := pageID(retentionEndOffset / w.pageSize)
