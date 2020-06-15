@@ -21,11 +21,7 @@ func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcE
 		targetTime := now.Truncate(interval).Add(interval).Add(intervalOffset)
 		time.Sleep(targetTime.Sub(now))
 
-		t0 := time.Now()
-		fmt.Printf("time:%s\tmsg:start\n", formatTime(t0))
 		err := sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest, ignoreSrcEmpty, showAll)
-		t1 := time.Now()
-		fmt.Printf("time:%s\tmsg:finish\tduration:%s\terr:%v\n", formatTime(t1), t1.Sub(t0).String(), err)
 		if err != nil {
 			return err
 		}
@@ -34,6 +30,14 @@ func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcE
 }
 
 func sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcEmpty, showAll bool) error {
+	t0 := time.Now()
+	fmt.Printf("time:%s\tmsg:start\n", formatTime(t0))
+	var totalItemCount int
+	defer func() {
+		t1 := time.Now()
+		fmt.Printf("time:%s\tmsg:finish\tduration:%s\ttotalItemCount:%d\n", formatTime(t1), t1.Sub(t0).String(), totalItemCount)
+	}()
+
 	itemDirnames, err := filepath.Glob(filepath.Join(srcBase, itemPattern))
 	if err != nil {
 		return err
@@ -41,12 +45,14 @@ func sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest string, ign
 	if len(itemDirnames) == 0 {
 		return fmt.Errorf("itemPattern match no directries, itemPattern=%s", itemPattern)
 	}
+	totalItemCount = len(itemDirnames)
 
 	for _, itemDirname := range itemDirnames {
 		itemRelDir, err := filepath.Rel(srcBase, itemDirname)
 		if err != nil {
 			return err
 		}
+		//fmt.Printf("itemRel:%s\n", itemRelDir)
 		err = sumDiffItem(srcBase, destBase, itemRelDir, srcPattern, dest, ignoreSrcEmpty, showAll)
 		if err != nil {
 			return err
