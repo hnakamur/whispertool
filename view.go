@@ -27,6 +27,7 @@ func View(filename string, raw bool, now, from, until time.Time, retId int, show
 }
 
 type whisperFileData struct {
+	filename          string
 	aggregationMethod AggregationMethod
 	maxRetention      uint32
 	xFilesFactor      float32
@@ -80,6 +81,7 @@ func readWhisperDB(db *Whisper, now, from, until time.Time, retId int, filename 
 	}
 
 	return &whisperFileData{
+		filename:          filename,
 		aggregationMethod: db.Meta.AggregationMethod,
 		maxRetention:      db.Meta.MaxRetention,
 		xFilesFactor:      db.Meta.XFilesFactor,

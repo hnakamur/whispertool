@@ -12,7 +12,6 @@ import (
 var ErrDiffFound = errors.New("diff found")
 
 func Diff(src, dest string, recursive, ignoreSrcEmpty, showAll bool, now, from, until time.Time) error {
-retry:
 	if recursive {
 		return errors.New("recursive option not implemented yet")
 	}
@@ -27,26 +26,32 @@ retry:
 		return err
 	}
 
-	if !retentionsEqual(srcData.retentions, destData.retentions) {
+	return diffWhisperFileData(srcData, destData, ignoreSrcEmpty, showAll)
+}
+
+func diffWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, showAll bool) error {
+	if !retentionsEqual(src.retentions, dest.retentions) {
 		return fmt.Errorf("%s and %s archive confiugrations are unalike. "+
-			"Resize the input before diffing", src, dest)
+			"Resize the input before diffing", src.filename, dest.filename)
 	}
 
-	if err := timeDiffMultiTimeSeriesPointsPointers(srcData.tss, destData.tss); err != nil {
+	if err := timeDiffMultiArchivePoints(src.tss, dest.tss); err != nil {
 		log.Printf("diff failed since %s and %s archive time values are unalike: %s",
-			src, dest, err.Error())
-		goto retry
+			src.filename, dest.filename, err.Error())
+		//goto retry
+		return fmt.Errorf("diff failed since %s and %s archive time values are unalike: %s",
+			src.filename, dest.filename, err.Error())
 	}
 
-	iss := valueDiffIndexesMultiTimeSeriesPointsPointers(srcData.tss, destData.tss, ignoreSrcEmpty)
+	iss := valueDiffIndexesMultiTimeSeriesPointsPointers(src.tss, dest.tss, ignoreSrcEmpty)
 	if diffIndexesEmpty(iss) {
 		return nil
 	}
 
 	if showAll {
 		for i, is := range iss {
-			srcTs := srcData.tss[i]
-			destTs := destData.tss[i]
+			srcTs := src.tss[i]
+			destTs := dest.tss[i]
 			for j, srcPt := range srcTs {
 				var diff int
 				if len(is) > 0 && is[0] == j {
@@ -66,8 +71,8 @@ retry:
 	}
 
 	for i, is := range iss {
-		srcTs := srcData.tss[i]
-		destTs := destData.tss[i]
+		srcTs := src.tss[i]
+		destTs := dest.tss[i]
 		for _, j := range is {
 			srcPt := srcTs[j]
 			destPt := destTs[j]
@@ -166,7 +171,7 @@ func timeEqualMultiTimeSeriesPointsPointers(src, dest [][]Point) bool {
 	return true
 }
 
-func timeDiffTimeSeriesPointsPointers(src, dest []Point) error {
+func timeDiffPoints(src, dest []Point) error {
 	if len(src) != len(dest) {
 		return fmt.Errorf("point count unmatch, src=%d, dest=%d", len(src), len(dest))
 	}
@@ -184,13 +189,13 @@ func timeDiffTimeSeriesPointsPointers(src, dest []Point) error {
 	return nil
 }
 
-func timeDiffMultiTimeSeriesPointsPointers(src, dest [][]Point) error {
+func timeDiffMultiArchivePoints(src, dest [][]Point) error {
 	if len(src) != len(dest) {
 		return fmt.Errorf("retention count unmatch, src=%d, dest=%d", len(src), len(dest))
 	}
 
 	for i, srcTs := range src {
-		if err := timeDiffTimeSeriesPointsPointers(srcTs, dest[i]); err != nil {
+		if err := timeDiffPoints(srcTs, dest[i]); err != nil {
 			return fmt.Errorf("timestamps unmatch for retention=%d: %s", i, err)
 		}
 	}

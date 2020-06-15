@@ -24,7 +24,10 @@ func RunSum(srcPattern, destFilename, textOut string) error {
 		return fmt.Errorf("no file matched for -src=%s", srcPattern)
 	}
 
-	sumData, err := sumWhisperFile(srcFilenames)
+	now := time.Now()
+	from := time.Unix(0, 0)
+	until := now
+	sumData, err := sumWhisperFile(srcFilenames, now, from, until)
 	if err != nil {
 		return err
 	}
@@ -36,12 +39,9 @@ func RunSum(srcPattern, destFilename, textOut string) error {
 	return nil
 }
 
-func sumWhisperFile(srcFilenames []string) (*whisperFileData, error) {
+func sumWhisperFile(srcFilenames []string, now, from, until time.Time) (*whisperFileData, error) {
 retry:
 	srcDatas := make([]*whisperFileData, len(srcFilenames))
-	now := time.Now()
-	from := time.Unix(0, 0)
-	until := now
 	var g errgroup.Group
 	for i, srcFilename := range srcFilenames {
 		i := i
@@ -68,7 +68,7 @@ retry:
 	}
 
 	for i := 1; i < len(srcDatas); i++ {
-		if err := timeDiffMultiTimeSeriesPointsPointers(srcDatas[0].tss, srcDatas[i].tss); err != nil {
+		if err := timeDiffMultiArchivePoints(srcDatas[0].tss, srcDatas[i].tss); err != nil {
 			log.Printf("sum failed since %s and %s archive time values are unalike: %s",
 				srcFilenames[0], srcFilenames[i], err.Error())
 			goto retry
