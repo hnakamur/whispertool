@@ -26,12 +26,21 @@ func Diff(src, dest string, recursive, ignoreSrcEmpty, showAll bool, now, from, 
 		return err
 	}
 
-	return diffWhisperFileData(srcData, destData, ignoreSrcEmpty, showAll)
+	iss, err := diffIndexesWhisperFileData(srcData, destData, ignoreSrcEmpty, showAll)
+	if err != nil {
+		return err
+	}
+
+	if diffIndexesEmpty(iss) {
+		return nil
+	}
+	writeDiff(iss, srcData, destData, showAll)
+	return ErrDiffFound
 }
 
-func diffWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, showAll bool) error {
+func diffIndexesWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, showAll bool) ([][]int, error) {
 	if !retentionsEqual(src.retentions, dest.retentions) {
-		return fmt.Errorf("%s and %s archive confiugrations are unalike. "+
+		return nil, fmt.Errorf("%s and %s archive confiugrations are unalike. "+
 			"Resize the input before diffing", src.filename, dest.filename)
 	}
 
@@ -39,17 +48,17 @@ func diffWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, showAll boo
 		log.Printf("diff failed since %s and %s archive time values are unalike: %s",
 			src.filename, dest.filename, err.Error())
 		//goto retry
-		return fmt.Errorf("diff failed since %s and %s archive time values are unalike: %s",
+		return nil, fmt.Errorf("diff failed since %s and %s archive time values are unalike: %s",
 			src.filename, dest.filename, err.Error())
 	}
 
-	iss := valueDiffIndexesMultiTimeSeriesPointsPointers(src.tss, dest.tss, ignoreSrcEmpty)
-	if diffIndexesEmpty(iss) {
-		return nil
-	}
+	iss := valueDiffIndexesMultiArchivePoints(src.tss, dest.tss, ignoreSrcEmpty)
+	return iss, nil
+}
 
+func writeDiff(indexes [][]int, src, dest *whisperFileData, showAll bool) {
 	if showAll {
-		for i, is := range iss {
+		for i, is := range indexes {
 			srcTs := src.tss[i]
 			destTs := dest.tss[i]
 			for j, srcPt := range srcTs {
@@ -67,10 +76,10 @@ func diffWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, showAll boo
 					diff)
 			}
 		}
-		return ErrDiffFound
+		return
 	}
 
-	for i, is := range iss {
+	for i, is := range indexes {
 		srcTs := src.tss[i]
 		destTs := dest.tss[i]
 		for _, j := range is {
@@ -83,8 +92,6 @@ func diffWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, showAll boo
 				strconv.FormatFloat(destPt.Value, 'f', -1, 64))
 		}
 	}
-
-	return ErrDiffFound
 }
 
 func retentionsEqual(rr1, rr2 []Retention) bool {
@@ -113,7 +120,7 @@ func valueEqualTimeSeriesPoint(src, dest Point, ignoreSrcEmpty bool) bool {
 		(!srcIsNaN && !destIsNaN && srcVal == destVal)
 }
 
-func valueDiffIndexesTimeSeriesPointsPointers(src, dest []Point, ignoreSrcEmpty bool) []int {
+func valueDiffIndexesPoints(src, dest []Point, ignoreSrcEmpty bool) []int {
 	var is []int
 	for i, srcPt := range src {
 		destPt := dest[i]
@@ -124,11 +131,11 @@ func valueDiffIndexesTimeSeriesPointsPointers(src, dest []Point, ignoreSrcEmpty 
 	return is
 }
 
-func valueDiffIndexesMultiTimeSeriesPointsPointers(src, dest [][]Point, ignoreSrcEmpty bool) [][]int {
+func valueDiffIndexesMultiArchivePoints(src, dest [][]Point, ignoreSrcEmpty bool) [][]int {
 	iss := make([][]int, len(src))
 	for i, srcTs := range src {
 		destTs := dest[i]
-		iss[i] = valueDiffIndexesTimeSeriesPointsPointers(srcTs, destTs, ignoreSrcEmpty)
+		iss[i] = valueDiffIndexesPoints(srcTs, destTs, ignoreSrcEmpty)
 	}
 	return iss
 }
