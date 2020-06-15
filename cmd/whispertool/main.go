@@ -252,10 +252,11 @@ func runSumDiffCmd(args []string) error {
 	src := fs.String("src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
 	dest := fs.String("dest", "", "dest whisper filename (ex. dest.wsp).")
 	ignoreSrcEmpty := fs.Bool("ignore-src-empty", false, "ignore diff when source point is empty.")
+	ignoreDestEmpty := fs.Bool("ignore-dest-empty", false, "ignore diff when destination point is empty.")
 	showAll := fs.Bool("show-all", false, "print all points when diff exists.")
 	interval := fs.Duration("interval", time.Minute, "run interval")
 	intervalOffset := fs.Duration("interval-offset", 7*time.Second, "run interval offset")
-
+	untilOffset := fs.Duration("until-offset", 0, "until offset")
 	fs.Parse(args)
 
 	if *item == "" {
@@ -274,7 +275,7 @@ func runSumDiffCmd(args []string) error {
 		return newRequiredOptionError(fs, "dest")
 	}
 
-	return whispertool.SumDiff(*srcBase, *destBase, *item, *src, *dest, *ignoreSrcEmpty, *showAll, *interval, *intervalOffset)
+	return whispertool.SumDiff(*srcBase, *destBase, *item, *src, *dest, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, *interval, *intervalOffset, *untilOffset)
 }
 
 const holeCmdUsage = `Usage: %s hole [options] src.wsp dest.wsp
@@ -327,6 +328,7 @@ func runDiffCmd(args []string) error {
 	}
 	recursive := fs.Bool("r", false, "diff files recursively.")
 	ignoreSrcEmpty := fs.Bool("ignore-src-empty", false, "ignore diff when source point is empty.")
+	ignoreDestEmpty := fs.Bool("ignore-dest-empty", false, "ignore diff when destination point is empty.")
 	showAll := fs.Bool("show-all", false, "print all points when diff exists.")
 
 	now := time.Now()
@@ -350,7 +352,7 @@ func runDiffCmd(args []string) error {
 		return errFromIsAfterUntil
 	}
 
-	return whispertool.Diff(fs.Arg(0), fs.Arg(1), *recursive, *ignoreSrcEmpty, *showAll, now, from, until)
+	return whispertool.Diff(fs.Arg(0), fs.Arg(1), *recursive, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, now, from, until)
 }
 
 const generateCmdUsage = `Usage: %s generate [options] dest.wsp

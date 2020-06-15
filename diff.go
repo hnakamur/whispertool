@@ -11,7 +11,7 @@ import (
 
 var ErrDiffFound = errors.New("diff found")
 
-func Diff(src, dest string, recursive, ignoreSrcEmpty, showAll bool, now, from, until time.Time) error {
+func Diff(src, dest string, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, now, from, until time.Time) error {
 	if recursive {
 		return errors.New("recursive option not implemented yet")
 	}
@@ -26,7 +26,7 @@ func Diff(src, dest string, recursive, ignoreSrcEmpty, showAll bool, now, from, 
 		return err
 	}
 
-	iss, err := diffIndexesWhisperFileData(srcData, destData, ignoreSrcEmpty, showAll)
+	iss, err := diffIndexesWhisperFileData(srcData, destData, ignoreSrcEmpty, ignoreDestEmpty, showAll)
 	if err != nil {
 		return err
 	}
@@ -38,7 +38,7 @@ func Diff(src, dest string, recursive, ignoreSrcEmpty, showAll bool, now, from, 
 	return ErrDiffFound
 }
 
-func diffIndexesWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, showAll bool) ([][]int, error) {
+func diffIndexesWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, ignoreDestEmpty, showAll bool) ([][]int, error) {
 	if !retentionsEqual(src.retentions, dest.retentions) {
 		return nil, fmt.Errorf("%s and %s archive confiugrations are unalike. "+
 			"Resize the input before diffing", src.filename, dest.filename)
@@ -52,7 +52,7 @@ func diffIndexesWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, show
 			src.filename, dest.filename, err.Error())
 	}
 
-	iss := valueDiffIndexesMultiArchivePoints(src.tss, dest.tss, ignoreSrcEmpty)
+	iss := valueDiffIndexesMultiArchivePoints(src.tss, dest.tss, ignoreSrcEmpty, ignoreDestEmpty)
 	return iss, nil
 }
 
@@ -107,7 +107,7 @@ func retentionsEqual(rr1, rr2 []Retention) bool {
 	return true
 }
 
-func valueEqualTimeSeriesPoint(src, dest Point, ignoreSrcEmpty bool) bool {
+func valueEqualTimeSeriesPoint(src, dest Point, ignoreSrcEmpty, ignoreDestEmpty bool) bool {
 	srcVal := src.Value
 	srcIsNaN := math.IsNaN(srcVal)
 	if srcIsNaN && ignoreSrcEmpty {
@@ -116,26 +116,26 @@ func valueEqualTimeSeriesPoint(src, dest Point, ignoreSrcEmpty bool) bool {
 
 	destVal := dest.Value
 	destIsNaN := math.IsNaN(destVal)
-	return (srcIsNaN && destIsNaN) ||
+	return ((srcIsNaN || ignoreDestEmpty) && destIsNaN) ||
 		(!srcIsNaN && !destIsNaN && srcVal == destVal)
 }
 
-func valueDiffIndexesPoints(src, dest []Point, ignoreSrcEmpty bool) []int {
+func valueDiffIndexesPoints(src, dest []Point, ignoreSrcEmpty, ignoreDestEmpty bool) []int {
 	var is []int
 	for i, srcPt := range src {
 		destPt := dest[i]
-		if !valueEqualTimeSeriesPoint(srcPt, destPt, ignoreSrcEmpty) {
+		if !valueEqualTimeSeriesPoint(srcPt, destPt, ignoreSrcEmpty, ignoreDestEmpty) {
 			is = append(is, i)
 		}
 	}
 	return is
 }
 
-func valueDiffIndexesMultiArchivePoints(src, dest [][]Point, ignoreSrcEmpty bool) [][]int {
+func valueDiffIndexesMultiArchivePoints(src, dest [][]Point, ignoreSrcEmpty, ignoreDestEmpty bool) [][]int {
 	iss := make([][]int, len(src))
 	for i, srcTs := range src {
 		destTs := dest[i]
-		iss[i] = valueDiffIndexesPoints(srcTs, destTs, ignoreSrcEmpty)
+		iss[i] = valueDiffIndexesPoints(srcTs, destTs, ignoreSrcEmpty, ignoreDestEmpty)
 	}
 	return iss
 }
