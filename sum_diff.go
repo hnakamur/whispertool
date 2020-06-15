@@ -21,7 +21,11 @@ func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcE
 		targetTime := now.Truncate(interval).Add(interval).Add(intervalOffset)
 		time.Sleep(targetTime.Sub(now))
 
+		t0 := time.Now()
+		fmt.Printf("time:%s\tmsg:start\n", formatTime(t0))
 		err := sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest, ignoreSrcEmpty, showAll)
+		t1 := time.Now()
+		fmt.Printf("time:%s\tmsg:finish\tduration:%s\terr:%v\n", formatTime(t1), t1.Sub(t0).String(), err)
 		if err != nil {
 			return err
 		}
