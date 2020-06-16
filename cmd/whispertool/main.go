@@ -223,7 +223,7 @@ func runSumCmd(args []string) error {
 	src := fs.String("src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
 	dest := fs.String("dest", "", "dest whisper filename (ex. dest.wsp).")
 	textOut := fs.String("text-out", "", "text output. empty means no output, - means stdout, other means output file.")
-	retId := fs.Int("retention-id", whispertool.RetIdAll, "retention ID to diff (-1 is all).")
+	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to diff (-1 is all).")
 	fs.Parse(args)
 
 	if *src == "" {
@@ -255,7 +255,7 @@ func runSumDiffCmd(args []string) error {
 	ignoreSrcEmpty := fs.Bool("ignore-src-empty", false, "ignore diff when source point is empty.")
 	ignoreDestEmpty := fs.Bool("ignore-dest-empty", false, "ignore diff when destination point is empty.")
 	showAll := fs.Bool("show-all", false, "print all points when diff exists.")
-	retId := fs.Int("retention-id", whispertool.RetIdAll, "retention ID to diff (-1 is all).")
+	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to diff (-1 is all).")
 	interval := fs.Duration("interval", time.Minute, "run interval")
 	intervalOffset := fs.Duration("interval-offset", 7*time.Second, "run interval offset")
 	untilOffset := fs.Duration("until-offset", 0, "until offset")
@@ -332,7 +332,7 @@ func runDiffCmd(args []string) error {
 	ignoreSrcEmpty := fs.Bool("ignore-src-empty", false, "ignore diff when source point is empty.")
 	ignoreDestEmpty := fs.Bool("ignore-dest-empty", false, "ignore diff when destination point is empty.")
 	showAll := fs.Bool("show-all", false, "print all points when diff exists.")
-	retId := fs.Int("retention-id", whispertool.RetIdAll, "retention ID to diff (-1 is all).")
+	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to diff (-1 is all).")
 
 	now := time.Now()
 	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
