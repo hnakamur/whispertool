@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, interval, intervalOffset, untilOffset time.Duration, retId int) error {
@@ -62,10 +64,6 @@ func sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest string, ign
 }
 
 func sumDiffItem(srcBase, destBase, itemRelDir, srcPattern, dest string, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, untilOffset time.Duration, retId int) error {
-	now := time.Now()
-	from := time.Unix(0, 0)
-	until := now.Add(-untilOffset)
-
 	srcFullPattern := filepath.Join(srcBase, itemRelDir, srcPattern)
 	srcFilenames, err := filepath.Glob(srcFullPattern)
 	if err != nil {
@@ -74,16 +72,32 @@ func sumDiffItem(srcBase, destBase, itemRelDir, srcPattern, dest string, ignoreS
 	if len(srcFilenames) == 0 {
 		return fmt.Errorf("no file matched for -src=%s", srcPattern)
 	}
-
-	sumData, err := sumWhisperFile(srcFilenames, now, from, until, retId)
-	if err != nil {
-		return err
-	}
-	sumData.filename = srcFilenames[0]
-
 	destFull := filepath.Join(destBase, itemRelDir, dest)
-	destData, err := readWhisperFile(destFull, now, from, until, retId)
-	if err != nil {
+
+	now := time.Now()
+	from := time.Unix(0, 0)
+	until := now.Add(-untilOffset)
+
+	var sumData, destData *whisperFileData
+	var g errgroup.Group
+	g.Go(func() error {
+		var err error
+		sumData, err = sumWhisperFile(srcFilenames, now, from, until, retId)
+		if err != nil {
+			return err
+		}
+		sumData.filename = srcFilenames[0]
+		return nil
+	})
+	g.Go(func() error {
+		var err error
+		destData, err = readWhisperFile(destFull, now, from, until, retId)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err := g.Wait(); err != nil {
 		return err
 	}
 
