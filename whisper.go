@@ -205,8 +205,10 @@ func (w *Whisper) allocBuf(pid pageID) []byte {
 	return b
 }
 
-func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until timestamp.Second) ([]Point, error) {
-	now := timestamp.FromTimeToSecond(time.Now())
+func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until, now timestamp.Second) ([]Point, error) {
+	if now == 0 {
+		now = timestamp.FromTimeToSecond(time.Now())
+	}
 	//log.Printf("FetchFromSpecifiedArchive start, from=%s, until=%s, now=%s",
 	//	formatTime(secondsToTime(int64(from))),
 	//	formatTime(secondsToTime(int64(until))),

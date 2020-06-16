@@ -154,7 +154,11 @@ func readWhisperSingleArchive(db *Whisper, now, from, until time.Time, retId int
 			formatTime(secondsToTime(int64(fetchFrom))),
 			formatTime(secondsToTime(int64(fetchUntil))))
 	}
-	pts, err := db.FetchFromSpecifiedArchive(retId, timestamp.Second(fetchFrom), timestamp.Second(fetchUntil))
+	pts, err := db.FetchFromSpecifiedArchive(
+		retId,
+		timestamp.Second(fetchFrom),
+		timestamp.Second(fetchUntil),
+		timestamp.Second(nowUnix))
 	if err != nil {
 		return nil, err
 	}
