@@ -180,8 +180,10 @@ func TestMerge(t *testing.T) {
 			}
 
 			const ignoreSrcEmpty = false
+			const ignoreDestEmpty = false
 			const showAll = false
-			err = whispertool.Diff(srcFilename, destFilename, recursive, ignoreSrcEmpty, showAll, now, from, until)
+			const retID = 0
+			err = whispertool.Diff(srcFilename, destFilename, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll, now, from, until, retID)
 			if err != nil {
 				if errors.Is(err, whispertool.ErrDiffFound) {
 					t.Errorf("merged result dest.wsp should have same content as src.wsp: %s", err)
