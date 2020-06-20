@@ -39,6 +39,8 @@ type Meta struct {
 	retentionCount    uint32
 }
 
+type Retentions []Retention
+
 type Retention struct {
 	offset          uint32
 	SecondsPerPoint Duration
@@ -484,27 +486,73 @@ func (w *Whisper) timestampAt(offset int64) Timestamp {
 	return t
 }
 
+func ParseRetentions(s string) ([]Retention, error) {
+	if len(s) == 0 {
+		return nil, fmt.Errorf("invalid retentions: %q", s)
+	}
+	var rr []Retention
+	for {
+		var rStr string
+		i := strings.IndexRune(s, ',')
+		if i == -1 {
+			rStr = s
+		} else {
+			rStr = s[:i]
+		}
+		r, err := ParseRetention(rStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid retentions: %q", s)
+		}
+		rr = append(rr, *r)
+
+		if i == -1 {
+			break
+		}
+		if i+1 >= len(s) {
+			return nil, fmt.Errorf("invalid retentions: %q", s)
+		}
+		s = s[i+1:]
+	}
+	return rr, nil
+}
+
 func ParseRetention(s string) (*Retention, error) {
-	sep := strings.IndexRune(s, ':')
-	if sep == -1 || sep+1 >= len(s) {
-		return nil, fmt.Errorf("invalid retention: %s", s)
+	i := strings.IndexRune(s, ':')
+	if i == -1 || i+1 >= len(s) {
+		return nil, fmt.Errorf("invalid retention: %q", s)
 	}
 
-	step, err := ParseDuration(s[:sep])
+	step, err := ParseDuration(s[:i])
 	if err != nil {
-		return nil, fmt.Errorf("invalid retention: %s", s)
+		return nil, fmt.Errorf("invalid retention: %q", s)
 	}
-	d, err := ParseDuration(s[sep+1:])
+	d, err := ParseDuration(s[i+1:])
 	if err != nil {
-		return nil, fmt.Errorf("invalid retention: %s", s)
+		return nil, fmt.Errorf("invalid retention: %q", s)
 	}
-	if step <= 0 || d <= 0 || d%step == 0 {
-		return nil, fmt.Errorf("invalid retention: %s", s)
+	if step <= 0 || d <= 0 || d%step != 0 {
+		return nil, fmt.Errorf("invalid retention: %q", s)
 	}
 	return &Retention{
 		SecondsPerPoint: step,
 		NumberOfPoints:  uint32(d / step),
 	}, nil
+}
+
+func (rr Retentions) String() string {
+	var b strings.Builder
+	for i, r := range rr {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString(r.String())
+	}
+	return b.String()
+}
+
+func (r Retention) String() string {
+	return r.SecondsPerPoint.String() + ":" +
+		(r.SecondsPerPoint * Duration(r.NumberOfPoints)).String()
 }
 
 func (r *Retention) pointIndex(baseInterval, interval Timestamp) int {
