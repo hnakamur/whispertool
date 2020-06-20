@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -33,13 +34,13 @@ type Whisper struct {
 
 type Meta struct {
 	AggregationMethod AggregationMethod
-	MaxRetention      Duration
+	maxRetention      Duration
 	XFilesFactor      float32
-	RetentionCount    uint32
+	retentionCount    uint32
 }
 
 type Retention struct {
-	Offset          uint32
+	offset          uint32
 	SecondsPerPoint Duration
 	NumberOfPoints  uint32
 }
@@ -124,7 +125,7 @@ func (w *Whisper) readHeader() error {
 		return err
 	}
 
-	if w.fileSize < metaSize+int64(w.Meta.RetentionCount)*retentionSize {
+	if w.fileSize < metaSize+int64(w.Meta.retentionCount)*retentionSize {
 		return io.ErrUnexpectedEOF
 	}
 	if err := w.readRetentions(); err != nil {
@@ -148,14 +149,14 @@ func (w *Whisper) readMeta() error {
 	}
 
 	w.Meta.AggregationMethod = AggregationMethod(w.uint32At(0))
-	w.Meta.MaxRetention = Duration(w.uint32At(uint32Size))
+	w.Meta.maxRetention = Duration(w.uint32At(uint32Size))
 	w.Meta.XFilesFactor = w.float32At(2 * uint32Size)
-	w.Meta.RetentionCount = w.uint32At(3 * uint32Size)
+	w.Meta.retentionCount = w.uint32At(3 * uint32Size)
 	return nil
 }
 
 func (w *Whisper) readRetentions() error {
-	nRet := int64(w.Meta.RetentionCount)
+	nRet := int64(w.Meta.retentionCount)
 	off := metaSize + nRet*retentionSize
 	until := pageID(off / w.pageSize)
 	if err := w.readPagesIfNeeded(0, until); err != nil {
@@ -184,7 +185,7 @@ func (w *Whisper) baseInterval(retentionID int) (Timestamp, error) {
 	}
 
 	r := w.Retentions[retentionID]
-	off := int64(r.Offset)
+	off := int64(r.offset)
 	fromPg := pageID(off / w.pageSize)
 	untilPg := pageID((off + uint32Size) / w.pageSize)
 	if err := w.readPagesIfNeeded(fromPg, untilPg); err != nil {
@@ -252,7 +253,7 @@ func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until, now Ti
 	if from > until {
 		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
 	}
-	oldest := now.Add(-w.Meta.MaxRetention)
+	oldest := now.Add(-w.Meta.maxRetention)
 	// range is in the future
 	if from > now {
 		return nil, nil
@@ -355,7 +356,7 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval Timestamp, retentio
 	step := Timestamp(r.SecondsPerPoint)
 	points := make([]Point, (untilInterval-fromInterval)/step)
 
-	retentionStartOffset := int64(r.Offset)
+	retentionStartOffset := int64(r.offset)
 	retentionEndOffset := retentionStartOffset + int64(r.NumberOfPoints)*pointSize
 	//log.Printf("fetchRawPoints, retentionStartOffset=%d, retentionEndOffset=%d, numberOfPoints=%d",
 	//	retentionStartOffset, retentionEndOffset, r.NumberOfPoints)
@@ -405,7 +406,7 @@ func clearOldPoints(points []Point, fromInterval, step Timestamp) {
 
 func (w *Whisper) GetRawPoints(retentionID int) []Point {
 	r := w.Retentions[retentionID]
-	off := int64(r.Offset)
+	off := int64(r.offset)
 	p := make([]Point, r.NumberOfPoints)
 	for i := uint32(0); i < r.NumberOfPoints; i++ {
 		p[i].Time = w.timestampAt(off)
@@ -471,7 +472,7 @@ func (w *Whisper) markPagesDirty(offset, size int64) {
 
 func (w *Whisper) retentionAt(offset int64) Retention {
 	return Retention{
-		Offset:          w.uint32At(offset),
+		offset:          w.uint32At(offset),
 		SecondsPerPoint: Duration(w.uint32At(offset + uint32Size)),
 		NumberOfPoints:  w.uint32At(offset + 2*uint32Size),
 	}
@@ -481,6 +482,29 @@ func (w *Whisper) timestampAt(offset int64) Timestamp {
 	t := Timestamp(w.uint32At(offset))
 	//log.Printf("timestampAt offset=%d, t=%s", offset, formatTime(secondsToTime(int64(t))))
 	return t
+}
+
+func ParseRetention(s string) (*Retention, error) {
+	sep := strings.IndexRune(s, ':')
+	if sep == -1 || sep+1 >= len(s) {
+		return nil, fmt.Errorf("invalid retention: %s", s)
+	}
+
+	step, err := ParseDuration(s[:sep])
+	if err != nil {
+		return nil, fmt.Errorf("invalid retention: %s", s)
+	}
+	d, err := ParseDuration(s[sep+1:])
+	if err != nil {
+		return nil, fmt.Errorf("invalid retention: %s", s)
+	}
+	if step <= 0 || d <= 0 || d%step == 0 {
+		return nil, fmt.Errorf("invalid retention: %s", s)
+	}
+	return &Retention{
+		SecondsPerPoint: step,
+		NumberOfPoints:  uint32(d / step),
+	}, nil
 }
 
 func (r *Retention) pointIndex(baseInterval, interval Timestamp) int {
@@ -493,7 +517,7 @@ func (r *Retention) MaxRetention() Duration {
 }
 
 func (r *Retention) pointOffsetAt(index int) int64 {
-	return int64(r.Offset) + int64(index)*pointSize
+	return int64(r.offset) + int64(index)*pointSize
 }
 
 func (r *Retention) Interval(t Timestamp) Timestamp {
