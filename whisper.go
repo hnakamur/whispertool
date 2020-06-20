@@ -8,11 +8,14 @@ import (
 	"log"
 	"math"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type pageID uint64
+type pageIDSlice []pageID
 
 type Whisper struct {
 	Meta       Meta
@@ -52,9 +55,14 @@ type Point struct {
 	Value float64
 }
 
-type pageRange struct {
-	start pageID
-	end   pageID
+type pageAndOffset struct {
+	pgid pageID
+	off  int64
+}
+
+type pageAndOffsetRange struct {
+	start pageAndOffset
+	end   pageAndOffset
 }
 
 // These are sizes in whisper files.
@@ -80,6 +88,7 @@ func (w *Whisper) OpenOrCreate(filename string, bufPool *BufferPool, perm os.Fil
 
 	w.file = file
 	w.bufPool = bufPool
+
 	err = w.readHeader()
 	if err == nil {
 		return nil
@@ -88,7 +97,19 @@ func (w *Whisper) OpenOrCreate(filename string, bufPool *BufferPool, perm os.Fil
 		return err
 	}
 
-	log.Printf("OpenOrCreate error: %v", err)
+	if err := Retentions(w.Retentions).validate(); err != nil {
+		return err
+	}
+
+	w.fillDerivedValuesInHeader()
+	w.initPages(w.fileSizeFromHeader())
+	for i := pageID(0); i <= w.lastPageID; i++ {
+		w.pages[i] = w.allocBuf(i)
+		w.markPageDirty(i)
+	}
+	w.putMeta()
+	w.putRetentions()
+
 	return nil
 }
 
@@ -102,10 +123,20 @@ func Open(filename string, bufPool *BufferPool) (*Whisper, error) {
 		file:    file,
 		bufPool: bufPool,
 	}
+
 	if err := w.readHeader(); err != nil {
 		return nil, err
 	}
 	return w, nil
+}
+
+func (w *Whisper) initPages(fileSize int64) {
+	w.fileSize = fileSize
+	w.pageSize = int64(w.bufPool.BufferSize())
+	w.lastPageID = pageID(w.fileSize / w.pageSize)
+	w.lastPageSize = w.fileSize % w.pageSize
+	w.pages = make(map[pageID][]byte)
+	w.dirtyPages = make(map[pageID]struct{})
 }
 
 func (w *Whisper) readHeader() error {
@@ -113,12 +144,7 @@ func (w *Whisper) readHeader() error {
 	if err != nil {
 		return err
 	}
-
-	w.fileSize = st.Size()
-	w.pageSize = int64(w.bufPool.BufferSize())
-	w.lastPageID = pageID(w.fileSize / w.pageSize)
-	w.lastPageSize = w.fileSize % w.pageSize
-	w.pages = make(map[pageID][]byte)
+	w.initPages(st.Size())
 
 	if w.fileSize < metaSize {
 		return io.ErrUnexpectedEOF
@@ -145,7 +171,7 @@ func (w *Whisper) Close() error {
 }
 
 func (w *Whisper) readMeta() error {
-	log.Printf("readMeta start, before readPagesIfNeeded")
+	//log.Printf("readMeta start, before readPagesIfNeeded")
 	if err := w.readPagesIfNeeded(0, 0); err != nil {
 		return err
 	}
@@ -223,9 +249,9 @@ func (w *Whisper) readPagesIfNeeded(from, until pageID) error {
 		}
 
 		off := int64(from) * w.pageSize
-		log.Printf("readPagesIfNeeded before preadvFull from=%d, to=%d, off=%d", from, pid-1, off)
-		n, err := preadvFull(w.file, iovs, off)
-		log.Printf("readPagesIfNeeded after preadvFull from=%d, to=%d, off=%d, n=%d, err=%v", from, pid-1, off, n, err)
+		//log.Printf("readPagesIfNeeded before preadvFull from=%d, to=%d, off=%d", from, pid-1, off)
+		_, err := preadvFull(w.file, iovs, off)
+		//log.Printf("readPagesIfNeeded after preadvFull from=%d, to=%d, off=%d, n=%d, err=%v", from, pid-1, off, n, err)
 		if err != nil {
 			return err
 		}
@@ -246,12 +272,66 @@ func (w *Whisper) allocBuf(pid pageID) []byte {
 	return b
 }
 
+func (w *Whisper) Flush() error {
+	pgids := make([]pageID, 0, len(w.dirtyPages))
+	for pgid := range w.dirtyPages {
+		pgids = append(pgids, pgid)
+	}
+	sort.Sort(pageIDSlice(pgids))
+
+	var off int64
+	var iovs [][]byte
+	for i, pgid := range pgids {
+		if i == 0 || pgids[i-1] != pgid-1 {
+			off = int64(pgid) * w.pageSize
+			iovs = [][]byte{w.pages[pgid]}
+		} else {
+			iovs = append(iovs, w.pages[pgid])
+		}
+
+		if i == len(pgids)-1 || pgids[i+1] != pgid+1 {
+			_, err := pwritevFull(w.file, iovs, off)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if err := w.file.Sync(); err != nil {
+		return err
+	}
+	w.dirtyPages = make(map[pageID]struct{})
+	return nil
+}
+
+func (w *Whisper) markPageDirty(pgid pageID) {
+	w.dirtyPages[pgid] = struct{}{}
+}
+
+func (w *Whisper) fillDerivedValuesInHeader() {
+	w.Meta.maxRetention = w.Retentions[len(w.Retentions)-1].MaxRetention()
+	w.Meta.retentionCount = uint32(len(w.Retentions))
+	off := metaSize + len(w.Retentions)*retentionSize
+	for i := range w.Retentions {
+		r := &w.Retentions[i]
+		r.offset = uint32(off)
+		off += int(r.NumberOfPoints) * pointSize
+	}
+}
+
+func (w *Whisper) fileSizeFromHeader() int64 {
+	sz := int64(metaSize)
+	for _, r := range w.Retentions {
+		sz += retentionSize + int64(r.NumberOfPoints)*pointSize
+	}
+	return sz
+}
+
 func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until, now Timestamp) ([]Point, error) {
 	if now == 0 {
 		now = TimestampFromStdTime(time.Now())
 	}
-	log.Printf("FetchFromSpecifiedArchive start, from=%s, until=%s, now=%s",
-		from, until, now)
+	//log.Printf("FetchFromSpecifiedArchive start, from=%s, until=%s, now=%s",
+	//	from, until, now)
 	if from > until {
 		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
 	}
@@ -270,18 +350,14 @@ func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until, now Ti
 	if until > now {
 		until = now
 	}
-	//log.Printf("FetchFromSpecifiedArchive adjusted, from=%s, until=%s, now=%s",
-	//	formatTime(secondsToTime(int64(from))),
-	//	formatTime(secondsToTime(int64(until))),
-	//	formatTime(secondsToTime(int64(now))))
+	//log.Printf("FetchFromSpecifiedArchive adjusted, from=%s, until=%s, now=%s", from, until, now)
 
 	if retentionID < 0 || len(w.Retentions)-1 < retentionID {
 		return nil, ErrRetentionIDOutOfRange
 	}
 
 	baseInterval, err := w.baseInterval(retentionID)
-	//log.Printf("FetchFromSpecifiedArchive baseInterval=%s, err=%v",
-	//	formatTime(secondsToTime(int64(baseInterval))), err)
+	//log.Printf("FetchFromSpecifiedArchive baseInterval=%s, err=%v", baseInterval, err)
 	if err != nil {
 		return nil, err
 	}
@@ -311,12 +387,10 @@ func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until, now Ti
 	if err != nil {
 		return nil, err
 	}
-	//for i, pt := range points {
-	//	log.Printf("rawPoint i=%d, time=%s, value=%s",
-	//		i,
-	//		formatTime(secondsToTime(int64(pt.Time))),
-	//		strconv.FormatFloat(pt.Value, 'f', -1, 64))
-	//}
+	for i, pt := range points {
+		log.Printf("rawPoint i=%d, time=%s, value=%s",
+			i, pt.Time, formatFloat64(pt.Value))
+	}
 	clearOldPoints(points, fromInterval, step)
 
 	return points, nil
@@ -328,15 +402,11 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval Timestamp, retentio
 	if err != nil {
 		return nil, err
 	}
-	//log.Printf("fetchRawPoints, baseInterval=%s, fromInterval=%s, untilInterval=%s",
-	//	formatTime(secondsToTime(int64(baseInterval))),
-	//	formatTime(secondsToTime(int64(fromInterval))),
-	//	formatTime(secondsToTime(int64(untilInterval))))
+	log.Printf("fetchRawPoints, baseInterval=%s, fromInterval=%s, untilInterval=%s", baseInterval, fromInterval, untilInterval)
 
 	fromOffset := r.pointOffsetAt(r.pointIndex(baseInterval, fromInterval))
 	untilOffset := r.pointOffsetAt(r.pointIndex(baseInterval, untilInterval))
-	//log.Printf("fetchRawPoints, fromOffset=%d, untilOffset=%d",
-	//	fromOffset, untilOffset)
+	log.Printf("fetchRawPoints, fromOffset=%d, untilOffset=%d", fromOffset, untilOffset)
 
 	if fromOffset < untilOffset {
 		fromPg := pageID(fromOffset / w.pageSize)
@@ -360,8 +430,7 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval Timestamp, retentio
 
 	retentionStartOffset := int64(r.offset)
 	retentionEndOffset := retentionStartOffset + int64(r.NumberOfPoints)*pointSize
-	//log.Printf("fetchRawPoints, retentionStartOffset=%d, retentionEndOffset=%d, numberOfPoints=%d",
-	//	retentionStartOffset, retentionEndOffset, r.NumberOfPoints)
+	log.Printf("fetchRawPoints, retentionStartOffset=%d, retentionEndOffset=%d, numberOfPoints=%d", retentionStartOffset, retentionEndOffset, r.NumberOfPoints)
 
 	fromPg := pageID(fromOffset / w.pageSize)
 	retentinoEndPg := pageID(retentionEndOffset / w.pageSize)
@@ -420,16 +489,12 @@ func (w *Whisper) GetRawPoints(retentionID int) []Point {
 
 func (w *Whisper) uint32At(offset int64) uint32 {
 	buf := w.bufForValue(offset, uint32Size)
-	v := binary.BigEndian.Uint32(buf)
-	//log.Printf("uint32At offset=%d, buf=%v, v=%d, 0x%08x", offset, buf, v, v)
-	return v
+	return binary.BigEndian.Uint32(buf)
 }
 
 func (w *Whisper) uint64At(offset int64) uint64 {
 	buf := w.bufForValue(offset, uint64Size)
-	v := binary.BigEndian.Uint64(buf)
-	//log.Printf("uint64At offset=%d, buf=%v, v=%d, 0x%016x", offset, buf, v, v)
-	return v
+	return binary.BigEndian.Uint64(buf)
 }
 
 func (w *Whisper) float32At(offset int64) float32 {
@@ -437,9 +502,7 @@ func (w *Whisper) float32At(offset int64) float32 {
 }
 
 func (w *Whisper) float64At(offset int64) float64 {
-	v := math.Float64frombits(w.uint64At(offset))
-	//log.Printf("float64At offset=%d, v=%s", offset, strconv.FormatFloat(v, 'f', -1, 64))
-	return v
+	return math.Float64frombits(w.uint64At(offset))
 }
 
 func (w *Whisper) bufForValue(offset, size int64) []byte {
@@ -481,9 +544,88 @@ func (w *Whisper) retentionAt(offset int64) Retention {
 }
 
 func (w *Whisper) timestampAt(offset int64) Timestamp {
-	t := Timestamp(w.uint32At(offset))
-	//log.Printf("timestampAt offset=%d, t=%s", offset, formatTime(secondsToTime(int64(t))))
-	return t
+	return Timestamp(w.uint32At(offset))
+}
+
+func (w *Whisper) putUint32At(v uint32, offset int64) {
+	r := w.pageAndOffsetRangeFromFileOffsetAndSize(offset, uint32Size)
+	if r.fitsInOnePage() {
+		binary.BigEndian.PutUint32(w.pages[r.start.pgid][r.start.off:], v)
+		w.markPageDirty(r.start.pgid)
+		return
+	}
+	var buf [uint32Size]byte
+	binary.BigEndian.PutUint32(buf[:], v)
+	w.splitCopyToPages(&r, buf[:])
+}
+
+func (w *Whisper) putUint64At(v uint64, offset int64) {
+	r := w.pageAndOffsetRangeFromFileOffsetAndSize(offset, uint64Size)
+	if r.fitsInOnePage() {
+		binary.BigEndian.PutUint64(w.pages[r.start.pgid][r.start.off:], v)
+		w.markPageDirty(r.start.pgid)
+		return
+	}
+	var buf [uint64Size]byte
+	binary.BigEndian.PutUint64(buf[:], v)
+	w.splitCopyToPages(&r, buf[:])
+}
+
+func (w *Whisper) putFloat32At(v float32, offset int64) {
+	w.putUint32At(math.Float32bits(v), offset)
+}
+
+func (w *Whisper) putFloat64At(v float64, offset int64) {
+	w.putUint64At(math.Float64bits(v), offset)
+}
+
+func (w *Whisper) putTimestampAt(t Timestamp, offset int64) {
+	w.putUint64At(uint64(t), offset)
+}
+
+func (w *Whisper) putMeta() {
+	w.putUint32At(uint32(w.Meta.AggregationMethod), 0)
+	w.putUint32At(uint32(w.Meta.maxRetention), uint32Size)
+	w.putFloat32At(w.Meta.XFilesFactor, 2*uint32Size)
+	w.putUint32At(uint32(w.Meta.retentionCount), 3*uint32Size)
+}
+
+func (w *Whisper) putRetentions() {
+	off := int64(metaSize)
+	for i := range w.Retentions {
+		r := &w.Retentions[i]
+		w.putUint32At(r.offset, off)
+		w.putUint32At(uint32(r.SecondsPerPoint), off+uint32Size)
+		w.putUint32At(r.NumberOfPoints, off+2*uint32Size)
+		off += retentionSize
+	}
+}
+
+func (w *Whisper) splitCopyToPages(r *pageAndOffsetRange, b []byte) {
+	sz := w.pageSize - r.start.off
+	copy(w.pages[r.start.pgid][r.start.off:], b[:sz])
+	copy(w.pages[r.end.pgid][:r.end.off], b[sz:sz+r.end.off])
+	w.markPageDirty(r.start.pgid)
+	w.markPageDirty(r.end.pgid)
+}
+
+func (w *Whisper) pageAndOffsetFromFileOffset(offset int64) pageAndOffset {
+	return pageAndOffset{
+		pgid: pageID(offset / w.pageSize),
+		off:  offset % w.pageSize,
+	}
+}
+
+func (w *Whisper) pageAndOffsetRangeFromFileOffsetAndSize(offset, size int64) pageAndOffsetRange {
+	return pageAndOffsetRange{
+		start: w.pageAndOffsetFromFileOffset(offset),
+		end:   w.pageAndOffsetFromFileOffset(offset + size),
+	}
+}
+
+func (r *pageAndOffsetRange) fitsInOnePage() bool {
+	return r.start.pgid == r.end.pgid ||
+		(r.start.pgid+1 == r.end.pgid && r.end.off == 0)
 }
 
 func ParseRetentions(s string) ([]Retention, error) {
@@ -550,6 +692,49 @@ func (rr Retentions) String() string {
 	return b.String()
 }
 
+func (rr Retentions) validate() error {
+	if len(rr) == 0 {
+		return fmt.Errorf("no retentions")
+	}
+	for i, r := range rr {
+		if err := r.validate(); err != nil {
+			return fmt.Errorf("invalid archive%v: %v", i, err)
+		}
+
+		if i == len(rr)-1 {
+			break
+		}
+
+		rNext := rr[i+1]
+		if !(r.SecondsPerPoint < rNext.SecondsPerPoint) {
+			return fmt.Errorf("a Whisper database may not be configured having two archives with the same precision (archive%v: %v, archive%v: %v)", i, r, i+1, rNext)
+		}
+
+		if rNext.SecondsPerPoint%r.SecondsPerPoint != 0 {
+			return fmt.Errorf("higher precision archives' precision must evenly divide all lower precision archives' precision (archive%v: %v, archive%v: %v)", i, r.SecondsPerPoint, i+1, rNext.SecondsPerPoint)
+		}
+
+		if r.MaxRetention() >= rNext.MaxRetention() {
+			return fmt.Errorf("lower precision archives must cover larger time intervals than higher precision archives (archive%v: %v seconds, archive%v: %v seconds)", i, r.MaxRetention(), i+1, rNext.MaxRetention())
+		}
+
+		if r.NumberOfPoints < uint32(rNext.SecondsPerPoint/r.SecondsPerPoint) {
+			return fmt.Errorf("each archive must have at least enough points to consolidate to the next archive (archive%v consolidates %v of archive%v's points but it has only %v total points)", i+1, rNext.SecondsPerPoint/r.SecondsPerPoint, i, r.NumberOfPoints)
+		}
+	}
+	return nil
+}
+
+func (r Retention) validate() error {
+	if r.SecondsPerPoint <= 0 {
+		return errors.New("seconds per point must be positive")
+	}
+	if r.NumberOfPoints <= 0 {
+		return errors.New("number of points must be positive")
+	}
+	return nil
+}
+
 func (r Retention) String() string {
 	return r.SecondsPerPoint.String() + ":" +
 		(r.SecondsPerPoint * Duration(r.NumberOfPoints)).String()
@@ -572,3 +757,11 @@ func (r *Retention) Interval(t Timestamp) Timestamp {
 	step := int64(r.SecondsPerPoint)
 	return Timestamp(int64(t) - floorMod(int64(t), step) + step)
 }
+
+func formatFloat64(v float64) string {
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+func (pp pageIDSlice) Len() int           { return len(pp) }
+func (pp pageIDSlice) Less(i, j int) bool { return pp[i] < pp[j] }
+func (pp pageIDSlice) Swap(i, j int)      { pp[i], pp[j] = pp[j], pp[i] }
