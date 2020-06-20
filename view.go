@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/hnakamur/timestamp"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -29,7 +28,7 @@ func View(filename string, raw bool, now, from, until time.Time, retId int, show
 type whisperFileData struct {
 	filename          string
 	aggregationMethod AggregationMethod
-	maxRetention      uint32
+	maxRetention      Duration
 	xFilesFactor      float32
 	retentions        []Retention
 	tss               [][]Point
@@ -91,10 +90,10 @@ func readWhisperDB(db *Whisper, now, from, until time.Time, retId int, filename 
 }
 
 func readWhisperSingleArchive(db *Whisper, now, from, until time.Time, retId int, filename string) ([]Point, error) {
-	nowUnix := int64(now.Unix())
-	fromUnix := int64(from.Unix())
+	nowUnix := TimestampFromStdTime(now)
+	fromUnix := TimestampFromStdTime(from)
 
-	untilUnix := int64(until.Unix())
+	untilUnix := TimestampFromStdTime(until)
 	if untilUnix > nowUnix {
 		untilUnix = nowUnix
 	}
@@ -104,15 +103,12 @@ func readWhisperSingleArchive(db *Whisper, now, from, until time.Time, retId int
 
 	retentions := db.Retentions
 	r := retentions[retId]
-	minFrom := nowUnix - int64(r.MaxRetention())
-	step := int64(r.SecondsPerPoint)
+	minFrom := nowUnix.Add(-r.MaxRetention())
+	step := r.SecondsPerPoint
 
 	if debug {
 		log.Printf("readWhisperSingleArchive retId=%d, fromUnix=%s, untilUnix=%s, minFrom=%s",
-			retId,
-			formatTime(secondsToTime(int64(fromUnix))),
-			formatTime(secondsToTime(int64(untilUnix))),
-			formatTime(secondsToTime(int64(minFrom))))
+			retId, fromUnix, untilUnix, minFrom)
 	}
 	if fetchFrom < minFrom {
 		if debug {
@@ -132,11 +128,11 @@ func readWhisperSingleArchive(db *Whisper, now, from, until time.Time, retId int
 		// https://answers.launchpad.net/graphite/+question/294817
 		// but no answer from the person who only knows
 		// the original reason.
-		fetchFrom -= step
-		fetchUntil -= step
+		fetchFrom = fetchFrom.Add(-step)
+		fetchUntil = fetchUntil.Add(-step)
 		if debug {
 			log.Printf("adjust time range by subtracting step, fetchFrom=%s",
-				formatTime(secondsToTime(int64(fetchFrom))))
+				fetchFrom)
 		}
 	}
 
@@ -144,30 +140,23 @@ func readWhisperSingleArchive(db *Whisper, now, from, until time.Time, retId int
 		return nil, nil
 	}
 
-	exptectedPtsLen := (fetchUntil - fetchFrom) / step
+	exptectedPtsLen := fetchUntil.Sub(fetchFrom) / step
 	if exptectedPtsLen == 0 {
 		exptectedPtsLen = 1
 	}
 
 	if debug {
 		log.Printf("calling db.Fetch with fetchFrom=%s, fetchUntil=%s",
-			formatTime(secondsToTime(int64(fetchFrom))),
-			formatTime(secondsToTime(int64(fetchUntil))))
+			fetchFrom, fetchUntil)
 	}
-	pts, err := db.FetchFromSpecifiedArchive(
-		retId,
-		timestamp.Second(fetchFrom),
-		timestamp.Second(fetchUntil),
-		timestamp.Second(nowUnix))
+	pts, err := db.FetchFromSpecifiedArchive(retId, fetchFrom, fetchUntil, nowUnix)
 	if err != nil {
 		return nil, err
 	}
 	if debug {
 		for i, pt := range pts {
 			log.Printf("i=%d, pt.Time=%s, pt.Value=%s",
-				i,
-				formatTime(secondsToTime(int64(pt.Time))),
-				strconv.FormatFloat(pt.Value, 'f', -1, 64))
+				i, pt.Time, strconv.FormatFloat(pt.Value, 'f', -1, 64))
 		}
 	}
 	return pts, nil
@@ -239,9 +228,7 @@ func writeTimeSeriesForArchives(w io.Writer, tss [][]Point) error {
 	for i, ts := range tss {
 		for _, p := range ts {
 			_, err := fmt.Fprintf(w, "retId:%d\tt:%s\tval:%s\n",
-				i,
-				formatTime(secondsToTime(int64(p.Time))),
-				strconv.FormatFloat(p.Value, 'f', -1, 64))
+				i, p.Time, strconv.FormatFloat(p.Value, 'f', -1, 64))
 			if err != nil {
 				return err
 			}

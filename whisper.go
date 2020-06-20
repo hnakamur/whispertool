@@ -9,8 +9,6 @@ import (
 	"math"
 	"os"
 	"time"
-
-	"github.com/hnakamur/timestamp"
 )
 
 type pageID uint64
@@ -30,24 +28,24 @@ type Whisper struct {
 	pages      map[pageID][]byte
 	dirtyPages map[pageID]struct{}
 
-	baseIntervals []timestamp.Second
+	baseIntervals []Timestamp
 }
 
 type Meta struct {
 	AggregationMethod AggregationMethod
-	MaxRetention      uint32
+	MaxRetention      Duration
 	XFilesFactor      float32
 	RetentionCount    uint32
 }
 
 type Retention struct {
 	Offset          uint32
-	SecondsPerPoint uint32
+	SecondsPerPoint Duration
 	NumberOfPoints  uint32
 }
 
 type Point struct {
-	Time  timestamp.Second
+	Time  Timestamp
 	Value float64
 }
 
@@ -58,7 +56,7 @@ type pageRange struct {
 
 // These are sizes in whisper files.
 // NOTE: The size of type Point is different from the size of
-// point in file since timestamp.Seconds is int64, not uint32.
+// point in file since Timestamps is int64, not uint32.
 const (
 	uint32Size    = 4
 	uint64Size    = 8
@@ -150,7 +148,7 @@ func (w *Whisper) readMeta() error {
 	}
 
 	w.Meta.AggregationMethod = AggregationMethod(w.uint32At(0))
-	w.Meta.MaxRetention = w.uint32At(uint32Size)
+	w.Meta.MaxRetention = Duration(w.uint32At(uint32Size))
 	w.Meta.XFilesFactor = w.float32At(2 * uint32Size)
 	w.Meta.RetentionCount = w.uint32At(3 * uint32Size)
 	return nil
@@ -173,13 +171,13 @@ func (w *Whisper) readRetentions() error {
 }
 
 func (w *Whisper) initBaseIntervals() {
-	w.baseIntervals = make([]timestamp.Second, len(w.Retentions))
+	w.baseIntervals = make([]Timestamp, len(w.Retentions))
 	for i := range w.baseIntervals {
 		w.baseIntervals[i] = -1
 	}
 }
 
-func (w *Whisper) baseInterval(retentionID int) (timestamp.Second, error) {
+func (w *Whisper) baseInterval(retentionID int) (Timestamp, error) {
 	interval := w.baseIntervals[retentionID]
 	if interval != -1 {
 		return interval, nil
@@ -245,18 +243,16 @@ func (w *Whisper) allocBuf(pid pageID) []byte {
 	return b
 }
 
-func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until, now timestamp.Second) ([]Point, error) {
+func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until, now Timestamp) ([]Point, error) {
 	if now == 0 {
-		now = timestamp.FromTimeToSecond(time.Now())
+		now = TimestampFromStdTime(time.Now())
 	}
-	//log.Printf("FetchFromSpecifiedArchive start, from=%s, until=%s, now=%s",
-	//	formatTime(secondsToTime(int64(from))),
-	//	formatTime(secondsToTime(int64(until))),
-	//	formatTime(secondsToTime(int64(now))))
+	log.Printf("FetchFromSpecifiedArchive start, from=%s, until=%s, now=%s",
+		from, until, now)
 	if from > until {
 		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
 	}
-	oldest := now - timestamp.Second(w.Meta.MaxRetention)
+	oldest := now.Add(-w.Meta.MaxRetention)
 	// range is in the future
 	if from > now {
 		return nil, nil
@@ -290,7 +286,7 @@ func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until, now ti
 	r := &w.Retentions[retentionID]
 	fromInterval := r.Interval(from)
 	untilInterval := r.Interval(until)
-	step := timestamp.Second(r.SecondsPerPoint)
+	step := Timestamp(r.SecondsPerPoint)
 
 	if baseInterval == 0 {
 		points := make([]Point, (untilInterval-fromInterval)/step)
@@ -323,7 +319,7 @@ func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until, now ti
 	return points, nil
 }
 
-func (w *Whisper) fetchRawPoints(fromInterval, untilInterval timestamp.Second, retentionID int) ([]Point, error) {
+func (w *Whisper) fetchRawPoints(fromInterval, untilInterval Timestamp, retentionID int) ([]Point, error) {
 	r := &w.Retentions[retentionID]
 	baseInterval, err := w.baseInterval(retentionID)
 	if err != nil {
@@ -356,7 +352,7 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval timestamp.Second, r
 		return points, nil
 	}
 
-	step := timestamp.Second(r.SecondsPerPoint)
+	step := Timestamp(r.SecondsPerPoint)
 	points := make([]Point, (untilInterval-fromInterval)/step)
 
 	retentionStartOffset := int64(r.Offset)
@@ -396,7 +392,7 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval timestamp.Second, r
 	return points, nil
 }
 
-func clearOldPoints(points []Point, fromInterval, step timestamp.Second) {
+func clearOldPoints(points []Point, fromInterval, step Timestamp) {
 	currentInterval := fromInterval
 	for i := range points {
 		if points[i].Time != currentInterval {
@@ -476,31 +472,31 @@ func (w *Whisper) markPagesDirty(offset, size int64) {
 func (w *Whisper) retentionAt(offset int64) Retention {
 	return Retention{
 		Offset:          w.uint32At(offset),
-		SecondsPerPoint: w.uint32At(offset + uint32Size),
+		SecondsPerPoint: Duration(w.uint32At(offset + uint32Size)),
 		NumberOfPoints:  w.uint32At(offset + 2*uint32Size),
 	}
 }
 
-func (w *Whisper) timestampAt(offset int64) timestamp.Second {
-	t := timestamp.Second(w.uint32At(offset))
+func (w *Whisper) timestampAt(offset int64) Timestamp {
+	t := Timestamp(w.uint32At(offset))
 	//log.Printf("timestampAt offset=%d, t=%s", offset, formatTime(secondsToTime(int64(t))))
 	return t
 }
 
-func (r *Retention) pointIndex(baseInterval, interval timestamp.Second) int {
+func (r *Retention) pointIndex(baseInterval, interval Timestamp) int {
 	pointDistance := int64(interval-baseInterval) / int64(r.SecondsPerPoint)
 	return int(floorMod(pointDistance, int64(r.NumberOfPoints)))
 }
 
-func (r *Retention) MaxRetention() uint64 {
-	return uint64(r.SecondsPerPoint) * uint64(r.NumberOfPoints)
+func (r *Retention) MaxRetention() Duration {
+	return r.SecondsPerPoint * Duration(r.NumberOfPoints)
 }
 
 func (r *Retention) pointOffsetAt(index int) int64 {
 	return int64(r.Offset) + int64(index)*pointSize
 }
 
-func (r *Retention) Interval(t timestamp.Second) timestamp.Second {
+func (r *Retention) Interval(t Timestamp) Timestamp {
 	step := int64(r.SecondsPerPoint)
-	return timestamp.Second(int64(t) - floorMod(int64(t), step) + step)
+	return Timestamp(int64(t) - floorMod(int64(t), step) + step)
 }
