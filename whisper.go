@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"math"
 	"os"
 	"time"
@@ -25,7 +27,8 @@ type Whisper struct {
 	lastPageID   pageID
 	lastPageSize int64
 
-	pages map[pageID][]byte
+	pages      map[pageID][]byte
+	dirtyPages map[pageID]struct{}
 
 	baseIntervals []timestamp.Second
 }
@@ -48,6 +51,11 @@ type Point struct {
 	Value float64
 }
 
+type pageRange struct {
+	start pageID
+	end   pageID
+}
+
 // These are sizes in whisper files.
 // NOTE: The size of type Point is different from the size of
 // point in file since timestamp.Seconds is int64, not uint32.
@@ -63,39 +71,69 @@ const (
 
 var ErrRetentionIDOutOfRange = errors.New("retention is ID out of range")
 
+func (w *Whisper) OpenOrCreate(filename string, bufPool *BufferPool, perm os.FileMode) error {
+	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, perm)
+	if err != nil {
+		return err
+	}
+
+	w.file = file
+	w.bufPool = bufPool
+	err = w.readHeader()
+	if err == nil {
+		return nil
+	}
+	if err != io.ErrUnexpectedEOF {
+		return err
+	}
+
+	log.Printf("OpenOrCreate error: %v", err)
+	return nil
+}
+
 func Open(filename string, bufPool *BufferPool) (*Whisper, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
 
-	st, err := file.Stat()
-	if err != nil {
+	w := &Whisper{
+		file:    file,
+		bufPool: bufPool,
+	}
+	if err := w.readHeader(); err != nil {
 		return nil, err
 	}
+	return w, nil
+}
 
-	pageSize := int64(bufPool.BufferSize())
-	fileSize := st.Size()
-	lastPageID := pageID(fileSize / pageSize)
-	lastPageSize := fileSize % pageSize
+func (w *Whisper) readHeader() error {
+	st, err := w.file.Stat()
+	if err != nil {
+		return err
+	}
 
-	w := &Whisper{
-		file:         file,
-		bufPool:      bufPool,
-		pageSize:     pageSize,
-		fileSize:     fileSize,
-		lastPageID:   lastPageID,
-		lastPageSize: lastPageSize,
-		pages:        make(map[pageID][]byte),
+	w.fileSize = st.Size()
+	w.pageSize = int64(w.bufPool.BufferSize())
+	w.lastPageID = pageID(w.fileSize / w.pageSize)
+	w.lastPageSize = w.fileSize % w.pageSize
+	w.pages = make(map[pageID][]byte)
+
+	if w.fileSize < metaSize {
+		return io.ErrUnexpectedEOF
 	}
 	if err := w.readMeta(); err != nil {
-		return nil, err
+		return err
+	}
+
+	if w.fileSize < metaSize+int64(w.Meta.RetentionCount)*retentionSize {
+		return io.ErrUnexpectedEOF
 	}
 	if err := w.readRetentions(); err != nil {
-		return nil, err
+		return err
 	}
 	w.initBaseIntervals()
-	return w, nil
+	return nil
 }
 
 func (w *Whisper) Close() error {
@@ -106,6 +144,7 @@ func (w *Whisper) Close() error {
 }
 
 func (w *Whisper) readMeta() error {
+	log.Printf("readMeta start, before readPagesIfNeeded")
 	if err := w.readPagesIfNeeded(0, 0); err != nil {
 		return err
 	}
@@ -183,8 +222,9 @@ func (w *Whisper) readPagesIfNeeded(from, until pageID) error {
 		}
 
 		off := int64(from) * w.pageSize
-		//log.Printf("readPagesIfNeeded readv from=%d, to=%d", from, pid-1)
-		_, err := preadvFull(w.file, iovs, off)
+		log.Printf("readPagesIfNeeded before preadvFull from=%d, to=%d, off=%d", from, pid-1, off)
+		n, err := preadvFull(w.file, iovs, off)
+		log.Printf("readPagesIfNeeded after preadvFull from=%d, to=%d, off=%d, n=%d, err=%v", from, pid-1, off, n, err)
 		if err != nil {
 			return err
 		}
@@ -418,6 +458,19 @@ func (w *Whisper) bufForValue(offset, size int64) []byte {
 	copy(buf, p0[offInPg:])
 	copy(buf[size-overflow:], p1[:overflow])
 	return buf
+}
+
+func (w *Whisper) markPagesDirty(offset, size int64) {
+	startPgID := pageID(offset / w.pageSize)
+	endPgID := pageID((offset + size) / w.pageSize)
+	endOffInPg := (offset + size) % w.pageSize
+	if endOffInPg == 0 {
+		endPgID--
+	}
+
+	for i := startPgID; i <= endPgID; i++ {
+		w.dirtyPages[i] = struct{}{}
+	}
 }
 
 func (w *Whisper) retentionAt(offset int64) Retention {
