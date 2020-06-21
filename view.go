@@ -153,8 +153,7 @@ func readWhisperSingleArchive(db *Whisper, now, from, until time.Time, retId int
 	}
 	if debug {
 		for i, pt := range pts {
-			log.Printf("i=%d, pt.Time=%s, pt.Value=%s",
-				i, pt.Time, strconv.FormatFloat(pt.Value, 'f', -1, 64))
+			log.Printf("i=%d, pt.Time=%s, pt.Value=%s", i, pt.Time, pt.Value)
 		}
 	}
 	return pts, nil
@@ -220,8 +219,7 @@ func (d *whisperFileData) WriteTo(w io.Writer, showHeader bool) error {
 func writeTimeSeriesForArchives(w io.Writer, tss [][]Point) error {
 	for i, ts := range tss {
 		for _, p := range ts {
-			_, err := fmt.Fprintf(w, "retId:%d\tt:%s\tval:%s\n",
-				i, p.Time, strconv.FormatFloat(p.Value, 'f', -1, 64))
+			_, err := fmt.Fprintf(w, "retId:%d\tt:%s\tval:%s\n", i, p.Time, p.Value)
 			if err != nil {
 				return err
 			}

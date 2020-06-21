@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math"
-	"strconv"
 	"time"
 )
 
@@ -69,11 +67,7 @@ func writeDiff(indexes [][]int, src, dest *whisperFileData, showAll bool) {
 				}
 				destPt := destTs[j]
 				fmt.Printf("retId:%d\tt:%s\tsrcVal:%s\tdestVal:%s\tdiff:%d\n",
-					i,
-					formatTime(secondsToTime(int64(srcPt.Time))),
-					strconv.FormatFloat(srcPt.Value, 'f', -1, 64),
-					strconv.FormatFloat(destPt.Value, 'f', -1, 64),
-					diff)
+					i, srcPt.Time, srcPt.Value, destPt.Value, diff)
 			}
 		}
 		return
@@ -86,10 +80,7 @@ func writeDiff(indexes [][]int, src, dest *whisperFileData, showAll bool) {
 			srcPt := srcTs[j]
 			destPt := destTs[j]
 			fmt.Printf("retId:%d\tt:%s\tsrcVal:%s\tdestVal:%s\n",
-				i,
-				formatTime(secondsToTime(int64(srcPt.Time))),
-				strconv.FormatFloat(srcPt.Value, 'f', -1, 64),
-				strconv.FormatFloat(destPt.Value, 'f', -1, 64))
+				i, srcPt.Time, srcPt.Value, destPt.Value)
 		}
 	}
 }
@@ -109,13 +100,13 @@ func retentionsEqual(rr1, rr2 []Retention) bool {
 
 func valueEqualTimeSeriesPoint(src, dest Point, ignoreSrcEmpty, ignoreDestEmpty bool) bool {
 	srcVal := src.Value
-	srcIsNaN := math.IsNaN(srcVal)
+	srcIsNaN := srcVal.IsNaN()
 	if srcIsNaN && ignoreSrcEmpty {
 		return true
 	}
 
 	destVal := dest.Value
-	destIsNaN := math.IsNaN(destVal)
+	destIsNaN := destVal.IsNaN()
 	return ((srcIsNaN || ignoreDestEmpty) && destIsNaN) ||
 		(!srcIsNaN && !destIsNaN && srcVal == destVal)
 }

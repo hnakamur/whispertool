@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math"
 	"path/filepath"
 	"time"
 
@@ -113,9 +112,9 @@ func deepClonePoints(pts []Point) []Point {
 
 func addTimeSeriesPointTo(dest, src []Point) {
 	for i, pt := range src {
-		if math.IsNaN(dest[i].Value) {
+		if dest[i].Value.IsNaN() {
 			dest[i].Value = pt.Value
-		} else if !math.IsNaN(pt.Value) {
+		} else if !pt.Value.IsNaN() {
 			dest[i].Value += pt.Value
 		}
 	}

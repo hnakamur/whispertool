@@ -50,9 +50,11 @@ type Retention struct {
 	NumberOfPoints  uint32
 }
 
+type Value float64
+
 type Point struct {
 	Time  Timestamp
-	Value float64
+	Value Value
 }
 
 type pageAndOffset struct {
@@ -372,7 +374,7 @@ func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until, now Ti
 		t := fromInterval
 		for i := range points {
 			points[i].Time = t
-			points[i].Value = math.NaN()
+			points[i].Value.SetNaN()
 			t += step
 		}
 		return points, nil
@@ -388,8 +390,7 @@ func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until, now Ti
 		return nil, err
 	}
 	for i, pt := range points {
-		log.Printf("rawPoint i=%d, time=%s, value=%s",
-			i, pt.Time, formatFloat64(pt.Value))
+		log.Printf("rawPoint i=%d, time=%s, value=%s", i, pt.Time, pt.Value)
 	}
 	clearOldPoints(points, fromInterval, step)
 
@@ -419,7 +420,7 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval Timestamp, retentio
 		offset := fromOffset
 		for i := range points {
 			points[i].Time = w.timestampAt(offset)
-			points[i].Value = w.float64At(offset + uint32Size)
+			points[i].Value = w.valueAt(offset + uint32Size)
 			offset += pointSize
 		}
 		return points, nil
@@ -450,14 +451,14 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval Timestamp, retentio
 	i := 0
 	for offset < retentionEndOffset {
 		points[i].Time = w.timestampAt(offset)
-		points[i].Value = w.float64At(offset + uint32Size)
+		points[i].Value = w.valueAt(offset + uint32Size)
 		offset += pointSize
 		i++
 	}
 	offset = retentionStartOffset
 	for offset < untilOffset {
 		points[i].Time = w.timestampAt(offset)
-		points[i].Value = w.float64At(offset + uint32Size)
+		points[i].Value = w.valueAt(offset + uint32Size)
 		offset += pointSize
 		i++
 	}
@@ -469,7 +470,7 @@ func clearOldPoints(points []Point, fromInterval, step Timestamp) {
 	for i := range points {
 		if points[i].Time != currentInterval {
 			points[i].Time = currentInterval
-			points[i].Value = math.NaN()
+			points[i].Value.SetNaN()
 		}
 		currentInterval += step
 	}
@@ -481,7 +482,7 @@ func (w *Whisper) GetRawPoints(retentionID int) []Point {
 	p := make([]Point, r.NumberOfPoints)
 	for i := uint32(0); i < r.NumberOfPoints; i++ {
 		p[i].Time = w.timestampAt(off)
-		p[i].Value = w.float64At(off + uint32Size)
+		p[i].Value = w.valueAt(off + uint32Size)
 		off += pointSize
 	}
 	return p
@@ -503,6 +504,10 @@ func (w *Whisper) float32At(offset int64) float32 {
 
 func (w *Whisper) float64At(offset int64) float64 {
 	return math.Float64frombits(w.uint64At(offset))
+}
+
+func (w *Whisper) valueAt(offset int64) Value {
+	return Value(w.float64At(offset))
 }
 
 func (w *Whisper) bufForValue(offset, size int64) []byte {
@@ -758,8 +763,16 @@ func (r *Retention) Interval(t Timestamp) Timestamp {
 	return Timestamp(int64(t) - floorMod(int64(t), step) + step)
 }
 
-func formatFloat64(v float64) string {
-	return strconv.FormatFloat(v, 'f', -1, 64)
+func (v *Value) SetNaN() {
+	*v = Value(math.NaN())
+}
+
+func (v Value) IsNaN() bool {
+	return math.IsNaN(float64(v))
+}
+
+func (v Value) String() string {
+	return strconv.FormatFloat(float64(v), 'f', -1, 64)
 }
 
 func (pp pageIDSlice) Len() int           { return len(pp) }
