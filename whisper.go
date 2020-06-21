@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -82,27 +83,23 @@ const (
 
 var ErrRetentionIDOutOfRange = errors.New("retention is ID out of range")
 
-func (w *Whisper) OpenOrCreate(filename string, bufPool *BufferPool, perm os.FileMode) error {
-	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, perm)
+func (w *Whisper) Create(filename string, bufPool *BufferPool, perm os.FileMode) error {
+	if err := Retentions(w.Retentions).validate(); err != nil {
+		return err
+	}
+
+	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_EXCL, perm)
 	if err != nil {
+		return err
+	}
+
+	if err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		file.Close()
 		return err
 	}
 
 	w.file = file
 	w.bufPool = bufPool
-
-	err = w.readHeader()
-	if err == nil {
-		return nil
-	}
-	if err != io.ErrUnexpectedEOF {
-		return err
-	}
-
-	if err := Retentions(w.Retentions).validate(); err != nil {
-		return err
-	}
-
 	w.fillDerivedValuesInHeader()
 	w.initPages(w.fileSizeFromHeader())
 	for i := pageID(0); i <= w.lastPageID; i++ {
@@ -111,8 +108,29 @@ func (w *Whisper) OpenOrCreate(filename string, bufPool *BufferPool, perm os.Fil
 	}
 	w.putMeta()
 	w.putRetentions()
-
 	return nil
+}
+
+func OpenForWrite(filename string, bufPool *BufferPool) (*Whisper, error) {
+	file, err := os.OpenFile(filename, os.O_RDWR, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		file.Close()
+		return nil, err
+	}
+
+	w := &Whisper{
+		file:    file,
+		bufPool: bufPool,
+	}
+
+	if err := w.readHeader(); err != nil {
+		return nil, err
+	}
+	return w, nil
 }
 
 func Open(filename string, bufPool *BufferPool) (*Whisper, error) {
