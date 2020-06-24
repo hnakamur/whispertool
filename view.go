@@ -147,7 +147,7 @@ func readWhisperSingleArchive(db *Whisper, now, from, until time.Time, retId int
 		log.Printf("calling db.Fetch with fetchFrom=%s, fetchUntil=%s",
 			fetchFrom, fetchUntil)
 	}
-	pts, err := db.FetchFromSpecifiedArchive(retId, fetchFrom, fetchUntil, nowUnix)
+	pts, err := db.FetchFromArchive(retId, fetchFrom, fetchUntil, nowUnix)
 	if err != nil {
 		return nil, err
 	}

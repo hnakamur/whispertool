@@ -58,6 +58,8 @@ type Point struct {
 	Value Value
 }
 
+type Points []Point
+
 type pageAndOffset struct {
 	pgid pageID
 	off  int64
@@ -101,6 +103,7 @@ func (w *Whisper) Create(filename string, bufPool *BufferPool, perm os.FileMode)
 	w.file = file
 	w.bufPool = bufPool
 	w.fillDerivedValuesInHeader()
+	w.initBaseIntervals()
 	w.initPages(w.fileSizeFromHeader())
 	for i := pageID(0); i <= w.lastPageID; i++ {
 		w.pages[i] = w.allocBuf(i)
@@ -346,7 +349,7 @@ func (w *Whisper) fileSizeFromHeader() int64 {
 	return sz
 }
 
-func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until, now Timestamp) ([]Point, error) {
+func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) ([]Point, error) {
 	if now == 0 {
 		now = TimestampFromStdTime(time.Now())
 	}
@@ -383,8 +386,8 @@ func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until, now Ti
 	}
 
 	r := &w.Retentions[retentionID]
-	fromInterval := r.Interval(from)
-	untilInterval := r.Interval(until)
+	fromInterval := r.interval(from)
+	untilInterval := r.interval(until)
 	step := Timestamp(r.SecondsPerPoint)
 
 	if baseInterval == 0 {
@@ -416,24 +419,19 @@ func (w *Whisper) FetchFromSpecifiedArchive(retentionID int, from, until, now Ti
 }
 
 func (w *Whisper) fetchRawPoints(fromInterval, untilInterval Timestamp, retentionID int) ([]Point, error) {
+	if err := w.readPagesForIntervalRange(fromInterval, untilInterval, retentionID); err != nil {
+		return nil, err
+	}
+
 	r := &w.Retentions[retentionID]
 	baseInterval, err := w.baseInterval(retentionID)
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("fetchRawPoints, baseInterval=%s, fromInterval=%s, untilInterval=%s", baseInterval, fromInterval, untilInterval)
 
 	fromOffset := r.pointOffsetAt(r.pointIndex(baseInterval, fromInterval))
 	untilOffset := r.pointOffsetAt(r.pointIndex(baseInterval, untilInterval))
-	log.Printf("fetchRawPoints, fromOffset=%d, untilOffset=%d", fromOffset, untilOffset)
-
 	if fromOffset < untilOffset {
-		fromPg := pageID(fromOffset / w.pageSize)
-		untilPg := pageID(untilOffset / w.pageSize)
-		if err := w.readPagesIfNeeded(fromPg, untilPg); err != nil {
-			return nil, fmt.Errorf("cannot read page from %d to %d for points: %s",
-				fromPg, untilPg, err)
-		}
 		points := make([]Point, (untilOffset-fromOffset)/pointSize)
 		offset := fromOffset
 		for i := range points {
@@ -449,21 +447,6 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval Timestamp, retentio
 
 	retentionStartOffset := int64(r.offset)
 	retentionEndOffset := retentionStartOffset + int64(r.NumberOfPoints)*pointSize
-	log.Printf("fetchRawPoints, retentionStartOffset=%d, retentionEndOffset=%d, numberOfPoints=%d", retentionStartOffset, retentionEndOffset, r.NumberOfPoints)
-
-	fromPg := pageID(fromOffset / w.pageSize)
-	retentinoEndPg := pageID(retentionEndOffset / w.pageSize)
-	if err := w.readPagesIfNeeded(fromPg, retentinoEndPg); err != nil {
-		return nil, fmt.Errorf("cannot read page from %d to %d for points: %s",
-			fromPg, retentinoEndPg, err)
-	}
-
-	retentinoStartPg := pageID(retentionStartOffset / w.pageSize)
-	untilPg := pageID(untilOffset / w.pageSize)
-	if err := w.readPagesIfNeeded(retentinoStartPg, untilPg); err != nil {
-		return nil, fmt.Errorf("cannot read page from %d to %d for points: %s",
-			retentinoStartPg, untilPg, err)
-	}
 
 	offset := fromOffset
 	i := 0
@@ -481,6 +464,96 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval Timestamp, retentio
 		i++
 	}
 	return points, nil
+}
+
+func (w *Whisper) UpdatePointForArchive(retentionID int, t Timestamp, v Value, now Timestamp) error {
+	points := []Point{{Time: t, Value: v}}
+	return w.UpdatePointsForArchive(retentionID, points, now)
+}
+
+func (w *Whisper) UpdatePointsForArchive(retentionID int, points []Point, now Timestamp) error {
+	if now == 0 {
+		now = TimestampFromStdTime(time.Now())
+	}
+
+	log.Printf("UpdatePointsForArchive start, retentionID=%d, len(points)=%d", retentionID, len(points))
+	r := &w.Retentions[retentionID]
+	points = r.filterPoints(points, now)
+	log.Printf("UpdatePointsForArchive, after filterPoints, len(points)=%d", len(points))
+	if len(points) == 0 {
+		return nil
+	}
+
+	sort.Stable(Points(points))
+	alignedPoints := alignPoints(r, points)
+
+	fromInterval := alignedPoints[0].Time
+	untilInterval := alignedPoints[len(alignedPoints)-1].Time
+	log.Printf("UpdatePointsForArchive, fromInterval=%s, untilInterval=%s", fromInterval, untilInterval)
+	if err := w.readPagesForIntervalRange(fromInterval, untilInterval, retentionID); err != nil {
+		return err
+	}
+
+	baseInterval, err := w.baseInterval(retentionID)
+	if err != nil {
+		return err
+	}
+	if baseInterval == 0 {
+		baseInterval = r.intervalForWrite(now)
+	}
+	log.Printf("UpdatePointsForArchive, baseInterval=%s", baseInterval)
+
+	for _, p := range alignedPoints {
+		offset := r.pointOffsetAt(r.pointIndex(baseInterval, p.Time))
+		log.Printf("UpdatePointsForArchive, p.Time=%s, p.Value=%s, offset=%d", p.Time, p.Value, offset)
+		w.putTimestampAt(p.Time, offset)
+		w.putValueAt(p.Value, offset+uint32Size)
+	}
+
+	// TODO: propagate
+
+	return nil
+}
+
+func (w *Whisper) readPagesForIntervalRange(fromInterval, untilInterval Timestamp, retentionID int) error {
+	r := &w.Retentions[retentionID]
+	baseInterval, err := w.baseInterval(retentionID)
+	if err != nil {
+		return err
+	}
+
+	fromOffset := r.pointOffsetAt(r.pointIndex(baseInterval, fromInterval))
+	untilOffset := r.pointOffsetAt(r.pointIndex(baseInterval, untilInterval))
+	fromPg := w.pageIDForStartOffset(fromOffset)
+	untilPg := w.pageIDForEndOffset(untilOffset + pointSize)
+	if fromPg <= untilPg {
+		if err := w.readPagesIfNeeded(fromPg, untilPg); err != nil {
+			return fmt.Errorf("cannot read page from %d to %d for points: %s",
+				fromPg, untilPg, err)
+		}
+	}
+
+	retentionStartOffset := int64(r.offset)
+	retentionEndOffset := retentionStartOffset + int64(r.NumberOfPoints)*pointSize
+	retentionStartPg := w.pageIDForStartOffset(retentionStartOffset)
+	retentionEndPg := w.pageIDForEndOffset(retentionEndOffset)
+
+	if untilPg+1 < fromPg {
+		if err := w.readPagesIfNeeded(retentionStartPg, untilPg); err != nil {
+			return fmt.Errorf("cannot read page from %d to %d for points: %s",
+				retentionStartPg, untilPg, err)
+		}
+		if err := w.readPagesIfNeeded(fromPg, retentionEndPg); err != nil {
+			return fmt.Errorf("cannot read page from %d to %d for points: %s",
+				fromPg, retentionEndPg, err)
+		}
+	} else {
+		if err := w.readPagesIfNeeded(retentionStartPg, retentionEndPg); err != nil {
+			return fmt.Errorf("cannot read page from %d to %d for points: %s",
+				retentionStartPg, retentionEndPg, err)
+		}
+	}
+	return nil
 }
 
 func clearOldPoints(points []Point, fromInterval, step Timestamp) {
@@ -603,7 +676,13 @@ func (w *Whisper) putFloat64At(v float64, offset int64) {
 }
 
 func (w *Whisper) putTimestampAt(t Timestamp, offset int64) {
-	w.putUint64At(uint64(t), offset)
+	log.Printf("putTimestampAt, uint64(t)=%d, offset=%d", uint64(t), offset)
+	w.putUint32At(uint32(t), offset)
+}
+
+func (w *Whisper) putValueAt(v Value, offset int64) {
+	log.Printf("putValueAt, v=%s, offset=%d", v, offset)
+	w.putFloat64At(float64(v), offset)
 }
 
 func (w *Whisper) putMeta() {
@@ -630,6 +709,18 @@ func (w *Whisper) splitCopyToPages(r *pageAndOffsetRange, b []byte) {
 	copy(w.pages[r.end.pgid][:r.end.off], b[sz:sz+r.end.off])
 	w.markPageDirty(r.start.pgid)
 	w.markPageDirty(r.end.pgid)
+}
+
+func (w *Whisper) pageIDForStartOffset(offset int64) pageID {
+	return pageID(offset / w.pageSize)
+}
+
+func (w *Whisper) pageIDForEndOffset(offset int64) pageID {
+	pgID := pageID(offset / w.pageSize)
+	if offset%w.pageSize == 0 && pgID > 0 {
+		pgID--
+	}
+	return pgID
 }
 
 func (w *Whisper) pageAndOffsetFromFileOffset(offset int64) pageAndOffset {
@@ -776,9 +867,44 @@ func (r *Retention) pointOffsetAt(index int) int64 {
 	return int64(r.offset) + int64(index)*pointSize
 }
 
-func (r *Retention) Interval(t Timestamp) Timestamp {
+func (r *Retention) interval(t Timestamp) Timestamp {
 	step := int64(r.SecondsPerPoint)
 	return Timestamp(int64(t) - floorMod(int64(t), step) + step)
+}
+
+func (r *Retention) intervalForWrite(t Timestamp) Timestamp {
+	step := int64(r.SecondsPerPoint)
+	return Timestamp(int64(t) - floorMod(int64(t), step))
+}
+
+func (r *Retention) filterPoints(points []Point, now Timestamp) []Point {
+	oldest := r.intervalForWrite(now.Add(-r.MaxRetention()))
+	filteredPoints := make([]Point, 0, len(points))
+	for _, p := range points {
+		if p.Time >= oldest && p.Time <= now {
+			filteredPoints = append(filteredPoints, p)
+		}
+	}
+	return filteredPoints
+}
+
+// points must be sorted by Time
+func alignPoints(r *Retention, points []Point) []Point {
+	alignedPoints := make([]Point, 0, len(points))
+	var prevTime Timestamp
+	for i, point := range points {
+		dPoint := Point{
+			Time:  r.intervalForWrite(point.Time),
+			Value: point.Value,
+		}
+		if i > 0 && point.Time == prevTime {
+			alignedPoints[len(alignedPoints)-1].Value = dPoint.Value
+		} else {
+			alignedPoints = append(alignedPoints, dPoint)
+			prevTime = dPoint.Time
+		}
+	}
+	return alignedPoints
 }
 
 func (v *Value) SetNaN() {
@@ -796,3 +922,7 @@ func (v Value) String() string {
 func (pp pageIDSlice) Len() int           { return len(pp) }
 func (pp pageIDSlice) Less(i, j int) bool { return pp[i] < pp[j] }
 func (pp pageIDSlice) Swap(i, j int)      { pp[i], pp[j] = pp[j], pp[i] }
+
+func (pp Points) Len() int           { return len(pp) }
+func (pp Points) Less(i, j int) bool { return pp[i].Time < pp[j].Time }
+func (pp Points) Swap(i, j int)      { pp[i], pp[j] = pp[j], pp[i] }

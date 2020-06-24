@@ -4,37 +4,35 @@ import (
 	crand "crypto/rand"
 	"encoding/binary"
 	"math/rand"
+	"os"
 	"time"
-
-	whisper "github.com/go-graphite/go-whisper"
 )
 
 func Generate(dest string, retentionDefs string, fill bool, randMax int, textOut string) error {
-	//retentions, err := whisper.ParseRetentionDefs(retentionDefs)
-	//if err != nil {
-	//	return err
-	//}
+	retentions, err := ParseRetentions(retentionDefs)
+	if err != nil {
+		return err
+	}
 
-	//d := &whisperFileData{
-	//	retentions:   retentionsToRetentionSlice(retentions),
-	//	aggMethod:    "Sum",
-	//	xFilesFactor: 0,
-	//}
+	d := &whisperFileData{
+		retentions:        retentions,
+		aggregationMethod: Sum,
+		xFilesFactor:      0,
+	}
 
-	//if fill {
-	//	rnd := rand.New(rand.NewSource(newRandSeed()))
-	//	now := time.Now()
-	//	until := now
-	//	d.tss = randomTimeSeriesPointsForArchives(retentions, until, now,
-	//		rnd, randMax)
-	//}
+	now := TimestampFromStdTime(time.Now())
+	if fill {
+		rnd := rand.New(rand.NewSource(newRandSeed()))
+		until := now
+		d.tss = randomTimeSeriesPointsForArchives(retentions, until, now,
+			rnd, randMax)
+	}
 
-	//if err = writeWhisperFileData(textOut, d, true); err != nil {
-	//	return err
-	//}
+	if err = writeWhisperFileData(textOut, d, true); err != nil {
+		return err
+	}
 
-	//return createWhisperFile(dest, d)
-	return nil
+	return createWhisperFile(dest, d)
 }
 
 func newRandSeed() int64 {
@@ -45,43 +43,24 @@ func newRandSeed() int64 {
 	return int64(binary.BigEndian.Uint64(b[:]))
 }
 
-//func retentionsToRetentionSlice(retentions whisper.Retentions) []Retention {
-//	retentions2 := make([]whisper.Retention, len(retentions))
-//	for i, r := range retentions {
-//		retentions2[i] = whisper.NewRetention(
-//			r.SecondsPerPoint(),
-//			r.NumberOfPoints())
-//	}
-//	return retentions2
-//}
-//
-//func retentionSliceToRetentions(retentions []whisper.Retention) whisper.Retentions {
-//	retentions2 := make([]*whisper.Retention, len(retentions))
-//	for i := range retentions {
-//		retentions2[i] = &retentions[i]
-//	}
-//	return retentions2
-//}
-
 func alignUnixTime(t int64, secondsPerPoint int) int64 {
 	return t - t%int64(secondsPerPoint)
 }
 
-func alignTime(t time.Time, secondsPerPoint int) time.Time {
-	return time.Unix(alignUnixTime(t.Unix(), secondsPerPoint), 0)
+func alignTime(t Timestamp, secondsPerPoint Duration) Timestamp {
+	return t - t%Timestamp(secondsPerPoint)
 }
 
-func randomValWithHighSum(t time.Time, rnd *rand.Rand, highRndMax int, r, highRet *whisper.Retention, highPts []*whisper.TimeSeriesPoint) float64 {
-	step := r.SecondsPerPoint()
+func randomValWithHighSum(t Timestamp, rnd *rand.Rand, highRndMax int, r, highRet *Retention, highPts []Point) Value {
+	step := r.SecondsPerPoint
 
-	v := float64(0)
+	v := Value(0)
 	for _, hp := range highPts {
-		highTime := time.Unix(int64(hp.Time), 0)
-		thisHighTime := alignTime(highTime, step)
-		if thisHighTime.Before(t) {
+		thisHighTime := alignTime(hp.Time, step)
+		if thisHighTime < t {
 			continue
 		}
-		if thisHighTime.After(t) {
+		if thisHighTime > t {
 			break
 		}
 		v += hp.Value
@@ -90,54 +69,55 @@ func randomValWithHighSum(t time.Time, rnd *rand.Rand, highRndMax int, r, highRe
 	if len(highPts) == 0 {
 		return v
 	}
-	highStartTime := time.Unix(int64(highPts[0].Time), 0)
-	if !t.Before(highStartTime) {
+	highStartTime := highPts[0].Time
+	if t >= highStartTime {
 		return v
 	}
-	n := int(highStartTime.Sub(t)/time.Second) / highRet.SecondsPerPoint()
-	v2 := float64(n * rnd.Intn(highRndMax+1))
+	n := int(highStartTime.Sub(t) / Second / highRet.SecondsPerPoint)
+	v2 := Value(n * rnd.Intn(highRndMax+1))
 	return v + v2
 }
 
-func randomTimeSeriesPoints(until, now time.Time, r, highRet *whisper.Retention, rnd *rand.Rand, rndMax, highRndMax int, highPts []*whisper.TimeSeriesPoint) []*whisper.TimeSeriesPoint {
+func randomTimeSeriesPoints(until, now Timestamp, r, highRet *Retention, rnd *rand.Rand, rndMax, highRndMax int, highPts []Point) []Point {
 	// adjust now and until for this archive
-	step := r.SecondsPerPoint()
+	step := r.SecondsPerPoint
 	thisNow := alignTime(now, step)
 	thisUntil := alignTime(until, step)
 
-	var thisHighStartTime time.Time
+	var thisHighStartTime Timestamp
 	if highPts != nil {
-		highStartTime := time.Unix(int64(highPts[0].Time), 0)
-		if highStartTime.Before(thisUntil) {
+		highStartTime := highPts[0].Time
+		if highStartTime < thisUntil {
 			thisHighStartTime = alignTime(highStartTime, step)
 		}
 	}
 
-	n := (r.MaxRetention() - int(thisNow.Sub(thisUntil)/time.Second)) / r.SecondsPerPoint()
-	ts := make([]*whisper.TimeSeriesPoint, n)
+	n := int((r.MaxRetention() - thisNow.Sub(thisUntil)) / r.SecondsPerPoint)
+	points := make([]Point, n)
 	for i := 0; i < n; i++ {
-		t := thisUntil.Add(-time.Duration((n-1-i)*step) * time.Second)
-		var v float64
-		if thisHighStartTime.IsZero() || t.Before(thisHighStartTime) {
-			v = float64(rnd.Intn(rndMax + 1))
+		t := thisUntil.Add(-Duration(n-1-i) * step * Second)
+		var v Value
+		if thisHighStartTime == 0 || t < thisHighStartTime {
+			v = Value(rnd.Intn(rndMax + 1))
 		} else {
 			v = randomValWithHighSum(t, rnd, highRndMax, r, highRet, highPts)
 		}
-		ts[i] = &whisper.TimeSeriesPoint{
-			Time:  int(t.Unix()),
+		points[i] = Point{
+			Time:  t,
 			Value: v,
 		}
 	}
-	return ts
+	return points
 }
 
-func randomTimeSeriesPointsForArchives(retentions []*whisper.Retention, until, now time.Time, rnd *rand.Rand, rndMaxForHightestArchive int) [][]*whisper.TimeSeriesPoint {
-	tss := make([][]*whisper.TimeSeriesPoint, len(retentions))
-	var highRet *whisper.Retention
+func randomTimeSeriesPointsForArchives(retentions []Retention, until, now Timestamp, rnd *rand.Rand, rndMaxForHightestArchive int) [][]Point {
+	tss := make([][]Point, len(retentions))
+	var highRet *Retention
 	var highRndMax int
-	var highPts []*whisper.TimeSeriesPoint
-	for i, r := range retentions {
-		rndMax := rndMaxForHightestArchive * r.SecondsPerPoint() / retentions[0].SecondsPerPoint()
+	var highPts []Point
+	for i := range retentions {
+		r := &retentions[i]
+		rndMax := rndMaxForHightestArchive * int(r.SecondsPerPoint) / int(retentions[0].SecondsPerPoint)
 		tss[i] = randomTimeSeriesPoints(until, now, r, highRet, rnd, rndMax, highRndMax, highPts)
 
 		highRndMax = rndMax
@@ -147,30 +127,39 @@ func randomTimeSeriesPointsForArchives(retentions []*whisper.Retention, until, n
 	return tss
 }
 
-//func createWhisperFile(filename string, d *whisperFileData) error {
-//	aggMethod, err := stringToAggregationMethod(d.aggMethod)
-//	if err != nil {
-//		return err
-//	}
-//
-//	db, err := whisper.Create(filename,
-//		retentionSliceToRetentions(d.retentions),
-//		aggMethod,
-//		d.xFilesFactor)
-//	if err != nil {
-//		return err
-//	}
-//	defer db.Close()
-//
-//	return updateWhisperFile(db, d.tss)
-//}
+func createWhisperFile(filename string, d *whisperFileData) error {
+	p := NewBufferPool(os.Getpagesize())
+	db := &Whisper{
+		Meta: Meta{
+			AggregationMethod: d.aggregationMethod,
+			XFilesFactor:      d.xFilesFactor,
+		},
+		Retentions: d.retentions,
+	}
+	err := db.Create(filename, p, 0644)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
 
-func updateWhisperFile(db *whisper.Whisper, tss [][]*whisper.TimeSeriesPoint) error {
+	if err := updateWhisperFile(db, d.tss); err != nil {
+		return err
+	}
+
+	if err := db.Flush(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func updateWhisperFile(db *Whisper, tss [][]Point) error {
 	if tss == nil {
 		return nil
 	}
-	for i, r := range db.Retentions() {
-		err := db.UpdateManyForArchive(tss[i], r.MaxRetention())
+	now := TimestampFromStdTime(time.Now())
+	for i := range db.Retentions {
+		err := db.UpdatePointsForArchive(i, tss[i], now)
 		if err != nil {
 			return err
 		}

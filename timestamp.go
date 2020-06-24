@@ -37,12 +37,12 @@ func ParseTimestamp(s string) (Timestamp, error) {
 
 // StdTimeToTimestamp returns t as a Timestamp.
 func TimestampFromStdTime(t time.Time) Timestamp {
-	return Timestamp(t.Unix())
+	return Timestamp(t.UTC().Unix())
 }
 
 // ToStdTime returns t as a time.Time.
 func (t Timestamp) ToStdTime() time.Time {
-	return time.Unix(int64(t), 0)
+	return time.Unix(int64(t), 0).UTC()
 }
 
 func (t Timestamp) String() string {
