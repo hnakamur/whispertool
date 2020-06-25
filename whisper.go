@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"os"
 	"sort"
@@ -410,9 +409,9 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 	if err != nil {
 		return nil, err
 	}
-	for i, pt := range points {
-		log.Printf("rawPoint i=%d, time=%s, value=%s", i, pt.Time, pt.Value)
-	}
+	//for i, pt := range points {
+	//	log.Printf("rawPoint i=%d, time=%s, value=%s", i, pt.Time, pt.Value)
+	//}
 	clearOldPoints(points, fromInterval, step)
 
 	return points, nil
@@ -476,10 +475,8 @@ func (w *Whisper) UpdatePointsForArchive(retentionID int, points []Point, now Ti
 		now = TimestampFromStdTime(time.Now())
 	}
 
-	log.Printf("UpdatePointsForArchive start, retentionID=%d, len(points)=%d", retentionID, len(points))
 	r := &w.Retentions[retentionID]
 	points = r.filterPoints(points, now)
-	log.Printf("UpdatePointsForArchive, after filterPoints, len(points)=%d", len(points))
 	if len(points) == 0 {
 		return nil
 	}
@@ -489,7 +486,6 @@ func (w *Whisper) UpdatePointsForArchive(retentionID int, points []Point, now Ti
 
 	fromInterval := alignedPoints[0].Time
 	untilInterval := alignedPoints[len(alignedPoints)-1].Time
-	log.Printf("UpdatePointsForArchive, fromInterval=%s, untilInterval=%s", fromInterval, untilInterval)
 	if err := w.readPagesForIntervalRange(fromInterval, untilInterval, retentionID); err != nil {
 		return err
 	}
@@ -501,11 +497,9 @@ func (w *Whisper) UpdatePointsForArchive(retentionID int, points []Point, now Ti
 	if baseInterval == 0 {
 		baseInterval = r.intervalForWrite(now)
 	}
-	log.Printf("UpdatePointsForArchive, baseInterval=%s", baseInterval)
 
 	for _, p := range alignedPoints {
 		offset := r.pointOffsetAt(r.pointIndex(baseInterval, p.Time))
-		log.Printf("UpdatePointsForArchive, p.Time=%s, p.Value=%s, offset=%d", p.Time, p.Value, offset)
 		w.putTimestampAt(p.Time, offset)
 		w.putValueAt(p.Value, offset+uint32Size)
 	}
@@ -676,12 +670,10 @@ func (w *Whisper) putFloat64At(v float64, offset int64) {
 }
 
 func (w *Whisper) putTimestampAt(t Timestamp, offset int64) {
-	log.Printf("putTimestampAt, uint64(t)=%d, offset=%d", uint64(t), offset)
 	w.putUint32At(uint32(t), offset)
 }
 
 func (w *Whisper) putValueAt(v Value, offset int64) {
-	log.Printf("putValueAt, v=%s, offset=%d", v, offset)
 	w.putFloat64At(float64(v), offset)
 }
 

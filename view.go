@@ -22,7 +22,10 @@ func View(filename string, raw bool, now, from, until time.Time, retId int, show
 	if raw {
 		return viewRaw(filename, now, from, until, retId, showHeader)
 	}
-	return view(filename, now, from, until, retId, showHeader)
+	tsNow := TimestampFromStdTime(now)
+	tsFrom := TimestampFromStdTime(from)
+	tsUntil := TimestampFromStdTime(until)
+	return view(filename, tsNow, tsFrom, tsUntil, retId, showHeader)
 }
 
 type whisperFileData struct {
@@ -33,7 +36,7 @@ type whisperFileData struct {
 	tss               [][]Point
 }
 
-func readWhisperFile(filename string, now, from, until time.Time, retId int) (*whisperFileData, error) {
+func readWhisperFile(filename string, now, from, until Timestamp, retId int) (*whisperFileData, error) {
 	p := NewBufferPool(os.Getpagesize())
 	db, err := Open(filename, p)
 	if err != nil {
@@ -44,10 +47,10 @@ func readWhisperFile(filename string, now, from, until time.Time, retId int) (*w
 	return readWhisperDB(db, now, from, until, retId, filename)
 }
 
-func readWhisperDB(db *Whisper, now, from, until time.Time, retId int, filename string) (*whisperFileData, error) {
+func readWhisperDB(db *Whisper, now, from, until Timestamp, retId int, filename string) (*whisperFileData, error) {
 	if debug {
 		log.Printf("readWhisperDB start, filename=%s, from=%s, until=%s, retId=%d",
-			filename, formatTime(from), formatTime(until), retId)
+			filename, from, until, retId)
 	}
 
 	retentions := db.Retentions
@@ -87,26 +90,22 @@ func readWhisperDB(db *Whisper, now, from, until time.Time, retId int, filename 
 	}, nil
 }
 
-func readWhisperSingleArchive(db *Whisper, now, from, until time.Time, retId int, filename string) ([]Point, error) {
-	nowUnix := TimestampFromStdTime(now)
-	fromUnix := TimestampFromStdTime(from)
-
-	untilUnix := TimestampFromStdTime(until)
-	if untilUnix > nowUnix {
-		untilUnix = nowUnix
+func readWhisperSingleArchive(db *Whisper, now, from, until Timestamp, retId int, filename string) ([]Point, error) {
+	if until > now {
+		until = now
 	}
 
-	fetchFrom := fromUnix
-	fetchUntil := untilUnix
+	fetchFrom := from
+	fetchUntil := until
 
 	retentions := db.Retentions
 	r := retentions[retId]
-	minFrom := nowUnix.Add(-r.MaxRetention())
+	minFrom := now.Add(-r.MaxRetention())
 	step := r.SecondsPerPoint
 
 	if debug {
-		log.Printf("readWhisperSingleArchive retId=%d, fromUnix=%s, untilUnix=%s, minFrom=%s",
-			retId, fromUnix, untilUnix, minFrom)
+		log.Printf("readWhisperSingleArchive retId=%d, from=%s, until=%s, minFrom=%s",
+			retId, from, until, minFrom)
 	}
 	if fetchFrom < minFrom {
 		if debug {
@@ -147,7 +146,7 @@ func readWhisperSingleArchive(db *Whisper, now, from, until time.Time, retId int
 		log.Printf("calling db.Fetch with fetchFrom=%s, fetchUntil=%s",
 			fetchFrom, fetchUntil)
 	}
-	pts, err := db.FetchFromArchive(retId, fetchFrom, fetchUntil, nowUnix)
+	pts, err := db.FetchFromArchive(retId, fetchFrom, fetchUntil, now)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +158,7 @@ func readWhisperSingleArchive(db *Whisper, now, from, until time.Time, retId int
 	return pts, nil
 }
 
-func view(filename string, now, from, until time.Time, retId int, showHeader bool) error {
+func view(filename string, now, from, until Timestamp, retId int, showHeader bool) error {
 	d, err := readWhisperFile(filename, now, from, until, retId)
 	if err != nil {
 		return err

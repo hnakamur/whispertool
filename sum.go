@@ -26,7 +26,10 @@ func RunSum(srcPattern, destFilename, textOut string, retId int) error {
 	now := time.Now()
 	from := time.Unix(0, 0)
 	until := now
-	sumData, err := sumWhisperFile(srcFilenames, now, from, until, retId)
+	tsNow := TimestampFromStdTime(now)
+	tsFrom := TimestampFromStdTime(from)
+	tsUntil := TimestampFromStdTime(until)
+	sumData, err := sumWhisperFile(srcFilenames, tsNow, tsFrom, tsUntil, retId)
 	if err != nil {
 		return err
 	}
@@ -38,7 +41,7 @@ func RunSum(srcPattern, destFilename, textOut string, retId int) error {
 	return nil
 }
 
-func sumWhisperFile(srcFilenames []string, now, from, until time.Time, retId int) (*whisperFileData, error) {
+func sumWhisperFile(srcFilenames []string, now, from, until Timestamp, retId int) (*whisperFileData, error) {
 retry:
 	srcDatas := make([]*whisperFileData, len(srcFilenames))
 	var g errgroup.Group

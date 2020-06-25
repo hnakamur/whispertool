@@ -1,61 +1,62 @@
 package whispertool
 
 import (
-	"math"
+	"errors"
+	"fmt"
+	"os"
 	"time"
-
-	whisper "github.com/go-graphite/go-whisper"
 )
 
 func Merge(src, dest string, recursive bool, now, from, until time.Time) error {
-	//if recursive {
-	//	return errors.New("recursive option not implemented yet")
-	//}
+	if recursive {
+		return errors.New("recursive option not implemented yet")
+	}
 
-	//readFrom := time.Unix(0, 0)
-	//readUntil := now
+	tsNow := TimestampFromStdTime(now)
+	tsFrom := TimestampFromStdTime(from)
+	tsUntil := TimestampFromStdTime(until)
 
-	//srcData, err := readWhisperFile(src, now, readFrom, readUntil, RetIdAll)
-	//if err != nil {
-	//	return err
-	//}
+	srcData, err := readWhisperFile(src, tsNow, tsFrom, tsUntil, RetIdAll)
+	if err != nil {
+		return err
+	}
 
-	//opts := &whisper.Options{FLock: true}
-	//destDB, err := whisper.OpenWithOptions(dest, opts)
-	//if err != nil {
-	//	return err
-	//}
-	//defer destDB.Close()
+	p := NewBufferPool(os.Getpagesize())
+	destDB, err := OpenForWrite(dest, p)
+	if err != nil {
+		return err
+	}
+	defer destDB.Close()
 
-	//destData, err := readWhisperDB(destDB, now, readFrom, readUntil, RetIdAll, dest)
-	//if err != nil {
-	//	return err
-	//}
+	destData, err := readWhisperDB(destDB, tsNow, tsFrom, tsUntil, RetIdAll, dest)
+	if err != nil {
+		return err
+	}
 
-	//if !retentionsEqual(srcData.retentions, destData.retentions) {
-	//	return fmt.Errorf("%s and %s archive confiugrations are unalike. "+
-	//		"Resize the input before diffing", src, dest)
-	//}
+	if !retentionsEqual(srcData.retentions, destData.retentions) {
+		return fmt.Errorf("%s and %s archive confiugrations are unalike. "+
+			"Resize the input before diffing", src, dest)
+	}
 
-	//if !timeEqualMultiTimeSeriesPointsPointers(srcData.tss, destData.tss) {
-	//	return fmt.Errorf("%s and %s archive time values are unalike. "+
-	//		"Resize the input before diffing", src, dest)
-	//}
+	if !timeEqualMultiTimeSeriesPointsPointers(srcData.tss, destData.tss) {
+		return fmt.Errorf("%s and %s archive time values are unalike. "+
+			"Resize the input before diffing", src, dest)
+	}
 
-	//tss := buildMultiTimeSeriesPointsPointersForMerge(srcData.tss, destData.tss, int(from.Unix()), int(until.Unix()), srcData.retentions)
-	//return updateWhisperFile(destDB, tss)
+	tss := buildMultiTimeSeriesPointsPointersForMerge(srcData.tss, destData.tss, tsFrom, tsUntil, srcData.retentions)
+	return updateWhisperFile(destDB, tss)
 	return nil
 }
 
-func buildTimeSeriesPointsPointersForMerge(srcTs, destTs []*whisper.TimeSeriesPoint, from, until int, propagatedTs []int64) []*whisper.TimeSeriesPoint {
-	var ts []*whisper.TimeSeriesPoint
+func buildTimeSeriesPointsPointersForMerge(srcTs, destTs []Point, from, until Timestamp, propagatedTs []Timestamp) []Point {
+	var ts []Point
 	for i, srcPt := range srcTs {
 		var propagateCopy bool
-		if len(propagatedTs) > 0 && propagatedTs[0] == int64(srcPt.Time) {
+		if len(propagatedTs) > 0 && propagatedTs[0] == srcPt.Time {
 			propagateCopy = true
 			propagatedTs = propagatedTs[1:]
 		}
-		if ((from <= srcPt.Time && math.IsNaN(destTs[i].Value)) || propagateCopy) && !math.IsNaN(srcPt.Value) {
+		if (from <= srcPt.Time && destTs[i].Value.IsNaN() || propagateCopy) && !srcPt.Value.IsNaN() {
 			ts = append(ts, srcPt)
 		}
 		if until < srcPt.Time {
@@ -65,10 +66,10 @@ func buildTimeSeriesPointsPointersForMerge(srcTs, destTs []*whisper.TimeSeriesPo
 	return ts
 }
 
-func buildPropagatedTs(highTs []*whisper.TimeSeriesPoint, step int) []int64 {
-	var ts []int64
+func buildPropagatedTs(highTs []Point, step Duration) []Timestamp {
+	var ts []Timestamp
 	for _, highPt := range highTs {
-		t := alignUnixTime(int64(highPt.Time), step)
+		t := alignTime(highPt.Time, step)
 		if len(ts) == 0 || ts[len(ts)-1] != t {
 			ts = append(ts, t)
 		}
@@ -76,12 +77,12 @@ func buildPropagatedTs(highTs []*whisper.TimeSeriesPoint, step int) []int64 {
 	return ts
 }
 
-func buildMultiTimeSeriesPointsPointersForMerge(srcTss, destTss [][]*whisper.TimeSeriesPoint, from, until int, retentions []whisper.Retention) [][]*whisper.TimeSeriesPoint {
-	var propagatedTs []int64
-	tss := make([][]*whisper.TimeSeriesPoint, len(srcTss))
+func buildMultiTimeSeriesPointsPointersForMerge(srcTss, destTss [][]Point, from, until Timestamp, retentions []Retention) [][]Point {
+	var propagatedTs []Timestamp
+	tss := make([][]Point, len(srcTss))
 	for i, srcTs := range srcTss {
 		if i > 0 {
-			propagatedTs = buildPropagatedTs(tss[i-1], retentions[i].SecondsPerPoint())
+			propagatedTs = buildPropagatedTs(tss[i-1], retentions[i].SecondsPerPoint)
 		}
 		tss[i] = buildTimeSeriesPointsPointersForMerge(srcTs, destTss[i], from, until, propagatedTs)
 	}

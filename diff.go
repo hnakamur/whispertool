@@ -14,12 +14,15 @@ func Diff(src, dest string, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll 
 		return errors.New("recursive option not implemented yet")
 	}
 
-	srcData, err := readWhisperFile(src, now, from, until, retId)
+	tsNow := TimestampFromStdTime(now)
+	tsFrom := TimestampFromStdTime(from)
+	tsUntil := TimestampFromStdTime(until)
+	srcData, err := readWhisperFile(src, tsNow, tsFrom, tsUntil, retId)
 	if err != nil {
 		return err
 	}
 
-	destData, err := readWhisperFile(dest, now, from, until, retId)
+	destData, err := readWhisperFile(dest, tsNow, tsFrom, tsUntil, retId)
 	if err != nil {
 		return err
 	}

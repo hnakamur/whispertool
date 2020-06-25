@@ -37,6 +37,9 @@ func ParseTimestamp(s string) (Timestamp, error) {
 
 // StdTimeToTimestamp returns t as a Timestamp.
 func TimestampFromStdTime(t time.Time) Timestamp {
+	if t.IsZero() {
+		return Timestamp(0)
+	}
 	return Timestamp(t.UTC().Unix())
 }
 

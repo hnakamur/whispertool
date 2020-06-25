@@ -77,12 +77,15 @@ func sumDiffItem(srcBase, destBase, itemRelDir, srcPattern, dest string, ignoreS
 	now := time.Now()
 	from := time.Unix(0, 0)
 	until := now.Add(-untilOffset)
+	tsNow := TimestampFromStdTime(now)
+	tsFrom := TimestampFromStdTime(from)
+	tsUntil := TimestampFromStdTime(until)
 
 	var sumData, destData *whisperFileData
 	var g errgroup.Group
 	g.Go(func() error {
 		var err error
-		sumData, err = sumWhisperFile(srcFilenames, now, from, until, retId)
+		sumData, err = sumWhisperFile(srcFilenames, tsNow, tsFrom, tsUntil, retId)
 		if err != nil {
 			return err
 		}
@@ -91,7 +94,7 @@ func sumDiffItem(srcBase, destBase, itemRelDir, srcPattern, dest string, ignoreS
 	})
 	g.Go(func() error {
 		var err error
-		destData, err = readWhisperFile(destFull, now, from, until, retId)
+		destData, err = readWhisperFile(destFull, tsNow, tsFrom, tsUntil, retId)
 		if err != nil {
 			return err
 		}
@@ -110,7 +113,7 @@ func sumDiffItem(srcBase, destBase, itemRelDir, srcPattern, dest string, ignoreS
 		return nil
 	}
 	fmt.Printf("time:%s\tmsg:sum diff found\tsrc:%s\tdest:%s\n",
-		formatTime(now), srcFullPattern, destFull)
+		tsNow, srcFullPattern, destFull)
 	writeDiff(iss, sumData, destData, showAll)
 	return nil
 }
