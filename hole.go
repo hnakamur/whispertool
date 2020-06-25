@@ -9,17 +9,17 @@ import (
 )
 
 func Hole(src, dest string, emptyRate float64, now, from, until time.Time) error {
-	//readFrom := time.Unix(0, 0)
-	//readUntil := now
-	//d, err := readWhisperFile(src, now, readFrom, readUntil, RetIdAll)
-	//if err != nil {
-	//	return err
-	//}
+	tsNow := TimestampFromStdTime(now)
+	tsFrom := TimestampFromStdTime(from)
+	tsUntil := TimestampFromStdTime(until)
+	d, err := readWhisperFile(src, tsNow, tsFrom, tsUntil, RetIdAll)
+	if err != nil {
+		return err
+	}
 
-	//rnd := rand.New(rand.NewSource(newRandSeed()))
-	//emptyRandomPointsInTimeSeriesPointsForAllArchives(d.tss, rnd, emptyRate, from, until, d.retentions)
-	//return createWhisperFile(dest, d)
-	return nil
+	rnd := rand.New(rand.NewSource(newRandSeed()))
+	emptyRandomPointsInTimeSeriesPointsForAllArchives(d.tss, rnd, emptyRate, tsFrom, tsUntil, d.retentions)
+	return createWhisperFile(dest, d)
 }
 
 var errInvalidAggregationMethod = errors.New("invalid aggregation method")
@@ -43,16 +43,16 @@ func stringToAggregationMethod(method string) (whisper.AggregationMethod, error)
 	}
 }
 
-func emptyRandomPointsInTimeSeriesPoints(ts []*whisper.TimeSeriesPoint, rnd *rand.Rand, empyRate float64, from, until time.Time, retention whisper.Retention) []*whisper.TimeSeriesPoint {
-	var ts2 []*whisper.TimeSeriesPoint
-	step := retention.SecondsPerPoint()
-	fromSec := int(alignUnixTime(from.Unix(), step))
-	untilSec := int(alignUnixTime(until.Unix(), step))
+func emptyRandomPointsInTimeSeriesPoints(ts []Point, rnd *rand.Rand, empyRate float64, from, until Timestamp, retention *Retention) []Point {
+	var ts2 []Point
+	step := retention.SecondsPerPoint
+	fromInterval := alignTime(from, step)
+	untilInterval := alignTime(until, step)
 	for _, p := range ts {
-		if fromSec <= p.Time && p.Time <= untilSec && rnd.Float64() < empyRate {
+		if fromInterval <= p.Time && p.Time <= untilInterval && rnd.Float64() < empyRate {
 			continue
 		}
-		ts2 = append(ts2, &whisper.TimeSeriesPoint{
+		ts2 = append(ts2, Point{
 			Time:  p.Time,
 			Value: p.Value,
 		})
@@ -60,8 +60,9 @@ func emptyRandomPointsInTimeSeriesPoints(ts []*whisper.TimeSeriesPoint, rnd *ran
 	return ts2
 }
 
-func emptyRandomPointsInTimeSeriesPointsForAllArchives(tss [][]*whisper.TimeSeriesPoint, rnd *rand.Rand, emptyRate float64, from, until time.Time, retentions []whisper.Retention) {
+func emptyRandomPointsInTimeSeriesPointsForAllArchives(tss [][]Point, rnd *rand.Rand, emptyRate float64, from, until Timestamp, retentions []Retention) {
 	for i, ts := range tss {
-		tss[i] = emptyRandomPointsInTimeSeriesPoints(ts, rnd, emptyRate, from, until, retentions[i])
+		r := &retentions[i]
+		tss[i] = emptyRandomPointsInTimeSeriesPoints(ts, rnd, emptyRate, from, until, r)
 	}
 }
