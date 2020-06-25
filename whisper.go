@@ -59,16 +59,6 @@ type Point struct {
 
 type Points []Point
 
-type pageAndOffset struct {
-	pgid pageID
-	off  int64
-}
-
-type pageAndOffsetRange struct {
-	start pageAndOffset
-	end   pageAndOffset
-}
-
 // These are sizes in whisper files.
 // NOTE: The size of type Point is different from the size of
 // point in file since Timestamps is int64, not uint32.
@@ -638,27 +628,33 @@ func (w *Whisper) timestampAt(offset int64) Timestamp {
 }
 
 func (w *Whisper) putUint32At(v uint32, offset int64) {
-	r := w.pageAndOffsetRangeFromFileOffsetAndSize(offset, uint32Size)
-	if r.fitsInOnePage() {
-		binary.BigEndian.PutUint32(w.pages[r.start.pgid][r.start.off:], v)
-		w.markPageDirty(r.start.pgid)
+	startPg := w.pageIDForStartOffset(offset)
+	endPg := w.pageIDForEndOffset(offset + uint32Size)
+	startOffInPg := w.offsetInPageForStartOffset(offset)
+	if startPg == endPg {
+		binary.BigEndian.PutUint32(w.pages[startPg][startOffInPg:], v)
+		w.markPageDirty(startPg)
 		return
 	}
 	var buf [uint32Size]byte
 	binary.BigEndian.PutUint32(buf[:], v)
-	w.splitCopyToPages(&r, buf[:])
+	endOffInPg := w.offsetInPageForEndOffset(offset + uint32Size)
+	w.splitCopyToPages(startPg, startOffInPg, endPg, endOffInPg, buf[:])
 }
 
 func (w *Whisper) putUint64At(v uint64, offset int64) {
-	r := w.pageAndOffsetRangeFromFileOffsetAndSize(offset, uint64Size)
-	if r.fitsInOnePage() {
-		binary.BigEndian.PutUint64(w.pages[r.start.pgid][r.start.off:], v)
-		w.markPageDirty(r.start.pgid)
+	startPg := w.pageIDForStartOffset(offset)
+	endPg := w.pageIDForEndOffset(offset + uint64Size)
+	startOffInPg := w.offsetInPageForStartOffset(offset)
+	if startPg == endPg {
+		binary.BigEndian.PutUint64(w.pages[startPg][startOffInPg:], v)
+		w.markPageDirty(startPg)
 		return
 	}
 	var buf [uint64Size]byte
 	binary.BigEndian.PutUint64(buf[:], v)
-	w.splitCopyToPages(&r, buf[:])
+	endOffInPg := w.offsetInPageForEndOffset(offset + uint64Size)
+	w.splitCopyToPages(startPg, startOffInPg, endPg, endOffInPg, buf[:])
 }
 
 func (w *Whisper) putFloat32At(v float32, offset int64) {
@@ -695,16 +691,20 @@ func (w *Whisper) putRetentions() {
 	}
 }
 
-func (w *Whisper) splitCopyToPages(r *pageAndOffsetRange, b []byte) {
-	sz := w.pageSize - r.start.off
-	copy(w.pages[r.start.pgid][r.start.off:], b[:sz])
-	copy(w.pages[r.end.pgid][:r.end.off], b[sz:sz+r.end.off])
-	w.markPageDirty(r.start.pgid)
-	w.markPageDirty(r.end.pgid)
+func (w *Whisper) splitCopyToPages(startPg pageID, startOffInPg int64, endPg pageID, endOffInPg int64, b []byte) {
+	sz := w.pageSize - startOffInPg
+	copy(w.pages[startPg][startOffInPg:], b[:sz])
+	copy(w.pages[endPg][:endOffInPg], b[sz:sz+endOffInPg])
+	w.markPageDirty(startPg)
+	w.markPageDirty(endPg)
 }
 
 func (w *Whisper) pageIDForStartOffset(offset int64) pageID {
 	return pageID(offset / w.pageSize)
+}
+
+func (w *Whisper) offsetInPageForStartOffset(offset int64) int64 {
+	return offset % w.pageSize
 }
 
 func (w *Whisper) pageIDForEndOffset(offset int64) pageID {
@@ -715,23 +715,12 @@ func (w *Whisper) pageIDForEndOffset(offset int64) pageID {
 	return pgID
 }
 
-func (w *Whisper) pageAndOffsetFromFileOffset(offset int64) pageAndOffset {
-	return pageAndOffset{
-		pgid: pageID(offset / w.pageSize),
-		off:  offset % w.pageSize,
+func (w *Whisper) offsetInPageForEndOffset(offset int64) int64 {
+	offInPg := offset % w.pageSize
+	if offInPg == 0 && offset > 0 {
+		offInPg += w.pageSize
 	}
-}
-
-func (w *Whisper) pageAndOffsetRangeFromFileOffsetAndSize(offset, size int64) pageAndOffsetRange {
-	return pageAndOffsetRange{
-		start: w.pageAndOffsetFromFileOffset(offset),
-		end:   w.pageAndOffsetFromFileOffset(offset + size),
-	}
-}
-
-func (r *pageAndOffsetRange) fitsInOnePage() bool {
-	return r.start.pgid == r.end.pgid ||
-		(r.start.pgid+1 == r.end.pgid && r.end.off == 0)
+	return offInPg
 }
 
 func ParseRetentions(s string) ([]Retention, error) {
