@@ -8,8 +8,6 @@ import (
 	"os"
 	"strconv"
 	"time"
-
-	whisper "github.com/go-graphite/go-whisper"
 )
 
 const UTCTimeLayout = "2006-01-02T15:04:05Z"
@@ -31,9 +29,9 @@ func viewRaw(filename string, now, from, until time.Time, retId int, showHeader 
 	}
 	if showHeader {
 		fmt.Printf("aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%s\tretentionCount:%d\n",
-			whisper.AggregationMethod(m.aggType).String(),
+			AggregationMethod(m.aggType),
 			m.aggType,
-			secondsToDuration(int64(m.maxRetention)),
+			Duration(m.maxRetention),
 			strconv.FormatFloat(float64(m.xFilesFactor), 'f', -1, 32),
 			m.retentionCount)
 	}
@@ -48,7 +46,7 @@ func viewRaw(filename string, now, from, until time.Time, retId int, showHeader 
 		if showHeader {
 			fmt.Printf("retentionDef:%d\tstep:%s\tnumberOfPoints:%d\toffset:%d\n",
 				i,
-				secondsToDuration(int64(r.secondsPerPoint)),
+				Duration(r.secondsPerPoint),
 				r.numberOfPoints,
 				r.offset)
 		}
@@ -155,12 +153,7 @@ func readFloat64From(r io.Reader) (float64, error) {
 		return math.NaN(), err
 	}
 	v := math.Float64frombits(intVal)
-	//log.Printf("readFloat64From intVal=0x%016x, v=%s", intVal, strconv.FormatFloat(v, 'f', -1, 64))
 	return v, nil
-}
-
-func secondsToDuration(d int64) time.Duration {
-	return time.Duration(d) * time.Second
 }
 
 func secondsToTime(t int64) time.Time {
