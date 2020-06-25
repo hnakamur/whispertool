@@ -377,22 +377,22 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 	r := &w.Retentions[retentionID]
 	fromInterval := r.interval(from)
 	untilInterval := r.interval(until)
-	step := Timestamp(r.SecondsPerPoint)
+	step := r.SecondsPerPoint
 
 	if baseInterval == 0 {
-		points := make([]Point, (untilInterval-fromInterval)/step)
+		points := make([]Point, (untilInterval-fromInterval)/Timestamp(step))
 		t := fromInterval
 		for i := range points {
 			points[i].Time = t
 			points[i].Value.SetNaN()
-			t += step
+			t = t.Add(step)
 		}
 		return points, nil
 	}
 
 	// Zero-length time range: always include the next point
 	if fromInterval == untilInterval {
-		untilInterval += step
+		untilInterval = untilInterval.Add(step)
 	}
 
 	points, err := w.fetchRawPoints(fromInterval, untilInterval, retentionID)
@@ -431,8 +431,8 @@ func (w *Whisper) fetchRawPoints(fromInterval, untilInterval Timestamp, retentio
 		return points, nil
 	}
 
-	step := Timestamp(r.SecondsPerPoint)
-	points := make([]Point, (untilInterval-fromInterval)/step)
+	step := r.SecondsPerPoint
+	points := make([]Point, (untilInterval-fromInterval)/Timestamp(step))
 
 	retentionStartOffset := int64(r.offset)
 	retentionEndOffset := retentionStartOffset + int64(r.NumberOfPoints)*pointSize
@@ -494,9 +494,123 @@ func (w *Whisper) UpdatePointsForArchive(retentionID int, points []Point, now Ti
 		w.putValueAt(p.Value, offset+uint32Size)
 	}
 
-	// TODO: propagate
+	lowRetID := retentionID + 1
+	if lowRetID < len(w.Retentions) {
+		rLow := &w.Retentions[lowRetID]
+		ts := rLow.timesToPropagate(alignedPoints)
+		for ; lowRetID < len(w.Retentions) && len(ts) > 0; lowRetID++ {
+			ts, err = w.propagate(lowRetID, ts, now)
+			if err != nil {
+				return err
+			}
+		}
+	}
 
 	return nil
+}
+
+func (r *Retention) timesToPropagate(points []Point) []Timestamp {
+	var ts []Timestamp
+	for _, p := range points {
+		t := r.intervalForWrite(p.Time)
+		if len(ts) > 0 && t == ts[len(ts)-1] {
+			continue
+		}
+		ts = append(ts, t)
+	}
+	return ts
+}
+
+func (w *Whisper) propagate(retentionID int, ts []Timestamp, now Timestamp) (propagatedTs []Timestamp, err error) {
+	if len(ts) == 0 {
+		return nil, nil
+	}
+	if err := w.readPagesForIntervalRange(ts[0], ts[len(ts)-1], retentionID); err != nil {
+		return nil, err
+	}
+
+	r := &w.Retentions[retentionID]
+
+	baseInterval, err := w.baseInterval(retentionID)
+	if err != nil {
+		return nil, err
+	}
+	if baseInterval == 0 {
+		baseInterval = r.intervalForWrite(now)
+	}
+
+	step := r.SecondsPerPoint
+	highRetID := retentionID - 1
+	var rLow *Retention
+	if retentionID+1 < len(w.Retentions) {
+		rLow = &w.Retentions[retentionID+1]
+	}
+
+	for _, t := range ts {
+		fromInterval := t
+		untilInterval := t.Add(step)
+		points, err := w.fetchRawPoints(fromInterval, untilInterval, highRetID)
+		if err != nil {
+			return nil, err
+		}
+		values := filterValidValues(points, fromInterval, step)
+		knownFactor := float32(len(values)) / float32(len(points))
+		if knownFactor < w.Meta.XFilesFactor {
+			continue
+		}
+
+		v := aggregate(w.Meta.AggregationMethod, values)
+		offset := r.pointOffsetAt(r.pointIndex(baseInterval, t))
+		w.putTimestampAt(t, offset)
+		w.putValueAt(v, offset+uint32Size)
+
+		if rLow != nil {
+			tLow := rLow.intervalForWrite(t)
+			if len(propagatedTs) == 0 || propagatedTs[len(propagatedTs)-1] != tLow {
+				propagatedTs = append(propagatedTs, tLow)
+			}
+		}
+	}
+
+	return propagatedTs, nil
+}
+
+func sum(values []Value) Value {
+	result := Value(0)
+	for _, value := range values {
+		result += value
+	}
+	return result
+}
+
+func aggregate(method AggregationMethod, knownValues []Value) Value {
+	switch method {
+	case Average:
+		return sum(knownValues) / Value(len(knownValues))
+	case Sum:
+		return sum(knownValues)
+	case First:
+		return knownValues[0]
+	case Last:
+		return knownValues[len(knownValues)-1]
+	case Max:
+		max := knownValues[0]
+		for _, value := range knownValues {
+			if value > max {
+				max = value
+			}
+		}
+		return max
+	case Min:
+		min := knownValues[0]
+		for _, value := range knownValues {
+			if value < min {
+				min = value
+			}
+		}
+		return min
+	}
+	panic("Invalid aggregation method")
 }
 
 func (w *Whisper) readPagesForIntervalRange(fromInterval, untilInterval Timestamp, retentionID int) error {
@@ -540,15 +654,28 @@ func (w *Whisper) readPagesForIntervalRange(fromInterval, untilInterval Timestam
 	return nil
 }
 
-func clearOldPoints(points []Point, fromInterval, step Timestamp) {
+func clearOldPoints(points []Point, fromInterval Timestamp, step Duration) {
 	currentInterval := fromInterval
 	for i := range points {
 		if points[i].Time != currentInterval {
 			points[i].Time = currentInterval
 			points[i].Value.SetNaN()
 		}
-		currentInterval += step
+		currentInterval = currentInterval.Add(step)
 	}
+}
+
+func filterValidValues(points []Point, fromInterval Timestamp, step Duration) []Value {
+	values := make([]Value, 0, len(points))
+	currentInterval := fromInterval
+	for _, p := range points {
+		if p.Time != currentInterval {
+			continue
+		}
+		values = append(values, p.Value)
+		currentInterval = currentInterval.Add(step)
+	}
+	return values
 }
 
 func (w *Whisper) GetRawPoints(retentionID int) []Point {
