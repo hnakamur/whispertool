@@ -372,6 +372,10 @@ func runGenerateCmd(args []string) error {
 	retentionDefs := fs.String("retentions", "1m:2h,1h:2d,1d:30d", "retentions definitions.")
 	randMax := fs.Int("max", 100, "random max value for shortest retention unit.")
 	fill := fs.Bool("fill", true, "fill with random data.")
+
+	now := time.Now()
+	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+
 	textOut := fs.String("text-out", "", "text output. empty means no output, - means stdout, other means output file.")
 	fs.Parse(args)
 
@@ -382,5 +386,5 @@ func runGenerateCmd(args []string) error {
 		return errNeedsOneFileArg
 	}
 
-	return whispertool.Generate(fs.Arg(0), *retentionDefs, *fill, *randMax, *textOut)
+	return whispertool.Generate(fs.Arg(0), *retentionDefs, *fill, *randMax, now, *textOut)
 }

@@ -2,6 +2,7 @@ package whispertool
 
 import (
 	"errors"
+	"log"
 	"math/rand"
 	"time"
 
@@ -12,6 +13,8 @@ func Hole(src, dest string, emptyRate float64, now, from, until time.Time) error
 	tsNow := TimestampFromStdTime(now)
 	tsFrom := TimestampFromStdTime(from)
 	tsUntil := TimestampFromStdTime(until)
+	log.Printf("Hole, tsNow=%s, tsFrom=%s, tsUntil=%s", tsNow, tsFrom, tsUntil)
+
 	d, err := readWhisperFile(src, tsNow, tsFrom, tsUntil, RetIdAll)
 	if err != nil {
 		return err
@@ -19,7 +22,12 @@ func Hole(src, dest string, emptyRate float64, now, from, until time.Time) error
 
 	rnd := rand.New(rand.NewSource(newRandSeed()))
 	emptyRandomPointsInTimeSeriesPointsForAllArchives(d.tss, rnd, emptyRate, tsFrom, tsUntil, d.retentions)
-	return createWhisperFile(dest, d)
+
+	if err = writeWhisperFileData("dest.txt", d, true); err != nil {
+		return err
+	}
+
+	return createWhisperFile(dest, d, tsNow)
 }
 
 var errInvalidAggregationMethod = errors.New("invalid aggregation method")

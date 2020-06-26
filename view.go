@@ -64,6 +64,7 @@ func readWhisperDB(db *Whisper, now, from, until Timestamp, retId int, filename 
 				if err != nil {
 					return err
 				}
+				log.Printf("reading one of all archives, retID=%d, len(ts)=%d", i, len(ts))
 				tss[i] = ts
 				return nil
 			})
@@ -103,35 +104,35 @@ func readWhisperSingleArchive(db *Whisper, now, from, until Timestamp, retId int
 	minFrom := now.Add(-r.MaxRetention())
 	step := r.SecondsPerPoint
 
-	if debug {
-		log.Printf("readWhisperSingleArchive retId=%d, from=%s, until=%s, minFrom=%s",
-			retId, from, until, minFrom)
-	}
-	if fetchFrom < minFrom {
-		if debug {
-			log.Printf("adjust fetchFrom to minFrom")
-		}
-		fetchFrom = minFrom
-	} else {
-		// NOTE: We need to adjust from and until by subtracting step
-		// since step is added to from and until in
-		// go-whisper archiveInfo.Interval method.
-		// https://github.com/go-graphite/go-whisper/blob/e5e7d31ca75557a461f9883667028ddc44713481/whisper.go#L1411
-		//
-		// I suppose archiveInfo.Interval follows
-		// __archive_fetch in original graphite-project/whisper.
-		// https://github.com/graphite-project/whisper/blob/master/whisper.py#L970-L972
-		// I asked why step is added at
-		// https://answers.launchpad.net/graphite/+question/294817
-		// but no answer from the person who only knows
-		// the original reason.
-		fetchFrom = fetchFrom.Add(-step)
-		fetchUntil = fetchUntil.Add(-step)
-		if debug {
-			log.Printf("adjust time range by subtracting step, fetchFrom=%s",
-				fetchFrom)
-		}
-	}
+	//if debug {
+	log.Printf("readWhisperSingleArchive retId=%d, from=%s, until=%s, minFrom=%s",
+		retId, from, until, minFrom)
+	//}
+	//if fetchFrom < minFrom {
+	//	if debug {
+	//		log.Printf("adjust fetchFrom to minFrom")
+	//	}
+	//	fetchFrom = minFrom
+	//} else {
+	//	// NOTE: We need to adjust from and until by subtracting step
+	//	// since step is added to from and until in
+	//	// go-whisper archiveInfo.Interval method.
+	//	// https://github.com/go-graphite/go-whisper/blob/e5e7d31ca75557a461f9883667028ddc44713481/whisper.go#L1411
+	//	//
+	//	// I suppose archiveInfo.Interval follows
+	//	// __archive_fetch in original graphite-project/whisper.
+	//	// https://github.com/graphite-project/whisper/blob/master/whisper.py#L970-L972
+	//	// I asked why step is added at
+	//	// https://answers.launchpad.net/graphite/+question/294817
+	//	// but no answer from the person who only knows
+	//	// the original reason.
+	//	fetchFrom = fetchFrom.Add(-step)
+	//	fetchUntil = fetchUntil.Add(-step)
+	//	if debug {
+	//		log.Printf("adjust time range by subtracting step, fetchFrom=%s",
+	//			fetchFrom)
+	//	}
+	//}
 
 	if fetchUntil < fetchFrom {
 		return nil, nil
@@ -142,10 +143,10 @@ func readWhisperSingleArchive(db *Whisper, now, from, until Timestamp, retId int
 		exptectedPtsLen = 1
 	}
 
-	if debug {
-		log.Printf("calling db.Fetch with fetchFrom=%s, fetchUntil=%s",
-			fetchFrom, fetchUntil)
-	}
+	//if debug {
+	log.Printf("calling db.Fetch with retId=%d, fetchFrom=%s, fetchUntil=%s",
+		retId, fetchFrom, fetchUntil)
+	//}
 	pts, err := db.FetchFromArchive(retId, fetchFrom, fetchUntil, now)
 	if err != nil {
 		return nil, err

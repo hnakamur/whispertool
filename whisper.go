@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"os"
 	"sort"
@@ -220,6 +221,7 @@ func (w *Whisper) initBaseIntervals() {
 
 func (w *Whisper) baseInterval(retentionID int) (Timestamp, error) {
 	interval := w.baseIntervals[retentionID]
+	log.Printf("baseInterval start retentionID=%d, interval=%d", retentionID, interval)
 	if interval != -1 {
 		return interval, nil
 	}
@@ -228,6 +230,7 @@ func (w *Whisper) baseInterval(retentionID int) (Timestamp, error) {
 	off := int64(r.offset)
 	fromPg := pageID(off / w.pageSize)
 	untilPg := pageID((off + uint32Size) / w.pageSize)
+	log.Printf("baseInterval before readPagesIfNeeded, off=%d, fromPg=%d, untilPg=%d", off, fromPg, untilPg)
 	if err := w.readPagesIfNeeded(fromPg, untilPg); err != nil {
 		return 0, fmt.Errorf("cannot read page from %d to %d for baseInterval: %s",
 			fromPg, untilPg, err)
@@ -236,7 +239,7 @@ func (w *Whisper) baseInterval(retentionID int) (Timestamp, error) {
 }
 
 func (w *Whisper) readPagesIfNeeded(from, until pageID) error {
-	//log.Printf("readPagesIfNeeded start, from=%d, until=%d", from, until)
+	log.Printf("readPagesIfNeeded start, from=%d, until=%d", from, until)
 	for from <= until {
 		for from <= until {
 			if _, ok := w.pages[from]; ok {
@@ -261,9 +264,9 @@ func (w *Whisper) readPagesIfNeeded(from, until pageID) error {
 		}
 
 		off := int64(from) * w.pageSize
-		//log.Printf("readPagesIfNeeded before preadvFull from=%d, to=%d, off=%d", from, pid-1, off)
-		_, err := preadvFull(w.file, iovs, off)
-		//log.Printf("readPagesIfNeeded after preadvFull from=%d, to=%d, off=%d, n=%d, err=%v", from, pid-1, off, n, err)
+		log.Printf("readPagesIfNeeded before preadvFull from=%d, to=%d, off=%d", from, pid-1, off)
+		n, err := preadvFull(w.file, iovs, off)
+		log.Printf("readPagesIfNeeded after preadvFull from=%d, to=%d, off=%d, n=%d, err=%v", from, pid-1, off, n, err)
 		if err != nil {
 			return err
 		}
@@ -342,8 +345,7 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 	if now == 0 {
 		now = TimestampFromStdTime(time.Now())
 	}
-	//log.Printf("FetchFromSpecifiedArchive start, from=%s, until=%s, now=%s",
-	//	from, until, now)
+	log.Printf("FetchFromSpecifiedArchive start, from=%s, until=%s, now=%s", from, until, now)
 	if from > until {
 		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
 	}
@@ -362,14 +364,14 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 	if until > now {
 		until = now
 	}
-	//log.Printf("FetchFromSpecifiedArchive adjusted, from=%s, until=%s, now=%s", from, until, now)
+	log.Printf("FetchFromSpecifiedArchive adjusted, from=%s, until=%s, now=%s", from, until, now)
 
 	if retentionID < 0 || len(w.Retentions)-1 < retentionID {
 		return nil, ErrRetentionIDOutOfRange
 	}
 
 	baseInterval, err := w.baseInterval(retentionID)
-	//log.Printf("FetchFromSpecifiedArchive baseInterval=%s, err=%v", baseInterval, err)
+	log.Printf("FetchFromSpecifiedArchive retentionID=%d, baseInterval=%s, err=%v", retentionID, baseInterval, err)
 	if err != nil {
 		return nil, err
 	}
@@ -399,10 +401,12 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("FetchFromArchive after fetchRawPoints, retentionID=%d, len(points)=%d", retentionID, len(points))
 	//for i, pt := range points {
 	//	log.Printf("rawPoint i=%d, time=%s, value=%s", i, pt.Time, pt.Value)
 	//}
 	clearOldPoints(points, fromInterval, step)
+	log.Printf("FetchFromArchive after clearOldPoints, retentionID=%d, len(points)=%d", retentionID, len(points))
 
 	return points, nil
 }

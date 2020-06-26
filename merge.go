@@ -3,6 +3,7 @@ package whispertool
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"time"
 )
@@ -15,9 +16,15 @@ func Merge(src, dest string, recursive bool, now, from, until time.Time) error {
 	tsNow := TimestampFromStdTime(now)
 	tsFrom := TimestampFromStdTime(from)
 	tsUntil := TimestampFromStdTime(until)
+	log.Printf("merge, tsNow=%s, tsFrom=%s, tsUntil=%s", tsNow, tsFrom, tsUntil)
 
 	srcData, err := readWhisperFile(src, tsNow, tsFrom, tsUntil, RetIdAll)
 	if err != nil {
+		return err
+	}
+
+	textOut := "src-before-merge.txt"
+	if err = writeWhisperFileData(textOut, srcData, true); err != nil {
 		return err
 	}
 
@@ -33,18 +40,40 @@ func Merge(src, dest string, recursive bool, now, from, until time.Time) error {
 		return err
 	}
 
+	textOut = "dest-before-merge.txt"
+	if err = writeWhisperFileData(textOut, destData, true); err != nil {
+		return err
+	}
+
 	if !retentionsEqual(srcData.retentions, destData.retentions) {
 		return fmt.Errorf("%s and %s archive confiugrations are unalike. "+
-			"Resize the input before diffing", src, dest)
+			"Resize the input before merging", src, dest)
 	}
 
-	if !timeEqualMultiTimeSeriesPointsPointers(srcData.tss, destData.tss) {
-		return fmt.Errorf("%s and %s archive time values are unalike. "+
-			"Resize the input before diffing", src, dest)
+	if err := timeDiffMultiArchivePoints(srcData.tss, destData.tss); err != nil {
+		log.Printf("merge failed since %s and %s archive time values are unalike: %s",
+			src, dest, err.Error())
+		return fmt.Errorf("merge failed since %s and %s archive time values are unalike: %s",
+			src, dest, err.Error())
 	}
+	//if !timeEqualMultiPoints(srcData.tss, destData.tss) {
+	//	return fmt.Errorf("%s and %s archive time values are unalike. "+
+	//		"Resize the input before merging", src, dest)
+	//}
 
 	tss := buildMultiTimeSeriesPointsPointersForMerge(srcData.tss, destData.tss, tsFrom, tsUntil, srcData.retentions)
-	return updateWhisperFile(destDB, tss)
+
+	log.Printf("len(tss)=%d", len(tss))
+	for i, ts := range tss {
+		log.Printf("i=%d, len(ts)=%d", i, len(ts))
+		for j, p := range ts {
+			log.Printf("i=%d, j=%d, p.Time=%s, p.Value=%s", i, j, p.Time, p.Value)
+		}
+	}
+
+	if err := updateWhisperFile(destDB, tss, tsNow); err != nil {
+		return err
+	}
 	return nil
 }
 

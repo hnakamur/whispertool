@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func Generate(dest string, retentionDefs string, fill bool, randMax int, textOut string) error {
+func Generate(dest string, retentionDefs string, fill bool, randMax int, now time.Time, textOut string) error {
 	retentions, err := ParseRetentions(retentionDefs)
 	if err != nil {
 		return err
@@ -20,19 +20,20 @@ func Generate(dest string, retentionDefs string, fill bool, randMax int, textOut
 		xFilesFactor:      0,
 	}
 
-	now := TimestampFromStdTime(time.Now())
+	tsNow := TimestampFromStdTime(now)
 	if fill {
 		rnd := rand.New(rand.NewSource(newRandSeed()))
-		until := now
-		d.tss = randomTimeSeriesPointsForArchives(retentions, until, now,
+		tsUntil := tsNow
+		d.tss = randomPointsForArchives(retentions, tsUntil, tsNow,
 			rnd, randMax)
 	}
 
+	//textOut = "src.txt"
 	if err = writeWhisperFileData(textOut, d, true); err != nil {
 		return err
 	}
 
-	return createWhisperFile(dest, d)
+	return createWhisperFile(dest, d, tsNow)
 }
 
 func newRandSeed() int64 {
@@ -110,7 +111,7 @@ func randomTimeSeriesPoints(until, now Timestamp, r, highRet *Retention, rnd *ra
 	return points
 }
 
-func randomTimeSeriesPointsForArchives(retentions []Retention, until, now Timestamp, rnd *rand.Rand, rndMaxForHightestArchive int) [][]Point {
+func randomPointsForArchives(retentions []Retention, until, now Timestamp, rnd *rand.Rand, rndMaxForHightestArchive int) [][]Point {
 	tss := make([][]Point, len(retentions))
 	var highRet *Retention
 	var highRndMax int
@@ -127,7 +128,7 @@ func randomTimeSeriesPointsForArchives(retentions []Retention, until, now Timest
 	return tss
 }
 
-func createWhisperFile(filename string, d *whisperFileData) error {
+func createWhisperFile(filename string, d *whisperFileData, now Timestamp) error {
 	p := NewBufferPool(os.Getpagesize())
 	db := &Whisper{
 		Meta: Meta{
@@ -142,27 +143,26 @@ func createWhisperFile(filename string, d *whisperFileData) error {
 	}
 	defer db.Close()
 
-	if err := updateWhisperFile(db, d.tss); err != nil {
-		return err
-	}
-
-	if err := db.Flush(); err != nil {
+	if err := updateWhisperFile(db, d.tss, now); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func updateWhisperFile(db *Whisper, tss [][]Point) error {
+func updateWhisperFile(db *Whisper, tss [][]Point, now Timestamp) error {
 	if tss == nil {
 		return nil
 	}
-	now := TimestampFromStdTime(time.Now())
 	for i := range db.Retentions {
 		err := db.UpdatePointsForArchive(i, tss[i], now)
 		if err != nil {
 			return err
 		}
+	}
+
+	if err := db.Flush(); err != nil {
+		return err
 	}
 	return nil
 }

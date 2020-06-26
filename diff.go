@@ -143,7 +143,7 @@ func diffIndexesEmpty(iss [][]int) bool {
 	return true
 }
 
-func timeEqualTimeSeriesPointsPointers(src, dest []Point) bool {
+func timeEqualPoints(src, dest []Point) bool {
 	if len(src) != len(dest) {
 		return false
 	}
@@ -158,13 +158,13 @@ func timeEqualTimeSeriesPointsPointers(src, dest []Point) bool {
 	return true
 }
 
-func timeEqualMultiTimeSeriesPointsPointers(src, dest [][]Point) bool {
+func timeEqualMultiPoints(src, dest [][]Point) bool {
 	if len(src) != len(dest) {
 		return false
 	}
 
 	for i, srcTs := range src {
-		if !timeEqualTimeSeriesPointsPointers(srcTs, dest[i]) {
+		if !timeEqualPoints(srcTs, dest[i]) {
 			return false
 		}
 	}
