@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+// Timestamp is the Unix timestamp, the number of seconds
+// elapsed since January 1, 1970 UTC.
+type Timestamp uint32
+
+// Duration is seconds between two Timestamps.
+type Duration int32
+
 const RFC3339UTC = "2006-01-02T15:04:05Z"
 
 const (
@@ -17,13 +24,6 @@ const (
 	Week            = 7 * Day
 	Year            = 365 * Day
 )
-
-// Timestamp is the Unix timestamp, the number of seconds
-// elapsed since January 1, 1970 UTC.
-type Timestamp int64
-
-// Duration is seconds between two Timestamps.
-type Duration int64
 
 // ParseTimestamp parses timestamp in "2006-01-02T15:04:05Z" format.
 // Note only "Z" is allowed for timezone.
@@ -54,13 +54,19 @@ func (t Timestamp) String() string {
 
 // Add returns t+d.
 func (t Timestamp) Add(d Duration) Timestamp {
-	return t + Timestamp(d)
+	if d >= 0 {
+		return t + Timestamp(d)
+	}
+	return t - Timestamp(-d)
 }
 
 // Sub returns the Duration t-u.
 // To compute t-d for Duration, use t.Add(-d).
 func (t Timestamp) Sub(u Timestamp) Duration {
-	return Duration(t - u)
+	if t >= u {
+		return Duration(t - u)
+	}
+	return -Duration(u - t)
 }
 
 func ParseDuration(s string) (Duration, error) {
@@ -73,7 +79,7 @@ func ParseDuration(s string) (Duration, error) {
 		return 0, fmt.Errorf("invalid Duration: %s: %s", s, err)
 	}
 	d := Duration(x)
-	if d > math.MaxInt64/unit {
+	if d > math.MaxInt32/unit {
 		// overflow
 		return 0, fmt.Errorf("invalid Duration: %s", s)
 	}
@@ -87,18 +93,18 @@ func ParseDuration(s string) (Duration, error) {
 
 var errLeadingInt = errors.New("Duration: bad [0-9]*") // never printed
 
-func leadingInt(s string) (x int64, rem string, err error) {
+func leadingInt(s string) (x int32, rem string, err error) {
 	i := 0
 	for ; i < len(s); i++ {
 		c := s[i]
 		if c < '0' || c > '9' {
 			break
 		}
-		if x > math.MaxInt64/10 {
+		if x > math.MaxInt32/10 {
 			// overflow
 			return 0, "", errLeadingInt
 		}
-		x = x*10 + int64(c) - '0'
+		x = x*10 + int32(c) - '0'
 		if x < 0 {
 			// overflow
 			return 0, "", errLeadingInt

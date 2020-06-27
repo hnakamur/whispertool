@@ -215,14 +215,14 @@ func (w *Whisper) readRetentions() error {
 func (w *Whisper) initBaseIntervals() {
 	w.baseIntervals = make([]Timestamp, len(w.Retentions))
 	for i := range w.baseIntervals {
-		w.baseIntervals[i] = -1
+		w.baseIntervals[i] = math.MaxUint32
 	}
 }
 
 func (w *Whisper) baseInterval(retentionID int) (Timestamp, error) {
 	interval := w.baseIntervals[retentionID]
 	log.Printf("baseInterval start retentionID=%d, interval=%d", retentionID, interval)
-	if interval != -1 {
+	if interval != math.MaxUint32 {
 		return interval, nil
 	}
 

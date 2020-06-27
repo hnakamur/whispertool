@@ -33,20 +33,20 @@ func TestParseDuration(t *testing.T) {
 		{input: "10y", wantDur: 10 * Year, wantErr: false},
 
 		// max values
-		{input: "9223372036854775807s", wantDur: 9223372036854775807 * Second, wantErr: false},
-		{input: "153722867280912930m", wantDur: 153722867280912930 * Minute, wantErr: false},
-		{input: "2562047788015215h", wantDur: 2562047788015215 * Hour, wantErr: false},
-		{input: "106751991167300d", wantDur: 106751991167300 * Day, wantErr: false},
-		{input: "15250284452471w", wantDur: 15250284452471 * Week, wantErr: false},
-		{input: "292471208677y", wantDur: 292471208677 * Year, wantErr: false},
+		{input: "2147483647s", wantDur: 2147483647 * Second, wantErr: false},
+		{input: "35791394m", wantDur: 35791394 * Minute, wantErr: false},
+		{input: "596523h", wantDur: 596523 * Hour, wantErr: false},
+		{input: "24855d", wantDur: 24855 * Day, wantErr: false},
+		{input: "3550w", wantDur: 3550 * Week, wantErr: false},
+		{input: "68y", wantDur: 68 * Year, wantErr: false},
 
 		// overflow
-		{input: "9223372036854775808s", wantDur: 0, wantErr: true},
-		{input: "153722867280912931m", wantDur: 0, wantErr: true},
-		{input: "2562047788015216h", wantDur: 0, wantErr: true},
-		{input: "106751991167301d", wantDur: 0, wantErr: true},
-		{input: "15250284452472w", wantDur: 0, wantErr: true},
-		{input: "292471208678y", wantDur: 0, wantErr: true},
+		{input: "2147483648s", wantDur: 0, wantErr: true},
+		{input: "35791395m", wantDur: 0, wantErr: true},
+		{input: "596524h", wantDur: 0, wantErr: true},
+		{input: "24856d", wantDur: 0, wantErr: true},
+		{input: "3551w", wantDur: 0, wantErr: true},
+		{input: "69y", wantDur: 0, wantErr: true},
 
 		// redundant leading zeros
 		{input: "00s", wantDur: 0, wantErr: true},
@@ -110,9 +110,9 @@ func TestDuration_String(t *testing.T) {
 		{input: 2 * 7 * 24 * 60 * 60, want: "2w"},
 		{input: 365 * 24 * 60 * 60, want: "1y"},
 		{input: 2 * 365 * 24 * 60 * 60, want: "2y"},
-		{input: math.MaxInt64, want: "9223372036854775807s"},
+		{input: math.MaxInt32, want: "2147483647s"},
 		{input: -1, want: "-1s"},
-		{input: math.MinInt64, want: "-9223372036854775808s"},
+		{input: math.MinInt32, want: "-2147483648s"},
 	}
 	for _, tc := range testCases {
 		got := tc.input.String()
