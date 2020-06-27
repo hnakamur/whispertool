@@ -6,10 +6,10 @@ import (
 	"time"
 )
 
-func viewRaw(filename string, from, until time.Time, retId int, showHeader bool) (*FileData, error) {
+func viewRaw(filename string, from, until time.Time, retId int, showHeader bool) error {
 	d, err := ReadFile(filename)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	tsFrom := TimestampFromStdTime(from)
 	tsUntil := TimestampFromStdTime(until)
@@ -50,5 +50,5 @@ func viewRaw(filename string, from, until time.Time, retId int, showHeader bool)
 				i, j, t, points[j].Value)
 		}
 	}
-	return d, nil
+	return nil
 }

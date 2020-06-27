@@ -7,6 +7,8 @@ import (
 	"io"
 	"math"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/willf/bitset"
 )
@@ -14,6 +16,7 @@ import (
 type FileData struct {
 	Meta       Meta
 	Retentions []Retention
+	PointsList [][]Point
 
 	buf             []byte
 	dirtyPageBitSet *bitset.BitSet
@@ -303,4 +306,107 @@ func (d *FileData) fetchRawPoints(retentionID int, fromInterval, untilInterval T
 		i++
 	}
 	return points
+}
+
+func (d *FileData) FetchFromArchive(retentionID int, from, until, now Timestamp) ([]Point, error) {
+	if now == 0 {
+		now = TimestampFromStdTime(time.Now())
+	}
+	//log.Printf("FetchFromArchive start, from=%s, until=%s, now=%s", from, until, now)
+	if from > until {
+		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
+	}
+	if retentionID < 0 || len(d.Retentions)-1 < retentionID {
+		return nil, ErrRetentionIDOutOfRange
+	}
+	r := &d.Retentions[retentionID]
+
+	oldest := now.Add(-r.MaxRetention())
+	// range is in the future
+	if from > now {
+		return nil, nil
+	}
+	// range is beyond retention
+	if until < oldest {
+		return nil, nil
+	}
+	if from < oldest {
+		from = oldest
+	}
+	if until > now {
+		until = now
+	}
+	//log.Printf("FetchFromArchive adjusted, from=%s, until=%s, now=%s", from, until, now)
+
+	baseInterval := d.baseInterval(r)
+	//log.Printf("FetchFromArchive retentionID=%d, baseInterval=%s", retentionID, baseInterval)
+
+	fromInterval := r.interval(from)
+	untilInterval := r.interval(until)
+	step := r.SecondsPerPoint
+
+	if baseInterval == 0 {
+		points := make([]Point, (untilInterval-fromInterval)/Timestamp(step))
+		t := fromInterval
+		for i := range points {
+			points[i].Time = t
+			points[i].Value.SetNaN()
+			t = t.Add(step)
+		}
+		return points, nil
+	}
+
+	// Zero-length time range: always include the next point
+	if fromInterval == untilInterval {
+		untilInterval = untilInterval.Add(step)
+	}
+
+	points := d.fetchRawPoints(retentionID, fromInterval, untilInterval)
+	//log.Printf("FetchFromArchive after fetchRawPoints, retentionID=%d, len(points)=%d", retentionID, len(points))
+	//for i, pt := range points {
+	//	log.Printf("rawPoint i=%d, time=%s, value=%s", i, pt.Time, pt.Value)
+	//}
+	clearOldPoints(points, fromInterval, step)
+	//log.Printf("FetchFromArchive after clearOldPoints, retentionID=%d, len(points)=%d", retentionID, len(points))
+
+	return points, nil
+}
+
+func clearOldPoints(points []Point, fromInterval Timestamp, step Duration) {
+	currentInterval := fromInterval
+	for i := range points {
+		if points[i].Time != currentInterval {
+			points[i].Time = currentInterval
+			points[i].Value.SetNaN()
+		}
+		currentInterval = currentInterval.Add(step)
+	}
+}
+
+func (d *FileData) Print(w io.Writer, showHeader bool) error {
+	if showHeader {
+		_, err := fmt.Fprintf(w, "aggMethod:%s\txFilesFactor:%s\n",
+			d.Meta.AggregationMethod,
+			strconv.FormatFloat(float64(d.Meta.XFilesFactor), 'f', -1, 32))
+		if err != nil {
+			return err
+		}
+
+		for i, r := range d.Retentions {
+			_, err := fmt.Fprintf(w, "retentionDef:%d\tstep:%s\tnumberOfPoints:%d\n",
+				i, r.SecondsPerPoint, r.NumberOfPoints)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	for i, points := range d.PointsList {
+		for _, p := range points {
+			_, err := fmt.Fprintf(w, "retId:%d\tt:%s\tval:%s\n", i, p.Time, p.Value)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
