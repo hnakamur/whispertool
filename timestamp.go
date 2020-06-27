@@ -14,7 +14,7 @@ type Timestamp uint32
 // Duration is seconds between two Timestamps.
 type Duration int32
 
-const RFC3339UTC = "2006-01-02T15:04:05Z"
+const UTCTimeLayout = "2006-01-02T15:04:05Z"
 
 const (
 	Second Duration = 1
@@ -28,7 +28,7 @@ const (
 // ParseTimestamp parses timestamp in "2006-01-02T15:04:05Z" format.
 // Note only "Z" is allowed for timezone.
 func ParseTimestamp(s string) (Timestamp, error) {
-	t, err := time.Parse(RFC3339UTC, s)
+	t, err := time.Parse(UTCTimeLayout, s)
 	if err != nil {
 		return 0, fmt.Errorf("invalid timestamp: %s", err)
 	}
@@ -49,7 +49,7 @@ func (t Timestamp) ToStdTime() time.Time {
 }
 
 func (t Timestamp) String() string {
-	return t.ToStdTime().Format(RFC3339UTC)
+	return t.ToStdTime().Format(UTCTimeLayout)
 }
 
 // Add returns t+d.
