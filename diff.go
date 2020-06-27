@@ -45,7 +45,7 @@ func diffIndexesWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, igno
 			"Resize the input before diffing", src.filename, dest.filename)
 	}
 
-	if err := timeDiffMultiArchivePoints(src.tss, dest.tss); err != nil {
+	if err := timeDiffMultiArchivePoints(src.pointsList, dest.pointsList); err != nil {
 		log.Printf("diff failed since %s and %s archive time values are unalike: %s",
 			src.filename, dest.filename, err.Error())
 		//goto retry
@@ -53,15 +53,15 @@ func diffIndexesWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, igno
 			src.filename, dest.filename, err.Error())
 	}
 
-	iss := valueDiffIndexesMultiArchivePoints(src.tss, dest.tss, ignoreSrcEmpty, ignoreDestEmpty)
+	iss := valueDiffIndexesMultiArchivePoints(src.pointsList, dest.pointsList, ignoreSrcEmpty, ignoreDestEmpty)
 	return iss, nil
 }
 
 func writeDiff(indexes [][]int, src, dest *whisperFileData, showAll bool) {
 	if showAll {
 		for i, is := range indexes {
-			srcTs := src.tss[i]
-			destTs := dest.tss[i]
+			srcTs := src.pointsList[i]
+			destTs := dest.pointsList[i]
 			for j, srcPt := range srcTs {
 				var diff int
 				if len(is) > 0 && is[0] == j {
@@ -77,8 +77,8 @@ func writeDiff(indexes [][]int, src, dest *whisperFileData, showAll bool) {
 	}
 
 	for i, is := range indexes {
-		srcTs := src.tss[i]
-		destTs := dest.tss[i]
+		srcTs := src.pointsList[i]
+		destTs := dest.pointsList[i]
 		for _, j := range is {
 			srcPt := srcTs[j]
 			destPt := destTs[j]

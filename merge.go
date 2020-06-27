@@ -50,7 +50,7 @@ func Merge(src, dest string, recursive bool, now, from, until time.Time) error {
 			"Resize the input before merging", src, dest)
 	}
 
-	if err := timeDiffMultiArchivePoints(srcData.tss, destData.tss); err != nil {
+	if err := timeDiffMultiArchivePoints(srcData.pointsList, destData.pointsList); err != nil {
 		log.Printf("merge failed since %s and %s archive time values are unalike: %s",
 			src, dest, err.Error())
 		return fmt.Errorf("merge failed since %s and %s archive time values are unalike: %s",
@@ -61,7 +61,7 @@ func Merge(src, dest string, recursive bool, now, from, until time.Time) error {
 	//		"Resize the input before merging", src, dest)
 	//}
 
-	tss := buildMultiTimeSeriesPointsPointersForMerge(srcData.tss, destData.tss, tsFrom, tsUntil, srcData.retentions)
+	tss := buildMultiTimeSeriesPointsPointersForMerge(srcData.pointsList, destData.pointsList, tsFrom, tsUntil, srcData.retentions)
 
 	log.Printf("len(tss)=%d", len(tss))
 	for i, ts := range tss {

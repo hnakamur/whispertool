@@ -21,7 +21,7 @@ func Hole(src, dest string, emptyRate float64, now, from, until time.Time) error
 	}
 
 	rnd := rand.New(rand.NewSource(newRandSeed()))
-	emptyRandomPointsInTimeSeriesPointsForAllArchives(d.tss, rnd, emptyRate, tsFrom, tsUntil, d.retentions)
+	emptyRandomPointsInTimeSeriesPointsForAllArchives(d.pointsList, rnd, emptyRate, tsFrom, tsUntil, d.retentions)
 
 	if err = writeWhisperFileData("dest.txt", d, true); err != nil {
 		return err

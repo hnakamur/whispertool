@@ -12,21 +12,40 @@ import (
 
 const UTCTimeLayout = "2006-01-02T15:04:05Z"
 
-func viewRaw(filename string, now, from, until time.Time, retId int, showHeader bool) error {
+type rawFileData struct {
+	filename   string
+	meta       *metadata
+	retentions []retention
+	pointsList [][]dataPoint
+}
+
+type metadata struct {
+	aggType        uint32
+	maxRetention   uint32
+	xFilesFactor   float32
+	retentionCount uint32
+}
+
+type retention struct {
+	offset          uint32
+	secondsPerPoint uint32
+	numberOfPoints  uint32
+}
+
+type dataPoint struct {
+	interval uint32
+	value    float64
+}
+
+func viewRaw(filename string, now, from, until time.Time, retId int, showHeader bool) (*rawFileData, error) {
+	d, err := readRawFileData(filename)
+	if err != nil {
+		return nil, err
+	}
 	fromUnix := uint32(from.Unix())
 	untilUnix := uint32(until.Unix())
 
-	f, err := os.Open(filename)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	m := &metadata{}
-	err = m.readFrom(f)
-	if err != nil {
-		return err
-	}
+	m := d.meta
 	if showHeader {
 		fmt.Printf("aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%s\tretentionCount:%d\n",
 			AggregationMethod(m.aggType),
@@ -36,13 +55,9 @@ func viewRaw(filename string, now, from, until time.Time, retId int, showHeader 
 			m.retentionCount)
 	}
 
-	retentions := make([]retention, m.retentionCount)
+	retentions := d.retentions
 	for i := range retentions {
 		r := &retentions[i]
-		err = r.readFrom(f)
-		if err != nil {
-			return err
-		}
 		if showHeader {
 			fmt.Printf("retentionDef:%d\tstep:%s\tnumberOfPoints:%d\toffset:%d\n",
 				i,
@@ -51,19 +66,13 @@ func viewRaw(filename string, now, from, until time.Time, retId int, showHeader 
 				r.offset)
 		}
 	}
-	dataPoints := make([][]dataPoint, len(retentions))
-	for i := 0; i < len(retentions); i++ {
+	for i := 0; i < len(d.pointsList); i++ {
 		if retId != RetIdAll && retId != i {
 			continue
 		}
-		dataPoints[i] = make([]dataPoint, retentions[i].numberOfPoints)
-		for j := 0; j < int(retentions[i].numberOfPoints); j++ {
-			err = dataPoints[i][j].readFrom(f)
-			if err != nil {
-				return err
-			}
-
-			t := dataPoints[i][j].interval
+		points := d.pointsList[i]
+		for j := 0; j < len(points); j++ {
+			t := points[j].interval
 			if t < fromUnix || untilUnix < t {
 				continue
 			}
@@ -72,17 +81,49 @@ func viewRaw(filename string, now, from, until time.Time, retId int, showHeader 
 				i,
 				j,
 				formatTime(secondsToTime(int64(t))),
-				strconv.FormatFloat(dataPoints[i][j].value, 'f', -1, 64))
+				strconv.FormatFloat(points[j].value, 'f', -1, 64))
 		}
 	}
-	return nil
+	return d, nil
 }
 
-type metadata struct {
-	aggType        uint32
-	maxRetention   uint32
-	xFilesFactor   float32
-	retentionCount uint32
+func readRawFileData(filename string) (*rawFileData, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	m := &metadata{}
+	err = m.readFrom(f)
+	if err != nil {
+		return nil, err
+	}
+
+	retentions := make([]retention, m.retentionCount)
+	for i := range retentions {
+		r := &retentions[i]
+		err = r.readFrom(f)
+		if err != nil {
+			return nil, err
+		}
+	}
+	pointsList := make([][]dataPoint, len(retentions))
+	for i := 0; i < len(retentions); i++ {
+		pointsList[i] = make([]dataPoint, retentions[i].numberOfPoints)
+		for j := 0; j < int(retentions[i].numberOfPoints); j++ {
+			err = pointsList[i][j].readFrom(f)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return &rawFileData{
+		filename:   filename,
+		meta:       m,
+		retentions: retentions,
+		pointsList: pointsList,
+	}, nil
 }
 
 func (m *metadata) readFrom(r io.Reader) error {
@@ -101,12 +142,6 @@ func (m *metadata) readFrom(r io.Reader) error {
 	return binary.Read(r, binary.BigEndian, &m.retentionCount)
 }
 
-type retention struct {
-	offset          uint32
-	secondsPerPoint uint32
-	numberOfPoints  uint32
-}
-
 func (rt *retention) readFrom(r io.Reader) error {
 	err := binary.Read(r, binary.BigEndian, &rt.offset)
 	if err != nil {
@@ -117,11 +152,6 @@ func (rt *retention) readFrom(r io.Reader) error {
 		return err
 	}
 	return binary.Read(r, binary.BigEndian, &rt.numberOfPoints)
-}
-
-type dataPoint struct {
-	interval uint32
-	value    float64
 }
 
 func (p *dataPoint) readFrom(r io.Reader) error {
@@ -162,4 +192,39 @@ func secondsToTime(t int64) time.Time {
 
 func formatTime(t time.Time) string {
 	return t.UTC().Format(UTCTimeLayout)
+}
+
+func convertRawDataToWhisperFileData(filename string, meta *metadata, retentions []retention, pointsList [][]dataPoint) *whisperFileData {
+	return &whisperFileData{
+		filename:          filename,
+		aggregationMethod: AggregationMethod(meta.aggType),
+		xFilesFactor:      meta.xFilesFactor,
+		retentions:        convertRawRetentionsToWhisperRetentions(retentions),
+		pointsList:        convertRawPointsListToWhisperPointsList(pointsList),
+	}
+}
+
+func convertRawRetentionsToWhisperRetentions(retentions []retention) []Retention {
+	whisperRetentions := make([]Retention, len(retentions))
+	for i, r := range retentions {
+		whisperRetentions[i] = Retention{
+			SecondsPerPoint: Duration(r.secondsPerPoint),
+			NumberOfPoints:  r.numberOfPoints,
+		}
+	}
+	return whisperRetentions
+}
+
+func convertRawPointsListToWhisperPointsList(pointsList [][]dataPoint) [][]Point {
+	whisperPointsList := make([][]Point, len(pointsList))
+	for i, points := range pointsList {
+		whisperPointsList[i] = make([]Point, len(points))
+		for j, p := range points {
+			whisperPointsList[i][j] = Point{
+				Time:  Timestamp(p.interval),
+				Value: Value(p.value),
+			}
+		}
+	}
+	return whisperPointsList
 }

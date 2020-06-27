@@ -24,7 +24,7 @@ func Generate(dest string, retentionDefs string, fill bool, randMax int, now tim
 	if fill {
 		rnd := rand.New(rand.NewSource(newRandSeed()))
 		tsUntil := tsNow
-		d.tss = randomPointsForArchives(retentions, tsUntil, tsNow,
+		d.pointsList = randomPointsForArchives(retentions, tsUntil, tsNow,
 			rnd, randMax)
 	}
 
@@ -143,7 +143,7 @@ func createWhisperFile(filename string, d *whisperFileData, now Timestamp) error
 	}
 	defer db.Close()
 
-	if err := updateWhisperFile(db, d.tss, now); err != nil {
+	if err := updateWhisperFile(db, d.pointsList, now); err != nil {
 		return err
 	}
 

@@ -20,7 +20,8 @@ var errRetIdOufOfRange = errors.New("retention id is out of range")
 
 func View(filename string, raw bool, now, from, until time.Time, retId int, showHeader bool) error {
 	if raw {
-		return viewRaw(filename, now, from, until, retId, showHeader)
+		_, err := viewRaw(filename, now, from, until, retId, showHeader)
+		return err
 	}
 	tsNow := TimestampFromStdTime(now)
 	tsFrom := TimestampFromStdTime(from)
@@ -33,7 +34,7 @@ type whisperFileData struct {
 	aggregationMethod AggregationMethod
 	xFilesFactor      float32
 	retentions        []Retention
-	tss               [][]Point
+	pointsList        [][]Point
 }
 
 func readWhisperFile(filename string, now, from, until Timestamp, retId int) (*whisperFileData, error) {
@@ -54,7 +55,7 @@ func readWhisperDB(db *Whisper, now, from, until Timestamp, retId int, filename 
 	}
 
 	retentions := db.Retentions
-	tss := make([][]Point, len(retentions))
+	pointsList := make([][]Point, len(retentions))
 	if retId == RetIdAll {
 		var g errgroup.Group
 		for i := range retentions {
@@ -65,7 +66,7 @@ func readWhisperDB(db *Whisper, now, from, until Timestamp, retId int, filename 
 					return err
 				}
 				log.Printf("reading one of all archives, retID=%d, len(ts)=%d", i, len(ts))
-				tss[i] = ts
+				pointsList[i] = ts
 				return nil
 			})
 			if err := g.Wait(); err != nil {
@@ -77,7 +78,7 @@ func readWhisperDB(db *Whisper, now, from, until Timestamp, retId int, filename 
 		if err != nil {
 			return nil, err
 		}
-		tss[retId] = ts
+		pointsList[retId] = ts
 	} else {
 		return nil, errRetIdOufOfRange
 	}
@@ -87,7 +88,7 @@ func readWhisperDB(db *Whisper, now, from, until Timestamp, retId int, filename 
 		aggregationMethod: db.Meta.AggregationMethod,
 		xFilesFactor:      db.Meta.XFilesFactor,
 		retentions:        retentions,
-		tss:               tss,
+		pointsList:        pointsList,
 	}, nil
 }
 
@@ -213,12 +214,12 @@ func (d *whisperFileData) WriteTo(w io.Writer, showHeader bool) error {
 			}
 		}
 	}
-	return writeTimeSeriesForArchives(w, d.tss)
+	return writeTimeSeriesForArchives(w, d.pointsList)
 }
 
-func writeTimeSeriesForArchives(w io.Writer, tss [][]Point) error {
-	for i, ts := range tss {
-		for _, p := range ts {
+func writeTimeSeriesForArchives(w io.Writer, pointsList [][]Point) error {
+	for i, points := range pointsList {
+		for _, p := range points {
 			_, err := fmt.Fprintf(w, "retId:%d\tt:%s\tval:%s\n", i, p.Time, p.Value)
 			if err != nil {
 				return err

@@ -70,7 +70,7 @@ retry:
 	}
 
 	for i := 1; i < len(srcDatas); i++ {
-		if err := timeDiffMultiArchivePoints(srcDatas[0].tss, srcDatas[i].tss); err != nil {
+		if err := timeDiffMultiArchivePoints(srcDatas[0].pointsList, srcDatas[i].pointsList); err != nil {
 			log.Printf("sum failed since %s and %s archive time values are unalike: %s",
 				srcFilenames[0], srcFilenames[i], err.Error())
 			goto retry
@@ -81,7 +81,7 @@ retry:
 }
 
 func sumWhisperFileData(srcDatas []*whisperFileData) *whisperFileData {
-	destTss := make([][]Point, len(srcDatas[0].tss))
+	destTss := make([][]Point, len(srcDatas[0].pointsList))
 	for i := range destTss {
 		destTss[i] = sumTimeSeriesPointInFileData(srcDatas, i)
 	}
@@ -90,14 +90,14 @@ func sumWhisperFileData(srcDatas []*whisperFileData) *whisperFileData {
 		retentions:        srcDatas[0].retentions,
 		aggregationMethod: srcDatas[0].aggregationMethod,
 		xFilesFactor:      srcDatas[0].xFilesFactor,
-		tss:               destTss,
+		pointsList:        destTss,
 	}
 }
 
 func sumTimeSeriesPointInFileData(srcDatas []*whisperFileData, retentionId int) []Point {
-	destTs := deepClonePoints(srcDatas[0].tss[retentionId])
+	destTs := deepClonePoints(srcDatas[0].pointsList[retentionId])
 	for i := 1; i < len(srcDatas); i++ {
-		addTimeSeriesPointTo(destTs, srcDatas[i].tss[retentionId])
+		addTimeSeriesPointTo(destTs, srcDatas[i].pointsList[retentionId])
 	}
 	return destTs
 }
