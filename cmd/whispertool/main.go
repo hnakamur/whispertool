@@ -204,7 +204,7 @@ func runViewRawCmd(args []string) error {
 	}
 
 	from := time.Unix(0, 0)
-	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format (exclusive)")
+	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format (exclusive if not 0)")
 
 	until := time.Now()
 	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive)")
