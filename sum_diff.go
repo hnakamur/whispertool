@@ -4,10 +4,10 @@ import (
 	"time"
 )
 
-func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, interval, intervalOffset, untilOffset time.Duration, retId int) error {
+func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, interval, intervalOffset, untilOffset time.Duration, retID int) error {
 	//	//log.Printf("SumDiff start srcBase=%s, destBase=%s, itemPattern=%s, srcPattern=%s, dest=%s", srcBase, destBase, itemPattern, srcPattern, dest)
 	//	if interval == 0 {
-	//		err := sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest, ignoreSrcEmpty, ignoreDestEmpty, showAll, untilOffset, retId)
+	//		err := sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest, ignoreSrcEmpty, ignoreDestEmpty, showAll, untilOffset, retID)
 	//		if err != nil {
 	//			return err
 	//		}
@@ -19,7 +19,7 @@ func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcE
 	//		targetTime := now.Truncate(interval).Add(interval).Add(intervalOffset)
 	//		time.Sleep(targetTime.Sub(now))
 	//
-	//		err := sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest, ignoreSrcEmpty, ignoreDestEmpty, showAll, untilOffset, retId)
+	//		err := sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest, ignoreSrcEmpty, ignoreDestEmpty, showAll, untilOffset, retID)
 	//		if err != nil {
 	//			return err
 	//		}
@@ -27,7 +27,7 @@ func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcE
 	return nil
 }
 
-//func sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, untilOffset time.Duration, retId int) error {
+//func sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, untilOffset time.Duration, retID int) error {
 //	t0 := time.Now()
 //	fmt.Printf("time:%s\tmsg:start\n", formatTime(t0))
 //	var totalItemCount int
@@ -51,7 +51,7 @@ func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcE
 //			return err
 //		}
 //		//fmt.Printf("itemRel:%s\n", itemRelDir)
-//		err = sumDiffItem(srcBase, destBase, itemRelDir, srcPattern, dest, ignoreSrcEmpty, ignoreDestEmpty, showAll, untilOffset, retId)
+//		err = sumDiffItem(srcBase, destBase, itemRelDir, srcPattern, dest, ignoreSrcEmpty, ignoreDestEmpty, showAll, untilOffset, retID)
 //		if err != nil {
 //			return err
 //		}
@@ -59,7 +59,7 @@ func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcE
 //	return nil
 //}
 //
-//func sumDiffItem(srcBase, destBase, itemRelDir, srcPattern, dest string, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, untilOffset time.Duration, retId int) error {
+//func sumDiffItem(srcBase, destBase, itemRelDir, srcPattern, dest string, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, untilOffset time.Duration, retID int) error {
 //	srcFullPattern := filepath.Join(srcBase, itemRelDir, srcPattern)
 //	srcFilenames, err := filepath.Glob(srcFullPattern)
 //	if err != nil {
@@ -81,7 +81,7 @@ func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcE
 //	var g errgroup.Group
 //	g.Go(func() error {
 //		var err error
-//		sumData, err = sumWhisperFile(srcFilenames, tsNow, tsFrom, tsUntil, retId)
+//		sumData, err = sumWhisperFile(srcFilenames, tsNow, tsFrom, tsUntil, retID)
 //		if err != nil {
 //			return err
 //		}
@@ -90,7 +90,7 @@ func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcE
 //	})
 //	g.Go(func() error {
 //		var err error
-//		destData, err = readWhisperFile(destFull, tsNow, tsFrom, tsUntil, retId)
+//		destData, err = readWhisperFile(destFull, tsNow, tsFrom, tsUntil, retID)
 //		if err != nil {
 //			return err
 //		}
@@ -100,7 +100,7 @@ func SumDiff(srcBase, destBase, itemPattern, srcPattern, dest string, ignoreSrcE
 //		return err
 //	}
 //
-//	iss, err := diffIndexesWhisperFileData(sumData, destData, ignoreSrcEmpty, ignoreDestEmpty, showAll, retId)
+//	iss, err := diffIndexesWhisperFileData(sumData, destData, ignoreSrcEmpty, ignoreDestEmpty, showAll, retID)
 //	if err != nil {
 //		return err
 //	}

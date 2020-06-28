@@ -7,16 +7,16 @@ import (
 	"time"
 )
 
-const RetIdAll = -1
+const RetIDAll = -1
 
 var debug = os.Getenv("DEBUG") != ""
 
-func View(filename string, now, from, until time.Time, retId int, textOut string, showHeader bool) error {
+func View(filename string, now, from, until time.Time, retID int, textOut string, showHeader bool) error {
 	tsNow := TimestampFromStdTime(now)
 	tsFrom := TimestampFromStdTime(from)
 	tsUntil := TimestampFromStdTime(until)
 
-	d, pointsList, err := readWhisperFile(filename, tsNow, tsFrom, tsUntil, retId)
+	d, pointsList, err := readWhisperFile(filename, tsNow, tsFrom, tsUntil, retID)
 	if err != nil {
 		return err
 	}
@@ -34,7 +34,7 @@ func readWhisperFile(filename string, now, from, until Timestamp, retID int) (*F
 	}
 
 	pointsList := make([][]Point, len(d.Retentions))
-	if retID == RetIdAll {
+	if retID == RetIDAll {
 		for i := range d.Retentions {
 			points, err := d.FetchFromArchive(i, from, until, now)
 			if err != nil {

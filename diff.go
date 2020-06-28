@@ -7,7 +7,7 @@ import (
 
 var ErrDiffFound = errors.New("diff found")
 
-func Diff(src, dest string, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, now, from, until time.Time, retId int) error {
+func Diff(src, dest string, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, now, from, until time.Time, retID int) error {
 	//	if recursive {
 	//		return errors.New("recursive option not implemented yet")
 	//	}
@@ -15,17 +15,17 @@ func Diff(src, dest string, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll 
 	//	tsNow := TimestampFromStdTime(now)
 	//	tsFrom := TimestampFromStdTime(from)
 	//	tsUntil := TimestampFromStdTime(until)
-	//	srcData, err := readWhisperFile(src, tsNow, tsFrom, tsUntil, retId)
+	//	srcData, err := readWhisperFile(src, tsNow, tsFrom, tsUntil, retID)
 	//	if err != nil {
 	//		return err
 	//	}
 	//
-	//	destData, err := readWhisperFile(dest, tsNow, tsFrom, tsUntil, retId)
+	//	destData, err := readWhisperFile(dest, tsNow, tsFrom, tsUntil, retID)
 	//	if err != nil {
 	//		return err
 	//	}
 	//
-	//	iss, err := diffIndexesWhisperFileData(srcData, destData, ignoreSrcEmpty, ignoreDestEmpty, showAll, retId)
+	//	iss, err := diffIndexesWhisperFileData(srcData, destData, ignoreSrcEmpty, ignoreDestEmpty, showAll, retID)
 	//	if err != nil {
 	//		return err
 	//	}
@@ -38,7 +38,7 @@ func Diff(src, dest string, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll 
 	return nil
 }
 
-//func diffIndexesWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, retId int) ([][]int, error) {
+//func diffIndexesWhisperFileData(src, dest *whisperFileData, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, retID int) ([][]int, error) {
 //	if !retentionsEqual(src.retentions, dest.retentions) {
 //		return nil, fmt.Errorf("%s and %s archive confiugrations are unalike. "+
 //			"Resize the input before diffing", src.filename, dest.filename)
@@ -68,7 +68,7 @@ func Diff(src, dest string, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll 
 //					is = is[1:]
 //				}
 //				destPt := destTs[j]
-//				fmt.Printf("retId:%d\tt:%s\tsrcVal:%s\tdestVal:%s\tdiff:%d\n",
+//				fmt.Printf("retID:%d\tt:%s\tsrcVal:%s\tdestVal:%s\tdiff:%d\n",
 //					i, srcPt.Time, srcPt.Value, destPt.Value, diff)
 //			}
 //		}
@@ -81,7 +81,7 @@ func Diff(src, dest string, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll 
 //		for _, j := range is {
 //			srcPt := srcTs[j]
 //			destPt := destTs[j]
-//			fmt.Printf("retId:%d\tt:%s\tsrcVal:%s\tdestVal:%s\n",
+//			fmt.Printf("retID:%d\tt:%s\tsrcVal:%s\tdestVal:%s\n",
 //				i, srcPt.Time, srcPt.Value, destPt.Value)
 //		}
 //	}

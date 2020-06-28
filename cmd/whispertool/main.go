@@ -157,7 +157,7 @@ func runViewCmd(args []string) error {
 	until := now
 	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive)")
 
-	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to print (-1 for all retentions)")
+	retID := fs.Int("ret-id", whispertool.RetIDAll, "retention ID to print (-1 for all retentions)")
 	textOut := fs.String("text-out", "-", "text output. empty means no output, - means stdout, other means output file.")
 	showHeader := fs.Bool("show-header", true, "whether or not to show header (metadata and reteions)")
 	fs.Parse(args)
@@ -169,7 +169,7 @@ func runViewCmd(args []string) error {
 		return errFromIsAfterUntil
 	}
 
-	return whispertool.View(fs.Arg(0), now, from, until, *retId, *textOut, *showHeader)
+	return whispertool.View(fs.Arg(0), now, from, until, *retID, *textOut, *showHeader)
 }
 
 const viewRawCmdUsage = `Usage: %s view-raw [options] file.wsp
@@ -188,7 +188,7 @@ func runViewRawCmd(args []string) error {
 	until := time.Now()
 	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive)")
 
-	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to print (-1 for all retentions)")
+	retID := fs.Int("ret-id", whispertool.RetIDAll, "retention ID to print (-1 for all retentions)")
 	textOut := fs.String("text-out", "-", "text output. empty means no output, - means stdout, other means output file.")
 	showHeader := fs.Bool("show-header", true, "whether or not to show header (metadata and reteions)")
 	sortsByTime := fs.Bool("sort", false, "whether or not to sorts points by time")
@@ -201,7 +201,7 @@ func runViewRawCmd(args []string) error {
 		return errFromIsAfterUntil
 	}
 
-	return whispertool.ViewRaw(fs.Arg(0), from, until, *retId, *textOut, *showHeader, *sortsByTime)
+	return whispertool.ViewRaw(fs.Arg(0), from, until, *retID, *textOut, *showHeader, *sortsByTime)
 }
 
 const mergeCmdUsage = `Usage: %s merge [options] src.wsp dest.wsp
@@ -259,14 +259,14 @@ func runSumCmd(args []string) error {
 	src := fs.String("src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
 	dest := fs.String("dest", "", "dest whisper filename (ex. dest.wsp).")
 	textOut := fs.String("text-out", "", "text output. empty means no output, - means stdout, other means output file.")
-	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to diff (-1 is all).")
+	retID := fs.Int("ret-id", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
 	fs.Parse(args)
 
 	if *src == "" {
 		return newRequiredOptionError(fs, "src")
 	}
 
-	return whispertool.RunSum(*src, *dest, *textOut, *retId)
+	return whispertool.RunSum(*src, *dest, *textOut, *retID)
 }
 
 const sumDiffCmdUsage = `Usage: %s sum-diff -item <pattern> -src <pattern> -dest <destname>
@@ -291,7 +291,7 @@ func runSumDiffCmd(args []string) error {
 	ignoreSrcEmpty := fs.Bool("ignore-src-empty", false, "ignore diff when source point is empty.")
 	ignoreDestEmpty := fs.Bool("ignore-dest-empty", false, "ignore diff when destination point is empty.")
 	showAll := fs.Bool("show-all", false, "print all points when diff exists.")
-	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to diff (-1 is all).")
+	retID := fs.Int("ret-id", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
 	interval := fs.Duration("interval", time.Minute, "run interval")
 	intervalOffset := fs.Duration("interval-offset", 7*time.Second, "run interval offset")
 	untilOffset := fs.Duration("until-offset", 0, "until offset")
@@ -313,7 +313,7 @@ func runSumDiffCmd(args []string) error {
 		return newRequiredOptionError(fs, "dest")
 	}
 
-	return whispertool.SumDiff(*srcBase, *destBase, *item, *src, *dest, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, *interval, *intervalOffset, *untilOffset, *retId)
+	return whispertool.SumDiff(*srcBase, *destBase, *item, *src, *dest, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, *interval, *intervalOffset, *untilOffset, *retID)
 }
 
 const holeCmdUsage = `Usage: %s hole [options] src.wsp dest.wsp
@@ -368,7 +368,7 @@ func runDiffCmd(args []string) error {
 	ignoreSrcEmpty := fs.Bool("ignore-src-empty", false, "ignore diff when source point is empty.")
 	ignoreDestEmpty := fs.Bool("ignore-dest-empty", false, "ignore diff when destination point is empty.")
 	showAll := fs.Bool("show-all", false, "print all points when diff exists.")
-	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to diff (-1 is all).")
+	retID := fs.Int("ret-id", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
 
 	now := time.Now()
 	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
@@ -391,7 +391,7 @@ func runDiffCmd(args []string) error {
 		return errFromIsAfterUntil
 	}
 
-	return whispertool.Diff(fs.Arg(0), fs.Arg(1), *recursive, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, now, from, until, *retId)
+	return whispertool.Diff(fs.Arg(0), fs.Arg(1), *recursive, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, now, from, until, *retID)
 }
 
 const generateCmdUsage = `Usage: %s generate [options] dest.wsp

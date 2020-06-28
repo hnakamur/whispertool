@@ -1,6 +1,6 @@
 package whispertool
 
-func RunSum(srcPattern, destFilename, textOut string, retId int) error {
+func RunSum(srcPattern, destFilename, textOut string, retID int) error {
 	//	if destFilename != "" {
 	//		return errors.New("writing sum to whisperfile is not implemented yet")
 	//	}
@@ -19,7 +19,7 @@ func RunSum(srcPattern, destFilename, textOut string, retId int) error {
 	//	tsNow := TimestampFromStdTime(now)
 	//	tsFrom := TimestampFromStdTime(from)
 	//	tsUntil := TimestampFromStdTime(until)
-	//	sumData, err := sumWhisperFile(srcFilenames, tsNow, tsFrom, tsUntil, retId)
+	//	sumData, err := sumWhisperFile(srcFilenames, tsNow, tsFrom, tsUntil, retID)
 	//	if err != nil {
 	//		return err
 	//	}
@@ -31,7 +31,7 @@ func RunSum(srcPattern, destFilename, textOut string, retId int) error {
 	return nil
 }
 
-//func sumWhisperFile(srcFilenames []string, now, from, until Timestamp, retId int) (*whisperFileData, error) {
+//func sumWhisperFile(srcFilenames []string, now, from, until Timestamp, retID int) (*whisperFileData, error) {
 //retry:
 //	srcDatas := make([]*whisperFileData, len(srcFilenames))
 //	var g errgroup.Group
@@ -39,7 +39,7 @@ func RunSum(srcPattern, destFilename, textOut string, retId int) error {
 //		i := i
 //		srcFilename := srcFilename
 //		g.Go(func() error {
-//			d, err := readWhisperFile(srcFilename, now, from, until, retId)
+//			d, err := readWhisperFile(srcFilename, now, from, until, retID)
 //			if err != nil {
 //				return err
 //			}

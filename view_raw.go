@@ -31,7 +31,7 @@ func readWhisperFileRaw(filename string, retID int) (*FileData, [][]Point, error
 	}
 
 	pointsList := make([][]Point, len(d.Retentions))
-	if retID == RetIdAll {
+	if retID == RetIDAll {
 		for i := range d.Retentions {
 			pointsList[i] = d.getAllRawUnsortedPoints(i)
 		}
