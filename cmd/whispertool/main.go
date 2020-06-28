@@ -28,8 +28,8 @@ func (e *requiredOptionError) Error() string {
 var errNeedsOneFileArg = errors.New("expected one whisper filename argument")
 var errNeedsSrcAndDestFilesArg = errors.New("expected source and destination whisper filename arguments")
 var errNeedsSrcAndDestDirsArg = errors.New("expected source and destination whisper directory arguments")
-var errEmptyRateOutOfBounds = errors.New("emptyRate must be 0 <= r <= 1.")
-var errFromIsAfterUntil = errors.New("from time must not be after until time.")
+var errEmptyRateOutOfBounds = errors.New("emptyRate must be 0 <= r <= 1")
+var errFromIsAfterUntil = errors.New("from time must not be after until time")
 
 const globalUsage = `Usage: %s <subcommand> [options]
 
@@ -59,18 +59,18 @@ var (
 	date    string
 )
 
-type UTCTimeValue struct {
+type utcTimeValue struct {
 	t *time.Time
 }
 
-func (t UTCTimeValue) String() string {
+func (t utcTimeValue) String() string {
 	if t.t == nil {
 		return ""
 	}
 	return t.t.Format(whispertool.UTCTimeLayout)
 }
 
-func (t UTCTimeValue) Set(s string) error {
+func (t utcTimeValue) Set(s string) error {
 	t2, err := time.Parse(whispertool.UTCTimeLayout, s)
 	if err != nil {
 		return err
@@ -170,13 +170,13 @@ func runViewCmd(args []string) error {
 	}
 
 	now := time.Now()
-	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&utcTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 
 	from := time.Unix(0, 0)
-	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format (exclusive)")
+	fs.Var(&utcTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format (exclusive)")
 
 	until := now
-	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive)")
+	fs.Var(&utcTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive)")
 
 	retID := fs.Int("ret", whispertool.RetIDAll, "retention ID to print (-1 for all retentions)")
 	textOut := fs.String("text-out", "-", "text output. empty means no output, - means stdout, other means output file.")
@@ -204,10 +204,10 @@ func runViewRawCmd(args []string) error {
 	}
 
 	from := time.Unix(0, 0)
-	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format (exclusive if not 0)")
+	fs.Var(&utcTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format (exclusive if not 0)")
 
 	until := time.Now()
-	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive)")
+	fs.Var(&utcTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive)")
 
 	retID := fs.Int("ret", whispertool.RetIDAll, "retention ID to print (-1 for all retentions)")
 	textOut := fs.String("text-out", "-", "text output. empty means no output, - means stdout, other means output file.")
@@ -239,13 +239,13 @@ func runMergeCmd(args []string) error {
 	}
 
 	now := time.Now()
-	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&utcTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 
 	from := time.Unix(0, 0)
-	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&utcTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 
 	until := now
-	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&utcTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 
 	recursive := fs.Bool("r", false, "merge files recursively.")
 	fs.Parse(args)
@@ -253,9 +253,8 @@ func runMergeCmd(args []string) error {
 	if fs.NArg() != 2 {
 		if *recursive {
 			return errNeedsSrcAndDestDirsArg
-		} else {
-			return errNeedsSrcAndDestFilesArg
 		}
+		return errNeedsSrcAndDestFilesArg
 	}
 	if from.After(until) {
 		return errFromIsAfterUntil
@@ -283,13 +282,13 @@ func runSumCmd(args []string) error {
 	retID := fs.Int("ret", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
 
 	now := time.Now()
-	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&utcTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 
 	from := time.Unix(0, 0)
-	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&utcTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 
 	until := now
-	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&utcTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 
 	fs.Parse(args)
 
@@ -361,13 +360,13 @@ func runHoleCmd(args []string) error {
 	emptyRate := fs.Float64("empty-rate", 0.2, "empty rate (0 <= r <= 1).")
 
 	now := time.Now()
-	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&utcTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 
 	from := time.Unix(0, 0)
-	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&utcTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 
 	until := now
-	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&utcTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 
 	textOut := fs.String("text-out", "", "text output. empty means no output, - means stdout, other means output file.")
 
@@ -409,21 +408,20 @@ func runDiffCmd(args []string) error {
 	retID := fs.Int("ret", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
 
 	now := time.Now()
-	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&utcTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 
 	from := time.Unix(0, 0)
-	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&utcTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 
 	until := now
-	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&utcTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 	fs.Parse(args)
 
 	if fs.NArg() != 2 {
 		if *recursive {
 			return errNeedsSrcAndDestDirsArg
-		} else {
-			return errNeedsSrcAndDestFilesArg
 		}
+		return errNeedsSrcAndDestFilesArg
 	}
 	if from.After(until) {
 		return errFromIsAfterUntil
@@ -448,7 +446,7 @@ func runGenerateCmd(args []string) error {
 	fill := fs.Bool("fill", true, "fill with random data.")
 
 	now := time.Now()
-	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&utcTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 
 	textOut := fs.String("text-out", "", "text output. empty means no output, - means stdout, other means output file.")
 
