@@ -69,6 +69,10 @@ func (t Timestamp) Sub(u Timestamp) Duration {
 	return -Duration(u - t)
 }
 
+func (t Timestamp) Align(d Duration) Timestamp {
+	return t - t%Timestamp(d)
+}
+
 func ParseDuration(s string) (Duration, error) {
 	x, rem, err := leadingInt(s)
 	if err != nil || len(rem) != 1 {

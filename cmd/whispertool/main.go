@@ -39,7 +39,8 @@ subcommands:
   merge               Update empty points with value from src whisper file.
   sum                 Sum value of whisper files.
   sum-diff            Sum value of whisper files and compare to another whisper file.
-  view                View raw content of whisper file.
+  view                View content of whisper file.
+  view-raw            View raw content of whisper file.
   version             Show version
 
 Run %s <subcommand> -h to show help for subcommand.
@@ -106,6 +107,8 @@ func run() int {
 		err = runSumDiffCmd(args[1:])
 	case "view":
 		err = runViewCmd(args[1:])
+	case "view-raw":
+		err = runViewRawCmd(args[1:])
 	case "version":
 		err = runShowVersion(args[1:])
 	default:
@@ -135,7 +138,7 @@ func runShowVersion(args []string) error {
 	return nil
 }
 
-const viewCmdUsage = `Usage: %s view file.wsp
+const viewCmdUsage = `Usage: %s view [options] file.wsp
 `
 
 func runViewCmd(args []string) error {
@@ -144,17 +147,18 @@ func runViewCmd(args []string) error {
 		fmt.Fprintf(fs.Output(), viewCmdUsage, cmdName)
 		fs.PrintDefaults()
 	}
-	raw := fs.Bool("raw", false, "View raw data.")
 
 	now := time.Now()
 	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 
 	from := time.Unix(0, 0)
-	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format (inclusive)")
 
 	until := now
-	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive when from == until, exclusive otherwise)")
+
 	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to print (-1 for all retentions)")
+	textOut := fs.String("text-out", "-", "text output. empty means no output, - means stdout, other means output file.")
 	showHeader := fs.Bool("show-header", true, "whether or not to show header (metadata and reteions)")
 	fs.Parse(args)
 
@@ -165,7 +169,39 @@ func runViewCmd(args []string) error {
 		return errFromIsAfterUntil
 	}
 
-	return whispertool.View(fs.Arg(0), *raw, now, from, until, *retId, *showHeader)
+	return whispertool.View(fs.Arg(0), now, from, until, *retId, *textOut, *showHeader)
+}
+
+const viewRawCmdUsage = `Usage: %s view-raw [options] file.wsp
+`
+
+func runViewRawCmd(args []string) error {
+	fs := flag.NewFlagSet("view-raw", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), viewRawCmdUsage, cmdName)
+		fs.PrintDefaults()
+	}
+
+	from := time.Unix(0, 0)
+	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format (inclusive)")
+
+	until := time.Now()
+	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive when from == until, exclusive otherwise)")
+
+	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to print (-1 for all retentions)")
+	textOut := fs.String("text-out", "-", "text output. empty means no output, - means stdout, other means output file.")
+	showHeader := fs.Bool("show-header", true, "whether or not to show header (metadata and reteions)")
+	sortsByTime := fs.Bool("sort", false, "whether or not to sorts points by time")
+	fs.Parse(args)
+
+	if fs.NArg() != 1 {
+		return errNeedsOneFileArg
+	}
+	if from.After(until) {
+		return errFromIsAfterUntil
+	}
+
+	return whispertool.ViewRaw(fs.Arg(0), from, until, *retId, *textOut, *showHeader, *sortsByTime)
 }
 
 const mergeCmdUsage = `Usage: %s merge [options] src.wsp dest.wsp
