@@ -152,10 +152,10 @@ func runViewCmd(args []string) error {
 	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 
 	from := time.Unix(0, 0)
-	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format (inclusive)")
+	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format (exclusive)")
 
 	until := now
-	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive when from == until, exclusive otherwise)")
+	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive)")
 
 	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to print (-1 for all retentions)")
 	textOut := fs.String("text-out", "-", "text output. empty means no output, - means stdout, other means output file.")
@@ -183,10 +183,10 @@ func runViewRawCmd(args []string) error {
 	}
 
 	from := time.Unix(0, 0)
-	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format (inclusive)")
+	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format (exclusive)")
 
 	until := time.Now()
-	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive when from == until, exclusive otherwise)")
+	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive)")
 
 	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to print (-1 for all retentions)")
 	textOut := fs.String("text-out", "-", "text output. empty means no output, - means stdout, other means output file.")

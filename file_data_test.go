@@ -3,6 +3,7 @@ package whispertool
 import (
 	"math/rand"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -101,48 +102,97 @@ func TestRetention_pointIndex(t *testing.T) {
 	}
 }
 
-func TestFileDataWriteRead(t *testing.T) {
+func TestFileDataWriteReadHigestRetention(t *testing.T) {
 	retentionDefs := "1m:2h,1h:2d,1d:30d"
 
-	tsNow := TimestampFromStdTime(time.Now())
-
-	retentions, err := ParseRetentions(retentionDefs)
-	if err != nil {
-		t.Fatal(err)
+	testCases := []struct {
+		now Timestamp
+	}{
+		{now: TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 0, 0, time.UTC))}, // aligned to retention
+		{now: TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 1, 0, time.UTC))}, // unaligned to retention
 	}
+	for _, tc := range testCases {
+		tc := tc
+		t.Run("now_"+tc.now.String(), func(t *testing.T) {
+			t.Parallel()
+			retentions, err := ParseRetentions(retentionDefs)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	m := Meta{
-		AggregationMethod: Sum,
-		XFilesFactor:      0,
-	}
-	d, err := NewFileData(m, retentions)
-	if err != nil {
-		t.Fatal(err)
-	}
+			m := Meta{
+				AggregationMethod: Sum,
+				XFilesFactor:      0,
+			}
+			d, err := NewFileData(m, retentions)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	rnd := rand.New(rand.NewSource(newRandSeed()))
-	tsUntil := tsNow
-	const randMax = 100
-	pointsList := randomPointsList(retentions, tsUntil, tsNow, rnd, randMax)
-	if err := updateFileDataWithPointsList(d, pointsList, tsNow); err != nil {
-		t.Fatal(err)
-	}
+			rnd := rand.New(rand.NewSource(newRandSeed()))
+			tsNow := tc.now
+			tsUntil := tsNow
+			const randMax = 100
+			pointsList := randomPointsList(retentions, tsUntil, tsNow, rnd, randMax)
+			if err := updateFileDataWithPointsList(d, pointsList, tsNow); err != nil {
+				t.Fatal(err)
+			}
 
-	gotPointsList := make([][]Point, len(d.Retentions))
-	for retID := range d.Retentions {
-		gotPointsList[retID] = d.getAllRawUnsortedPoints(retID)
-	}
-	sortPointsListByTime(gotPointsList)
+			gotPointsList := make([][]Point, len(d.Retentions))
+			for retID := range d.Retentions {
+				gotPointsList[retID] = d.getAllRawUnsortedPoints(retID)
+			}
+			sortPointsListByTime(gotPointsList)
 
-	wantPlDif, gotPlDif := PointsList(pointsList).Diff(gotPointsList)
-	for retID, gotPtsDif := range gotPlDif {
-		wantPtsDif := wantPlDif[retID]
-		if len(gotPtsDif) != len(wantPtsDif) {
-			t.Errorf("points count unmatch for retention %d, got=%d, want=%d", retID, len(gotPtsDif), len(wantPtsDif))
-		}
-		for i, gotPt := range gotPtsDif {
-			wantPt := wantPtsDif[i]
-			t.Errorf("point unmatch for retention %d, got=%s, want=%s", retID, gotPt, wantPt)
-		}
+			wantPlDif, gotPlDif := PointsList(pointsList).Diff(gotPointsList)
+			for retID, gotPtsDif := range gotPlDif {
+				wantPtsDif := wantPlDif[retID]
+				if len(gotPtsDif) != len(wantPtsDif) {
+					t.Errorf("points count unmatch for retention %d, got=%d, want=%d", retID, len(gotPtsDif), len(wantPtsDif))
+				}
+				for i, gotPt := range gotPtsDif {
+					wantPt := wantPtsDif[i]
+					t.Errorf("point unmatch for retention %d, got=%s, want=%s", retID, gotPt, wantPt)
+				}
+			}
+
+			retID := 0
+			r := &d.Retentions[retID]
+			tsFrom := tsNow.Truncate(Minute).Add(-5 * Minute)
+			tsUntil = tsFrom.Add(Minute)
+			gotPoints, err := d.FetchFromArchive(retID, tsFrom, tsUntil, tsNow)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantPoints := filterPointsByTimeRange(r, pointsList[retID], tsFrom, tsUntil)
+			sort.Stable(Points(wantPoints))
+			wantPtsDif, gotPtsDif := Points(wantPoints).Diff(gotPoints)
+			if len(gotPtsDif) != len(wantPtsDif) {
+				t.Errorf("points count unmatch for retention %d, now=%s, from=%s, until=%s, got=%d, want=%d", retID, tsNow, tsFrom, tsUntil, len(gotPtsDif), len(wantPtsDif))
+			}
+			for i, gotPt := range gotPtsDif {
+				wantPt := wantPtsDif[i]
+				t.Errorf("point unmatch for retention %d, now=%s, from=%s, until=%s, got=%s, want=%s", retID, tsNow, tsFrom, tsUntil, gotPt, wantPt)
+			}
+			t.Logf("now=%s, from=%s, until=%s, gotPoints=%v", tsNow, tsFrom, tsUntil, gotPoints)
+
+			tsFrom = tsNow.Add(-5 * Minute)
+			tsUntil = tsFrom.Add(Minute)
+			gotPoints, err = d.FetchFromArchive(retID, tsFrom, tsUntil, tsNow)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantPoints = filterPointsByTimeRange(r, pointsList[retID], tsFrom, tsUntil)
+			sort.Stable(Points(wantPoints))
+			wantPtsDif, gotPtsDif = Points(wantPoints).Diff(gotPoints)
+			if len(gotPtsDif) != len(wantPtsDif) {
+				t.Errorf("points count unmatch for retention %d, now=%s, from=%s, until=%s, got=%d, want=%d", retID, tsNow, tsFrom, tsUntil, len(gotPtsDif), len(wantPtsDif))
+			}
+			for i, gotPt := range gotPtsDif {
+				wantPt := wantPtsDif[i]
+				t.Errorf("point unmatch for retention %d, now=%s, from=%s, until=%s, got=%s, want=%s", retID, tsNow, tsFrom, tsUntil, gotPt, wantPt)
+			}
+			t.Logf("now=%s, from=%s, until=%s, gotPoints=%v", tsNow, tsFrom, tsUntil, gotPoints)
+		})
 	}
 }

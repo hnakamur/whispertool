@@ -58,7 +58,7 @@ func filterPointsByTimeRange(r *Retention, points []Point, from, until Timestamp
 	}
 	var points2 []Point
 	for _, p := range points {
-		if p.Time < from || p.Time >= until {
+		if p.Time <= from || p.Time > until {
 			continue
 		}
 		points2 = append(points2, p)

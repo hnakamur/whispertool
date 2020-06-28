@@ -325,6 +325,9 @@ func (d *FileData) fetchRawPoints(retentionID int, fromInterval, untilInterval T
 	return points
 }
 
+// FetchFromArchive fetches points from archive specified with `retentionID`.
+// It fetches points in range between `from` (exclusive) and `until` (inclusive).
+// If `now` is zero, the current time is used.
 func (d *FileData) FetchFromArchive(retentionID int, from, until, now Timestamp) ([]Point, error) {
 	if now == 0 {
 		now = TimestampFromStdTime(time.Now())
