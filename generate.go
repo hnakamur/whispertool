@@ -72,14 +72,14 @@ func randomPointsList(retentions []Retention, until, now Timestamp, rnd *rand.Ra
 func randomPoints(until, now Timestamp, r, highRet *Retention, rnd *rand.Rand, rndMax, highRndMax int, highPts []Point) []Point {
 	// adjust now and until for this archive
 	step := r.SecondsPerPoint
-	thisNow := now.Align(step)
-	thisUntil := until.Align(step)
+	thisNow := now.Truncate(step)
+	thisUntil := until.Truncate(step)
 
 	var thisHighStartTime Timestamp
 	if highPts != nil {
 		highStartTime := highPts[0].Time
 		if highStartTime < thisUntil {
-			thisHighStartTime = highStartTime.Align(step)
+			thisHighStartTime = highStartTime.Truncate(step)
 		}
 	}
 
@@ -106,7 +106,7 @@ func randomValWithHighSum(t Timestamp, rnd *rand.Rand, highRndMax int, r, highRe
 
 	v := Value(0)
 	for _, hp := range highPts {
-		thisHighTime := hp.Time.Align(step)
+		thisHighTime := hp.Time.Truncate(step)
 		if thisHighTime < t {
 			continue
 		}

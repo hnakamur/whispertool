@@ -69,8 +69,12 @@ func (t Timestamp) Sub(u Timestamp) Duration {
 	return -Duration(u - t)
 }
 
-func (t Timestamp) Align(d Duration) Timestamp {
-	return t - t%Timestamp(d)
+// Truncate returns the result of rounding t down to a multiple of d (since the Unix epoch time). If d <= 0, Truncate returns t.
+func (t Timestamp) Truncate(d Duration) Timestamp {
+	if d <= 0 {
+		return t
+	}
+	return t.Add(-Duration(int64(t) % int64(d)))
 }
 
 func ParseDuration(s string) (Duration, error) {

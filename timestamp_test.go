@@ -3,6 +3,7 @@ package whispertool
 import (
 	"math"
 	"testing"
+	"time"
 )
 
 func TestParseDuration(t *testing.T) {
@@ -143,4 +144,82 @@ func TestParseTimestamp(t *testing.T) {
 				tc.input, ts, tc.wantTs)
 		}
 	}
+}
+
+func TestTimestamp_Truncate(t *testing.T) {
+	testCases := []struct {
+		t    Timestamp
+		d    Duration
+		want Timestamp
+	}{
+		{
+			t:    TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 0, 0, time.UTC)),
+			d:    5 * Second,
+			want: TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 0, 0, time.UTC)),
+		},
+		{
+			t:    TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 4, 0, time.UTC)),
+			d:    5 * Second,
+			want: TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 0, 0, time.UTC)),
+		},
+		{
+			t:    TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 5, 0, time.UTC)),
+			d:    5 * Second,
+			want: TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 5, 0, time.UTC)),
+		},
+		{
+			t:    TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 7, 0, time.UTC)),
+			d:    5 * Second,
+			want: TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 5, 0, time.UTC)),
+		},
+		{
+			t:    TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 9, 0, time.UTC)),
+			d:    5 * Second,
+			want: TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 5, 0, time.UTC)),
+		},
+		{
+			t:    TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 10, 0, time.UTC)),
+			d:    5 * Second,
+			want: TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 10, 0, time.UTC)),
+		},
+		{
+			t:    TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 5, 0, time.Local)),
+			d:    5 * Second,
+			want: TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 5, 0, time.Local)),
+		},
+		{
+			t:    TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 6, 0, time.Local)),
+			d:    5 * Second,
+			want: TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 5, 0, time.Local)),
+		},
+		{
+			t:    TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 10, 0, time.Local)),
+			d:    5 * Second,
+			want: TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 10, 0, time.Local)),
+		},
+		{
+			t:    TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 14, 0, time.Local)),
+			d:    5 * Second,
+			want: TimestampFromStdTime(time.Date(2020, 6, 28, 9, 50, 10, 0, time.Local)),
+		},
+		{
+			t:    TimestampFromStdTime(time.Date(2020, 6, 28, 9, 55, 0, 999999999, time.UTC)),
+			d:    0,
+			want: TimestampFromStdTime(time.Date(2020, 6, 28, 9, 55, 0, 999999999, time.UTC)),
+		},
+		{
+			t:    TimestampFromStdTime(time.Date(2020, 6, 28, 9, 55, 0, 999999999, time.UTC)),
+			d:    -Second,
+			want: TimestampFromStdTime(time.Date(2020, 6, 28, 9, 55, 0, 999999999, time.UTC)),
+		},
+	}
+	for _, tc := range testCases {
+		got := tc.t.Truncate(tc.d)
+		if got != tc.want {
+			t.Errorf("timestamp for t=%s, d=%s, got=%s, want=%s", tc.t, tc.d, got, tc.want)
+		} else {
+			t.Logf("t=%s, d=%s, got=%s", tc.t, tc.d, got)
+		}
+	}
+
 }
