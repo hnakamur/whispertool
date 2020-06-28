@@ -4,10 +4,11 @@ import (
 	crand "crypto/rand"
 	"encoding/binary"
 	"math/rand"
+	"os"
 	"time"
 )
 
-func Generate(dest string, retentionDefs string, fill bool, randMax int, now time.Time, textOut string) error {
+func Generate(dest string, retentionDefs string, perm os.FileMode, fill bool, randMax int, now time.Time, textOut string) error {
 	tsNow := TimestampFromStdTime(now)
 
 	retentions, err := ParseRetentions(retentionDefs)
@@ -38,7 +39,7 @@ func Generate(dest string, retentionDefs string, fill bool, randMax int, now tim
 		return err
 	}
 
-	if err := WriteFile(dest, d, 0644); err != nil {
+	if err := WriteFile(dest, d, perm); err != nil {
 		return err
 	}
 	return nil

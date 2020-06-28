@@ -361,8 +361,8 @@ func (d *FileData) FetchFromArchive(retentionID int, from, until, now Timestamp)
 	baseInterval := d.baseInterval(r)
 	//log.Printf("FetchFromArchive retentionID=%d, baseInterval=%s", retentionID, baseInterval)
 
-	fromInterval := r.interval(from)
-	untilInterval := r.interval(until)
+	fromInterval := r.Interval(from)
+	untilInterval := r.Interval(until)
 	step := r.SecondsPerPoint
 
 	if baseInterval == 0 {
@@ -774,6 +774,23 @@ func (r Retention) validate() error {
 	return nil
 }
 
+func (rr Retentions) Equal(ss []Retention) bool {
+	if len(rr) != len(ss) {
+		return false
+	}
+	for i, r := range rr {
+		if !r.Equal(ss[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func (r Retention) Equal(s Retention) bool {
+	return r.SecondsPerPoint == s.SecondsPerPoint &&
+		r.NumberOfPoints == s.NumberOfPoints
+}
+
 func (r Retention) String() string {
 	return r.SecondsPerPoint.String() + ":" +
 		(r.SecondsPerPoint * Duration(r.NumberOfPoints)).String()
@@ -796,7 +813,7 @@ func (r *Retention) pointOffsetAt(index int) uint32 {
 	return r.offset + uint32(index)*pointSize
 }
 
-func (r *Retention) interval(t Timestamp) Timestamp {
+func (r *Retention) Interval(t Timestamp) Timestamp {
 	step := int64(r.SecondsPerPoint)
 	return Timestamp(int64(t) - floorMod(int64(t), step) + step)
 }
@@ -846,6 +863,15 @@ func (v Value) IsNaN() bool {
 
 func (v Value) String() string {
 	return strconv.FormatFloat(float64(v), 'f', -1, 64)
+}
+
+func (pl PointsList) AllEmpty() bool {
+	for _, pts := range pl {
+		if len(pts) != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func (pl PointsList) Diff(ql [][]Point) ([][]Point, [][]Point) {

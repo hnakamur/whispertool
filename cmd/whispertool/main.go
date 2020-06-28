@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/hnakamur/whispertool"
@@ -75,6 +76,26 @@ func (t UTCTimeValue) Set(s string) error {
 		return err
 	}
 	*t.t = t2
+	return nil
+}
+
+type fileModeValue struct {
+	m *os.FileMode
+}
+
+func (v fileModeValue) String() string {
+	if v.m == nil {
+		return ""
+	}
+	return strconv.FormatUint(uint64(*v.m), 8)
+}
+
+func (v fileModeValue) Set(s string) error {
+	m, err := strconv.ParseUint(s, 8, 32)
+	if err != nil {
+		return err
+	}
+	*v.m = os.FileMode(m)
 	return nil
 }
 
@@ -157,9 +178,9 @@ func runViewCmd(args []string) error {
 	until := now
 	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive)")
 
-	retID := fs.Int("ret-id", whispertool.RetIDAll, "retention ID to print (-1 for all retentions)")
+	retID := fs.Int("ret", whispertool.RetIDAll, "retention ID to print (-1 for all retentions)")
 	textOut := fs.String("text-out", "-", "text output. empty means no output, - means stdout, other means output file.")
-	showHeader := fs.Bool("show-header", true, "whether or not to show header (metadata and reteions)")
+	showHeader := fs.Bool("header", true, "whether or not to show header (metadata and reteions)")
 	fs.Parse(args)
 
 	if fs.NArg() != 1 {
@@ -188,9 +209,9 @@ func runViewRawCmd(args []string) error {
 	until := time.Now()
 	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format (inclusive)")
 
-	retID := fs.Int("ret-id", whispertool.RetIDAll, "retention ID to print (-1 for all retentions)")
+	retID := fs.Int("ret", whispertool.RetIDAll, "retention ID to print (-1 for all retentions)")
 	textOut := fs.String("text-out", "-", "text output. empty means no output, - means stdout, other means output file.")
-	showHeader := fs.Bool("show-header", true, "whether or not to show header (metadata and reteions)")
+	showHeader := fs.Bool("header", true, "whether or not to show header (metadata and reteions)")
 	sortsByTime := fs.Bool("sort", false, "whether or not to sorts points by time")
 	fs.Parse(args)
 
@@ -259,7 +280,7 @@ func runSumCmd(args []string) error {
 	src := fs.String("src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
 	dest := fs.String("dest", "", "dest whisper filename (ex. dest.wsp).")
 	textOut := fs.String("text-out", "", "text output. empty means no output, - means stdout, other means output file.")
-	retID := fs.Int("ret-id", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
+	retID := fs.Int("ret", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
 	fs.Parse(args)
 
 	if *src == "" {
@@ -291,7 +312,7 @@ func runSumDiffCmd(args []string) error {
 	ignoreSrcEmpty := fs.Bool("ignore-src-empty", false, "ignore diff when source point is empty.")
 	ignoreDestEmpty := fs.Bool("ignore-dest-empty", false, "ignore diff when destination point is empty.")
 	showAll := fs.Bool("show-all", false, "print all points when diff exists.")
-	retID := fs.Int("ret-id", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
+	retID := fs.Int("ret", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
 	interval := fs.Duration("interval", time.Minute, "run interval")
 	intervalOffset := fs.Duration("interval-offset", 7*time.Second, "run interval offset")
 	untilOffset := fs.Duration("until-offset", 0, "until offset")
@@ -327,7 +348,7 @@ func runHoleCmd(args []string) error {
 		fmt.Fprintf(fs.Output(), holeCmdUsage, cmdName)
 		fs.PrintDefaults()
 	}
-	emptyRate := fs.Float64("empty-rate", 0.2, "empty rate (0 < r <= 1).")
+	emptyRate := fs.Float64("empty-rate", 0.2, "empty rate (0 <= r <= 1).")
 
 	now := time.Now()
 	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
@@ -337,6 +358,12 @@ func runHoleCmd(args []string) error {
 
 	until := now
 	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+
+	textOut := fs.String("text-out", "", "text output. empty means no output, - means stdout, other means output file.")
+
+	perm := os.FileMode(0644)
+	fs.Var(&fileModeValue{m: &perm}, "perm", "whisper file permission (octal)")
+
 	fs.Parse(args)
 
 	if *emptyRate < 0 || 1 < *emptyRate {
@@ -349,7 +376,7 @@ func runHoleCmd(args []string) error {
 		return errFromIsAfterUntil
 	}
 
-	return whispertool.Hole(fs.Arg(0), fs.Arg(1), *emptyRate, now, from, until)
+	return whispertool.Hole(fs.Arg(0), fs.Arg(1), perm, *textOut, *emptyRate, now, from, until)
 }
 
 const diffCmdUsage = `Usage: %s diff [options] src.wsp dest.wsp
@@ -367,8 +394,9 @@ func runDiffCmd(args []string) error {
 	recursive := fs.Bool("r", false, "diff files recursively.")
 	ignoreSrcEmpty := fs.Bool("ignore-src-empty", false, "ignore diff when source point is empty.")
 	ignoreDestEmpty := fs.Bool("ignore-dest-empty", false, "ignore diff when destination point is empty.")
+	textOut := fs.String("text-out", "-", "text output. empty means no output, - means stdout, other means output file.")
 	showAll := fs.Bool("show-all", false, "print all points when diff exists.")
-	retID := fs.Int("ret-id", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
+	retID := fs.Int("ret", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
 
 	now := time.Now()
 	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
@@ -391,7 +419,7 @@ func runDiffCmd(args []string) error {
 		return errFromIsAfterUntil
 	}
 
-	return whispertool.Diff(fs.Arg(0), fs.Arg(1), *recursive, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, now, from, until, *retID)
+	return whispertool.Diff(fs.Arg(0), fs.Arg(1), *textOut, *recursive, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, now, from, until, *retID)
 }
 
 const generateCmdUsage = `Usage: %s generate [options] dest.wsp
@@ -413,6 +441,10 @@ func runGenerateCmd(args []string) error {
 	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 
 	textOut := fs.String("text-out", "", "text output. empty means no output, - means stdout, other means output file.")
+
+	perm := os.FileMode(0644)
+	fs.Var(&fileModeValue{m: &perm}, "perm", "whisper file permission (octal)")
+
 	fs.Parse(args)
 
 	if *retentionDefs == "" {
@@ -422,5 +454,5 @@ func runGenerateCmd(args []string) error {
 		return errNeedsOneFileArg
 	}
 
-	return whispertool.Generate(fs.Arg(0), *retentionDefs, *fill, *randMax, now, *textOut)
+	return whispertool.Generate(fs.Arg(0), *retentionDefs, perm, *fill, *randMax, now, *textOut)
 }
