@@ -279,15 +279,25 @@ func runSumCmd(args []string) error {
 
 	src := fs.String("src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
 	dest := fs.String("dest", "", "dest whisper filename (ex. dest.wsp).")
-	textOut := fs.String("text-out", "", "text output. empty means no output, - means stdout, other means output file.")
+	textOut := fs.String("text-out", "-", "text output. empty means no output, - means stdout, other means output file.")
 	retID := fs.Int("ret", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
+
+	now := time.Now()
+	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+
+	from := time.Unix(0, 0)
+	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+
+	until := now
+	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+
 	fs.Parse(args)
 
 	if *src == "" {
 		return newRequiredOptionError(fs, "src")
 	}
 
-	return whispertool.RunSum(*src, *dest, *textOut, *retID)
+	return whispertool.RunSum(*src, *dest, *textOut, *retID, now, from, until)
 }
 
 const sumDiffCmdUsage = `Usage: %s sum-diff -item <pattern> -src <pattern> -dest <destname>

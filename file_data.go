@@ -865,6 +865,16 @@ func (v Value) String() string {
 	return strconv.FormatFloat(float64(v), 'f', -1, 64)
 }
 
+func (v Value) Add(u Value) Value {
+	if v.IsNaN() {
+		return u
+	}
+	if u.IsNaN() {
+		return v
+	}
+	return u + v
+}
+
 func (pl PointsList) AllEmpty() bool {
 	for _, pts := range pl {
 		if len(pts) != 0 {
