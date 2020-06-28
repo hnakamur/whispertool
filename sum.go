@@ -103,5 +103,5 @@ func sumPointsListsForRetention(ptsListList [][][]Point, retID int) []Point {
 			}
 		}
 	}
-	return nil
+	return sumPoints
 }
