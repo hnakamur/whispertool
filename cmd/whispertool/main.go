@@ -40,6 +40,7 @@ subcommands:
   generate            Generate random whisper file.
   server              Run web server to respond view and sum query.
   sum                 Sum value of whisper files.
+  sum-copy            Copy sum of points from src to dest whisper file.
   sum-diff            Sum value of whisper files and compare to another whisper file.
   view                View content of whisper file.
   view-raw            View raw content of whisper file.
@@ -127,6 +128,8 @@ func run() int {
 		err = runServerCmd(args[1:])
 	case "sum":
 		err = runSumCmd(args[1:])
+	case "sum-copy":
+		err = runSumCopyCmd(args[1:])
 	case "sum-diff":
 		err = runSumDiffCmd(args[1:])
 	case "view":
@@ -326,6 +329,58 @@ func runSumCmd(args []string) error {
 	return whispertool.RunSum(*src, *dest, *textOut, *retID, now, from, until)
 }
 
+const sumCopyCmdUsage = `Usage: %s sum-copy [options] src.wsp dest.wsp
+       %s sum-copy -r [options] srcDir destDir
+
+options:
+`
+
+func runSumCopyCmd(args []string) error {
+	fs := flag.NewFlagSet("sum-copy", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), sumCopyCmdUsage, cmdName, cmdName)
+		fs.PrintDefaults()
+	}
+
+	recursive := fs.Bool("r", false, "copy files recursively.")
+	item := fs.String("item", "", "glob pattern of whisper directory")
+	srcURL := fs.String("src-url", "", "web app URL for src")
+	srcBase := fs.String("src-base", "", "src base directory")
+	destBase := fs.String("dest-base", "", "dest base directory")
+	src := fs.String("src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
+	dest := fs.String("dest", "", "dest whisper filename (ex. dest.wsp).")
+	retID := fs.Int("ret", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
+	textOut := fs.String("text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
+
+	now := time.Now()
+	fs.Var(&utcTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+
+	from := time.Unix(0, 0)
+	fs.Var(&utcTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+
+	until := now
+	fs.Var(&utcTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+	fs.Parse(args)
+
+	if *item == "" {
+		return newRequiredOptionError(fs, "item")
+	}
+	if *srcBase == "" && *srcURL == "" {
+		return newRequiredOptionError(fs, "src-base or src-url")
+	}
+	if *destBase == "" {
+		return newRequiredOptionError(fs, "dest-base")
+	}
+	if *src == "" {
+		return newRequiredOptionError(fs, "src")
+	}
+	if *dest == "" {
+		return newRequiredOptionError(fs, "dest")
+	}
+
+	return whispertool.SumCopy(*srcURL, *srcBase, *destBase, *item, *src, *dest, *textOut, *recursive, from, until, now, *retID)
+}
+
 const sumDiffCmdUsage = `Usage: %s sum-diff -item <pattern> -src <pattern> -dest <destname>
 
 Example: %s sum-diff -item '/var/lib/graphite/whisper/test/*/*' -src 'sv*.wsp' -dest 'sum.wsp'
@@ -354,6 +409,9 @@ func runSumDiffCmd(args []string) error {
 	interval := fs.Duration("interval", time.Minute, "run interval")
 	intervalOffset := fs.Duration("interval-offset", 7*time.Second, "run interval offset")
 
+	now := time.Now()
+	fs.Var(&utcTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+
 	from := time.Unix(0, 0)
 	fs.Var(&utcTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 
@@ -376,7 +434,7 @@ func runSumDiffCmd(args []string) error {
 		return newRequiredOptionError(fs, "dest")
 	}
 
-	return whispertool.SumDiff(*srcURL, *srcBase, *destBase, *item, *src, *dest, *textOut, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, *interval, *intervalOffset, *untilOffset, *retID, from)
+	return whispertool.SumDiff(*srcURL, *srcBase, *destBase, *item, *src, *dest, *textOut, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, *interval, *intervalOffset, *untilOffset, *retID, from, now)
 }
 
 const holeCmdUsage = `Usage: %s hole [options] src.wsp dest.wsp

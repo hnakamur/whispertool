@@ -10,10 +10,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func SumDiff(srcURL, srcBase, destBase, itemPattern, srcPattern, dest, textOut string, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, interval, intervalOffset, untilOffset time.Duration, retID int, from time.Time) error {
+func SumDiff(srcURL, srcBase, destBase, itemPattern, srcPattern, dest, textOut string, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, interval, intervalOffset, untilOffset time.Duration, retID int, from, now time.Time) error {
 	//log.Printf("SumDiff start srcBase=%s, destBase=%s, itemPattern=%s, srcPattern=%s, dest=%s", srcBase, destBase, itemPattern, srcPattern, dest)
 	if interval == 0 {
-		err := sumDiffOneTime(srcURL, srcBase, destBase, itemPattern, srcPattern, dest, textOut, ignoreSrcEmpty, ignoreDestEmpty, showAll, untilOffset, retID, from)
+		err := sumDiffOneTime(srcURL, srcBase, destBase, itemPattern, srcPattern, dest, textOut, ignoreSrcEmpty, ignoreDestEmpty, showAll, untilOffset, retID, from, now)
 		if err != nil {
 			return err
 		}
@@ -25,7 +25,7 @@ func SumDiff(srcURL, srcBase, destBase, itemPattern, srcPattern, dest, textOut s
 		targetTime := now.Truncate(interval).Add(interval).Add(intervalOffset)
 		time.Sleep(targetTime.Sub(now))
 
-		err := sumDiffOneTime(srcURL, srcBase, destBase, itemPattern, srcPattern, dest, textOut, ignoreSrcEmpty, ignoreDestEmpty, showAll, untilOffset, retID, from)
+		err := sumDiffOneTime(srcURL, srcBase, destBase, itemPattern, srcPattern, dest, textOut, ignoreSrcEmpty, ignoreDestEmpty, showAll, untilOffset, retID, from, now)
 		if err != nil {
 			return err
 		}
@@ -33,7 +33,7 @@ func SumDiff(srcURL, srcBase, destBase, itemPattern, srcPattern, dest, textOut s
 	return nil
 }
 
-func sumDiffOneTime(srcURL, srcBase, destBase, itemPattern, srcPattern, dest, textOut string, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, untilOffset time.Duration, retID int, from time.Time) error {
+func sumDiffOneTime(srcURL, srcBase, destBase, itemPattern, srcPattern, dest, textOut string, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, untilOffset time.Duration, retID int, from, now time.Time) error {
 	t0 := time.Now()
 	fmt.Printf("time:%s\tmsg:start\n", formatTime(t0))
 	var totalItemCount int
@@ -57,7 +57,7 @@ func sumDiffOneTime(srcURL, srcBase, destBase, itemPattern, srcPattern, dest, te
 			return err
 		}
 		fmt.Printf("item:%s\n", itemRelDir)
-		err = sumDiffItem(srcURL, srcBase, destBase, itemRelDir, srcPattern, dest, textOut, ignoreSrcEmpty, ignoreDestEmpty, showAll, untilOffset, retID, from)
+		err = sumDiffItem(srcURL, srcBase, destBase, itemRelDir, srcPattern, dest, textOut, ignoreSrcEmpty, ignoreDestEmpty, showAll, untilOffset, retID, from, now)
 		if err != nil {
 			return err
 		}
@@ -69,11 +69,12 @@ func formatTime(t time.Time) string {
 	return t.Format(UTCTimeLayout)
 }
 
-func sumDiffItem(srcURL, srcBase, destBase, itemRelDir, srcPattern, dest, textOut string, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, untilOffset time.Duration, retID int, from time.Time) error {
+func sumDiffItem(srcURL, srcBase, destBase, itemRelDir, srcPattern, dest, textOut string, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, untilOffset time.Duration, retID int, from, now time.Time) error {
 	srcFullPattern := filepath.Join(srcBase, itemRelDir, srcPattern)
 	var srcFilenames []string
 	if srcURL == "" {
-		srcFilenames, err := filepath.Glob(srcFullPattern)
+		var err error
+		srcFilenames, err = filepath.Glob(srcFullPattern)
 		if err != nil {
 			return err
 		}
@@ -83,7 +84,6 @@ func sumDiffItem(srcURL, srcBase, destBase, itemRelDir, srcPattern, dest, textOu
 	}
 	destFull := filepath.Join(destBase, itemRelDir, dest)
 
-	now := time.Now()
 	until := now.Add(-untilOffset)
 	tsNow := TimestampFromStdTime(now)
 	tsFrom := TimestampFromStdTime(from)
