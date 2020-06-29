@@ -1,38 +1,80 @@
 package whispertool
 
 import (
+	"flag"
 	"log"
 	"math/rand"
 	"os"
 	"time"
 )
 
-func Hole(src, dest string, perm os.FileMode, textOut string, emptyRate float64, now, from, until time.Time) error {
-	tsNow := TimestampFromStdTime(now)
-	tsFrom := TimestampFromStdTime(from)
-	tsUntil := TimestampFromStdTime(until)
+type HoleCommand struct {
+	Src       string
+	Dest      string
+	Perm      os.FileMode
+	EmptyRate float64
+	From      Timestamp
+	Until     Timestamp
+	Now       Timestamp
+	RetID     int
+	TextOut   string
+}
 
-	srcData, srcPtsList, err := readWhisperFile(src, tsNow, tsFrom, tsUntil, RetIDAll)
+func (c *HoleCommand) Parse(fs *flag.FlagSet, args []string) error {
+	fs.StringVar(&c.Src, "src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
+	fs.StringVar(&c.Dest, "dest", "", "dest whisper filename (ex. dest.wsp).")
+	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
+	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
+
+	c.Now = TimestampFromStdTime(time.Now())
+	c.Until = c.Now
+	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+
+	c.Perm = os.FileMode(0644)
+	fs.Var(&fileModeValue{m: &c.Perm}, "perm", "whisper file permission (octal)")
+	fs.Float64Var(&c.EmptyRate, "empty-rate", 0.2, "empty rate (0 <= r <= 1).")
+	fs.Parse(args)
+
+	if c.EmptyRate < 0 || 1 < c.EmptyRate {
+		return errEmptyRateOutOfBounds
+	}
+	if c.Src == "" {
+		return newRequiredOptionError(fs, "src")
+	}
+	if c.Dest == "" {
+		return newRequiredOptionError(fs, "dest")
+	}
+	if c.From > c.Until {
+		return errFromIsAfterUntil
+	}
+
+	return nil
+}
+
+func (c *HoleCommand) Execute() error {
+	srcData, srcPtsList, err := readWhisperFile(c.Src, c.Now, c.From, c.Until, RetIDAll)
 	if err != nil {
 		return err
 	}
 
 	rnd := rand.New(rand.NewSource(newRandSeed()))
-	destPtsList := emptyRandomPointsList(srcPtsList, rnd, emptyRate, tsFrom, tsUntil, srcData.Retentions)
+	destPtsList := emptyRandomPointsList(srcPtsList, rnd, c.EmptyRate, c.From, c.Until, srcData.Retentions)
 	destData, err := NewFileData(srcData.Meta, srcData.Retentions)
 	if err != nil {
 		return err
 	}
 
-	if err := updateFileDataWithPointsList(destData, destPtsList, tsNow); err != nil {
+	if err := updateFileDataWithPointsList(destData, destPtsList, c.Now); err != nil {
 		return err
 	}
 
-	if err = printFileData(textOut, destData, destPtsList, true); err != nil {
+	if err = printFileData(c.TextOut, destData, destPtsList, true); err != nil {
 		return err
 	}
 
-	if err := WriteFile(dest, destData, perm); err != nil {
+	if err := WriteFile(c.Dest, destData, c.Perm); err != nil {
 		return err
 	}
 	return nil

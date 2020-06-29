@@ -1,24 +1,55 @@
 package whispertool
 
 import (
+	"flag"
 	"sort"
 	"time"
 )
 
-func ViewRaw(filename string, from, until time.Time, retID int, textOut string, showHeader, sortsByTime bool) error {
-	d, pointsList, err := readWhisperFileRaw(filename, retID)
+type ViewRawCommand struct {
+	Filename    string
+	From        Timestamp
+	Until       Timestamp
+	RetID       int
+	ShowHeader  bool
+	SortsByTime bool
+	TextOut     string
+}
+
+func (c *ViewRawCommand) Parse(fs *flag.FlagSet, args []string) error {
+	c.Until = TimestampFromStdTime(time.Now())
+	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all)")
+	fs.BoolVar(&c.ShowHeader, "header", true, "whether or not to show header (metadata and reteions)")
+	fs.BoolVar(&c.SortsByTime, "sort", false, "whether or not to sorts points by time")
+	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
+	fs.Parse(args)
+
+	if fs.NArg() != 1 {
+		return errNeedsOneFileArg
+	}
+	c.Filename = fs.Arg(0)
+
+	if c.From > c.Until {
+		return errFromIsAfterUntil
+	}
+
+	return nil
+}
+
+func (c *ViewRawCommand) Execute() error {
+	d, pointsList, err := readWhisperFileRaw(c.Filename, c.RetID)
 	if err != nil {
 		return err
 	}
 
-	tsFrom := TimestampFromStdTime(from)
-	tsUntil := TimestampFromStdTime(until)
-	pointsList = filterPointsListByTimeRange(d, pointsList, tsFrom, tsUntil)
-	if sortsByTime {
+	pointsList = filterPointsListByTimeRange(d, pointsList, c.From, c.Until)
+	if c.SortsByTime {
 		sortPointsListByTime(pointsList)
 	}
 
-	if err := printFileData(textOut, d, pointsList, showHeader); err != nil {
+	if err := printFileData(c.TextOut, d, pointsList, c.ShowHeader); err != nil {
 		return err
 	}
 	return nil

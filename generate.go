@@ -3,15 +3,50 @@ package whispertool
 import (
 	crand "crypto/rand"
 	"encoding/binary"
+	"flag"
 	"math/rand"
 	"os"
 	"time"
 )
 
-func Generate(dest string, retentionDefs string, perm os.FileMode, fill bool, randMax int, now time.Time, textOut string) error {
-	tsNow := TimestampFromStdTime(now)
+type GenerateCommand struct {
+	Dest          string
+	Perm          os.FileMode
+	RetentionDefs string
+	RandMax       int
+	Fill          bool
+	Now           Timestamp
+	TextOut       string
+}
 
-	retentions, err := ParseRetentions(retentionDefs)
+func (c *GenerateCommand) Parse(fs *flag.FlagSet, args []string) error {
+	fs.StringVar(&c.Dest, "dest", "", "dest whisper filename (ex. dest.wsp).")
+	c.Perm = os.FileMode(0644)
+	fs.Var(&fileModeValue{m: &c.Perm}, "perm", "whisper file permission (octal)")
+
+	fs.StringVar(&c.RetentionDefs, "retentions", "1m:2h,1h:2d,1d:30d", "retentions definitions.")
+	fs.IntVar(&c.RandMax, "max", 100, "random max value for shortest retention unit.")
+	fs.BoolVar(&c.Fill, "fill", true, "fill with random data.")
+
+	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
+
+	c.Now = TimestampFromStdTime(time.Now())
+	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+
+	fs.Parse(args)
+
+	if c.RetentionDefs == "" {
+		return newRequiredOptionError(fs, "retentions")
+	}
+	if c.Dest == "" {
+		return newRequiredOptionError(fs, "dest")
+	}
+
+	return nil
+}
+
+func (c *GenerateCommand) Execute() error {
+	retentions, err := ParseRetentions(c.RetentionDefs)
 	if err != nil {
 		return err
 	}
@@ -26,20 +61,20 @@ func Generate(dest string, retentionDefs string, perm os.FileMode, fill bool, ra
 	}
 
 	var pointsList [][]Point
-	if fill {
+	if c.Fill {
 		rnd := rand.New(rand.NewSource(newRandSeed()))
-		tsUntil := tsNow
-		pointsList = randomPointsList(retentions, tsUntil, tsNow, rnd, randMax)
-		if err := updateFileDataWithPointsList(d, pointsList, tsNow); err != nil {
+		until := c.Now
+		pointsList = randomPointsList(retentions, until, c.Now, rnd, c.RandMax)
+		if err := updateFileDataWithPointsList(d, pointsList, c.Now); err != nil {
 			return err
 		}
 	}
 
-	if err = printFileData(textOut, d, pointsList, true); err != nil {
+	if err = printFileData(c.TextOut, d, pointsList, true); err != nil {
 		return err
 	}
 
-	if err := WriteFile(dest, d, perm); err != nil {
+	if err := WriteFile(c.Dest, d, c.Perm); err != nil {
 		return err
 	}
 	return nil

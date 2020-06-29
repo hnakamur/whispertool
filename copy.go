@@ -2,35 +2,64 @@ package whispertool
 
 import (
 	"errors"
-	"log"
+	"flag"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 )
 
-func Copy(srcURL, src, dest, textOut string, recursive bool, now, from, until time.Time, retID int) error {
-	if recursive {
-		return errors.New("recursive option not implemented yet")
+type CopyCommand struct {
+	SrcURL  string
+	Src     string
+	Dest    string
+	From    Timestamp
+	Until   Timestamp
+	Now     Timestamp
+	RetID   int
+	TextOut string
+}
+
+func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
+	fs.StringVar(&c.SrcURL, "src-url", "", "web app URL for src")
+	fs.StringVar(&c.Src, "src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
+	fs.StringVar(&c.Dest, "dest", "", "dest whisper filename (ex. dest.wsp).")
+	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
+	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
+
+	c.Now = TimestampFromStdTime(time.Now())
+	c.Until = c.Now
+	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+	fs.Parse(args)
+
+	if c.Src == "" && c.SrcURL == "" {
+		return newRequiredOptionError(fs, "src or src-url")
+	}
+	if c.Dest == "" {
+		return newRequiredOptionError(fs, "dest")
+	}
+	if c.From > c.Until {
+		return errFromIsAfterUntil
 	}
 
-	tsNow := TimestampFromStdTime(now)
-	tsFrom := TimestampFromStdTime(from)
-	tsUntil := TimestampFromStdTime(until)
-	log.Printf("copy, tsNow=%s, tsFrom=%s, tsUntil=%s", tsNow, tsFrom, tsUntil)
+	return nil
+}
 
+func (c *CopyCommand) Execute() error {
 	var destDB *Whisper
 	var srcData *FileData
 	var srcPtsList [][]Point
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
-		if srcURL != "" {
-			srcData, srcPtsList, err = readWhisperFileRemote(srcURL, src, tsNow, tsFrom, tsUntil, retID)
+		if c.SrcURL != "" {
+			srcData, srcPtsList, err = readWhisperFileRemote(c.SrcURL, c.Src, c.Now, c.From, c.Until, c.RetID)
 			if err != nil {
 				return err
 			}
 		} else {
-			srcData, srcPtsList, err = readWhisperFile(src, tsNow, tsFrom, tsUntil, retID)
+			srcData, srcPtsList, err = readWhisperFile(c.Src, c.Now, c.From, c.Until, c.RetID)
 			if err != nil {
 				return err
 			}
@@ -39,7 +68,7 @@ func Copy(srcURL, src, dest, textOut string, recursive bool, now, from, until ti
 	})
 	eg.Go(func() error {
 		var err error
-		destDB, err = OpenForWrite(dest)
+		destDB, err = OpenForWrite(c.Dest)
 		if err != nil {
 			return err
 		}
@@ -55,11 +84,11 @@ func Copy(srcURL, src, dest, textOut string, recursive bool, now, from, until ti
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 
-	if err := updateFileDataWithPointsList(destData, srcPtsList, tsNow); err != nil {
+	if err := updateFileDataWithPointsList(destData, srcPtsList, c.Now); err != nil {
 		return err
 	}
 
-	if err := printFileData(textOut, srcData, srcPtsList, true); err != nil {
+	if err := printFileData(c.TextOut, srcData, srcPtsList, true); err != nil {
 		return err
 	}
 

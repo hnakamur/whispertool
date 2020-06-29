@@ -1,7 +1,7 @@
 package whispertool
 
 import (
-	"errors"
+	"flag"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -9,29 +9,54 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func RunSum(srcPattern, destFilename, textOut string, retID int, now, from, until time.Time) error {
-	if destFilename != "" {
-		return errors.New("writing sum to whisperfile is not implemented yet")
+type SumCommand struct {
+	Src        string
+	From       Timestamp
+	Until      Timestamp
+	Now        Timestamp
+	RetID      int
+	TextOut    string
+	ShowHeader bool
+}
+
+func (c *SumCommand) Parse(fs *flag.FlagSet, args []string) error {
+	fs.StringVar(&c.Src, "src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
+	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
+	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
+	fs.BoolVar(&c.ShowHeader, "header", true, "whether or not to show header (metadata and reteions)")
+
+	c.Now = TimestampFromStdTime(time.Now())
+	c.Until = c.Now
+	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+	fs.Parse(args)
+
+	if c.Src == "" {
+		return newRequiredOptionError(fs, "src")
+	}
+	if c.From > c.Until {
+		return errFromIsAfterUntil
 	}
 
-	srcFilenames, err := filepath.Glob(srcPattern)
+	return nil
+}
+
+func (c *SumCommand) Execute() error {
+	srcFilenames, err := filepath.Glob(c.Src)
 	if err != nil {
 		return err
 	}
 	if len(srcFilenames) == 0 {
-		return fmt.Errorf("no file matched for -src=%s", srcPattern)
+		return fmt.Errorf("no file matched for -src=%s", c.Src)
 	}
 
-	tsNow := TimestampFromStdTime(now)
-	tsFrom := TimestampFromStdTime(from)
-	tsUntil := TimestampFromStdTime(until)
-	d, ptsList, err := sumWhisperFile(srcFilenames, tsNow, tsFrom, tsUntil, retID)
+	d, ptsList, err := sumWhisperFile(srcFilenames, c.Now, c.From, c.Until, c.RetID)
 	if err != nil {
 		return err
 	}
 
-	showHeader := true
-	if err := printFileData(textOut, d, ptsList, showHeader); err != nil {
+	if err := printFileData(c.TextOut, d, ptsList, c.ShowHeader); err != nil {
 		return err
 	}
 	return nil

@@ -3,6 +3,7 @@ package whispertool
 import (
 	"bufio"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,27 +17,64 @@ import (
 
 var ErrDiffFound = errors.New("diff found")
 
-func Diff(src, dest string, textOut string, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, now, from, until time.Time, retID int, srcURL string) error {
-	if recursive {
-		return errors.New("recursive option not implemented yet")
+type DiffCommand struct {
+	SrcURL          string
+	Src             string
+	Dest            string
+	From            Timestamp
+	Until           Timestamp
+	Now             Timestamp
+	RetID           int
+	TextOut         string
+	IgnoreSrcEmpty  bool
+	IgnoreDestEmpty bool
+	ShowAll         bool
+}
+
+func (c *DiffCommand) Parse(fs *flag.FlagSet, args []string) error {
+	fs.StringVar(&c.SrcURL, "src-url", "", "web app URL for src")
+	fs.StringVar(&c.Src, "src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
+	fs.StringVar(&c.Dest, "dest", "", "dest whisper filename (ex. dest.wsp).")
+	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
+	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
+
+	c.Now = TimestampFromStdTime(time.Now())
+	c.Until = c.Now
+	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+
+	fs.BoolVar(&c.IgnoreSrcEmpty, "ignore-src-empty", false, "ignore diff when source point is empty.")
+	fs.BoolVar(&c.IgnoreDestEmpty, "ignore-dest-empty", false, "ignore diff when destination point is empty.")
+	fs.BoolVar(&c.ShowAll, "show-all", false, "print all points when diff exists.")
+	fs.Parse(args)
+
+	if c.Src == "" {
+		return newRequiredOptionError(fs, "src")
+	}
+	if c.Dest == "" {
+		return newRequiredOptionError(fs, "dest")
+	}
+	if c.From > c.Until {
+		return errFromIsAfterUntil
 	}
 
-	tsNow := TimestampFromStdTime(now)
-	tsFrom := TimestampFromStdTime(from)
-	tsUntil := TimestampFromStdTime(until)
+	return nil
+}
 
+func (c *DiffCommand) Execute() error {
 	var srcData, destData *FileData
 	var srcPtsList, destPtsList [][]Point
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
-		if srcURL != "" {
-			srcData, srcPtsList, err = readWhisperFileRemote(srcURL, src, tsNow, tsFrom, tsUntil, retID)
+		if c.SrcURL != "" {
+			srcData, srcPtsList, err = readWhisperFileRemote(c.SrcURL, c.Src, c.Now, c.From, c.Until, c.RetID)
 			if err != nil {
 				return err
 			}
 		} else {
-			srcData, srcPtsList, err = readWhisperFile(src, tsNow, tsFrom, tsUntil, retID)
+			srcData, srcPtsList, err = readWhisperFile(c.Src, c.Now, c.From, c.Until, c.RetID)
 			if err != nil {
 				return err
 			}
@@ -45,7 +83,7 @@ func Diff(src, dest string, textOut string, recursive, ignoreSrcEmpty, ignoreDes
 	})
 	eg.Go(func() error {
 		var err error
-		destData, destPtsList, err = readWhisperFile(dest, tsNow, tsFrom, tsUntil, retID)
+		destData, destPtsList, err = readWhisperFile(c.Dest, c.Now, c.From, c.Until, c.RetID)
 		if err != nil {
 			return err
 		}
@@ -59,14 +97,12 @@ func Diff(src, dest string, textOut string, recursive, ignoreSrcEmpty, ignoreDes
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 
-	// log.Printf("diff, srcPtsList.counts=%v, destPtsList.counts=%v", PointsList(srcPtsList).Counts(), PointsList(destPtsList).Counts())
-
 	srcPlDif, destPlDif := PointsList(srcPtsList).Diff(destPtsList)
 	if PointsList(srcPlDif).AllEmpty() && PointsList(destPlDif).AllEmpty() {
 		return nil
 	}
 
-	err := printDiff(textOut, srcData, destData, srcPtsList, destPtsList, srcPlDif, destPlDif, ignoreSrcEmpty, ignoreDestEmpty, showAll)
+	err := printDiff(c.TextOut, srcData, destData, srcPtsList, destPtsList, srcPlDif, destPlDif, c.IgnoreSrcEmpty, c.IgnoreDestEmpty, c.ShowAll)
 	if err != nil {
 		return err
 	}

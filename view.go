@@ -2,6 +2,7 @@ package whispertool
 
 import (
 	"bufio"
+	"flag"
 	"io"
 	"os"
 	"time"
@@ -11,17 +12,46 @@ const RetIDAll = -1
 
 var debug = os.Getenv("DEBUG") != ""
 
-func View(filename string, now, from, until time.Time, retID int, textOut string, showHeader bool) error {
-	tsNow := TimestampFromStdTime(now)
-	tsFrom := TimestampFromStdTime(from)
-	tsUntil := TimestampFromStdTime(until)
+type ViewCommand struct {
+	Filename   string
+	From       Timestamp
+	Until      Timestamp
+	Now        Timestamp
+	RetID      int
+	ShowHeader bool
+	TextOut    string
+}
 
-	d, pointsList, err := readWhisperFile(filename, tsNow, tsFrom, tsUntil, retID)
+func (c *ViewCommand) Parse(fs *flag.FlagSet, args []string) error {
+	c.Now = TimestampFromStdTime(time.Now())
+	c.Until = c.Now
+	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all)")
+	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
+	fs.BoolVar(&c.ShowHeader, "header", true, "whether or not to show header (metadata and reteions)")
+	fs.Parse(args)
+
+	if fs.NArg() != 1 {
+		return errNeedsOneFileArg
+	}
+	c.Filename = fs.Arg(0)
+
+	if c.From > c.Until {
+		return errFromIsAfterUntil
+	}
+
+	return nil
+}
+
+func (c *ViewCommand) Execute() error {
+	d, pointsList, err := readWhisperFile(c.Filename, c.Now, c.From, c.Until, c.RetID)
 	if err != nil {
 		return err
 	}
 
-	if err := printFileData(textOut, d, pointsList, showHeader); err != nil {
+	if err := printFileData(c.TextOut, d, pointsList, c.ShowHeader); err != nil {
 		return err
 	}
 	return nil

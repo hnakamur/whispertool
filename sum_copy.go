@@ -4,36 +4,28 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/url"
 	"path/filepath"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 )
 
-type SumDiffCommand struct {
-	SrcURL          string
-	SrcBase         string
-	DestBase        string
-	ItemPattern     string
-	SrcPattern      string
-	Src             string
-	Dest            string
-	From            Timestamp
-	Until           Timestamp
-	Now             Timestamp
-	RetID           int
-	TextOut         string
-	IgnoreSrcEmpty  bool
-	IgnoreDestEmpty bool
-	ShowAll         bool
-
-	Interval       time.Duration
-	IntervalOffset time.Duration
-	UntilOffset    time.Duration
+type SumCopyCommand struct {
+	SrcURL      string
+	SrcBase     string
+	DestBase    string
+	ItemPattern string
+	SrcPattern  string
+	Src         string
+	Dest        string
+	From        Timestamp
+	Until       Timestamp
+	Now         Timestamp
+	RetID       int
+	TextOut     string
 }
 
-func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
+func (c *SumCopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.SrcURL, "src-url", "", "web app URL for src")
 	fs.StringVar(&c.SrcBase, "src-base", "", "src base directory")
 	fs.StringVar(&c.ItemPattern, "item", "", "glob pattern of whisper directory")
@@ -48,14 +40,6 @@ func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
-
-	fs.BoolVar(&c.IgnoreSrcEmpty, "ignore-src-empty", false, "ignore diff when source point is empty.")
-	fs.BoolVar(&c.IgnoreDestEmpty, "ignore-dest-empty", false, "ignore diff when destination point is empty.")
-	fs.BoolVar(&c.ShowAll, "show-all", false, "print all points when diff exists.")
-
-	fs.DurationVar(&c.Interval, "interval", 0, "run interval (0 means oneshot")
-	fs.DurationVar(&c.IntervalOffset, "interval-offset", 7*time.Second, "run interval offset")
-	fs.DurationVar(&c.UntilOffset, "until-offset", 0, "until offset")
 	fs.Parse(args)
 
 	if c.ItemPattern == "" {
@@ -76,30 +60,7 @@ func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	return nil
 }
 
-func (c *SumDiffCommand) Execute() error {
-	if c.Interval == 0 {
-		err := c.sumDiffOneTime()
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-
-	for {
-		now := time.Now()
-		targetTime := now.Truncate(c.Interval).Add(c.Interval).Add(c.IntervalOffset)
-		time.Sleep(targetTime.Sub(now))
-
-		c.Now = TimestampFromStdTime(time.Now())
-		err := c.sumDiffOneTime()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (c *SumDiffCommand) sumDiffOneTime() error {
+func (c *SumCopyCommand) Execute() error {
 	t0 := time.Now()
 	fmt.Printf("time:%s\tmsg:start\n", formatTime(t0))
 	var totalItemCount int
@@ -123,7 +84,7 @@ func (c *SumDiffCommand) sumDiffOneTime() error {
 			return err
 		}
 		fmt.Printf("item:%s\n", itemRelDir)
-		err = c.sumDiffItem(itemRelDir)
+		err = c.sumCopyItem(itemRelDir)
 		if err != nil {
 			return err
 		}
@@ -131,7 +92,7 @@ func (c *SumDiffCommand) sumDiffOneTime() error {
 	return nil
 }
 
-func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
+func (c *SumCopyCommand) sumCopyItem(itemRelDir string) error {
 	srcFullPattern := filepath.Join(c.SrcBase, itemRelDir, c.SrcPattern)
 	var srcFilenames []string
 	if c.SrcURL == "" {
@@ -146,23 +107,19 @@ func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
 	}
 	destFull := filepath.Join(c.DestBase, itemRelDir, c.Dest)
 
-	until := c.Until
-	if c.UntilOffset != 0 {
-		until = c.Now.Add(-Duration(c.UntilOffset / time.Second))
-	}
-
-	var sumData, destData *FileData
-	var sumPtsList, destPtsList [][]Point
+	var destDB *Whisper
+	var sumData *FileData
+	var sumPtsList [][]Point
 	var g errgroup.Group
 	g.Go(func() error {
 		var err error
 		if c.SrcURL != "" {
-			sumData, sumPtsList, err = sumWhisperFileRemote(c.SrcURL, srcFullPattern, c.Now, c.From, until, c.RetID)
+			sumData, sumPtsList, err = sumWhisperFileRemote(c.SrcURL, srcFullPattern, c.Now, c.From, c.Until, c.RetID)
 			if err != nil {
 				return err
 			}
 		} else {
-			sumData, sumPtsList, err = sumWhisperFile(srcFilenames, c.Now, c.From, until, c.RetID)
+			sumData, sumPtsList, err = sumWhisperFile(srcFilenames, c.Now, c.From, c.Until, c.RetID)
 			if err != nil {
 				return err
 			}
@@ -171,7 +128,7 @@ func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
 	})
 	g.Go(func() error {
 		var err error
-		destData, destPtsList, err = readWhisperFile(destFull, c.Now, c.From, until, c.RetID)
+		destDB, err = OpenForWrite(destFull)
 		if err != nil {
 			return err
 		}
@@ -180,38 +137,23 @@ func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
 	if err := g.Wait(); err != nil {
 		return err
 	}
+	defer destDB.Close()
 
+	destData := destDB.fileData
 	if !Retentions(sumData.Retentions).Equal(destData.Retentions) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 
-	sumPlDif, destPlDif := PointsList(sumPtsList).Diff(destPtsList)
-	if PointsList(sumPtsList).AllEmpty() && PointsList(destPlDif).AllEmpty() {
-		return nil
+	if err := updateFileDataWithPointsList(destData, sumPtsList, c.Now); err != nil {
+		return err
 	}
 
-	err := printDiff(c.TextOut, sumData, destData, sumPtsList, destPtsList, sumPlDif, destPlDif, c.IgnoreSrcEmpty, c.IgnoreDestEmpty, c.ShowAll)
-	if err != nil {
+	if err := printFileData(c.TextOut, sumData, sumPtsList, true); err != nil {
+		return err
+	}
+
+	if err := destDB.Sync(); err != nil {
 		return err
 	}
 	return nil
-}
-
-func formatTime(t time.Time) string {
-	return t.Format(UTCTimeLayout)
-}
-
-func sumWhisperFileRemote(srcURL, srcFullPattern string, now, from, until Timestamp, retID int) (*FileData, [][]Point, error) {
-	reqURL := fmt.Sprintf("%s/sum?now=%s&pattern=%s",
-		srcURL, url.QueryEscape(now.String()), url.QueryEscape(srcFullPattern))
-	d, err := getFileDataFromRemoteHelper(reqURL)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	pointsList, err := fetchPointsList(d, now, from, until, retID)
-	if err != nil {
-		return nil, nil, err
-	}
-	return d, pointsList, nil
 }

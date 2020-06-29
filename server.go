@@ -2,12 +2,18 @@ package whispertool
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"path/filepath"
 	"time"
 )
+
+type ServerCommand struct {
+	Addr    string
+	BaseDir string
+}
 
 type app struct {
 	baseDir string
@@ -19,14 +25,22 @@ type httpError struct {
 	cause      error
 }
 
-func RunWebApp(addr, baseDir string) error {
+func (c *ServerCommand) Parse(fs *flag.FlagSet, args []string) error {
+	fs.StringVar(&c.Addr, "addr", ":8080", "listen address")
+	fs.StringVar(&c.BaseDir, "base", ".", "base directory")
+	fs.Parse(args)
+
+	return nil
+}
+
+func (c *ServerCommand) Execute() error {
 	a := &app{
-		baseDir: baseDir,
+		baseDir: c.BaseDir,
 	}
 	http.HandleFunc("/view", wrapHandler(a.handleView))
 	http.HandleFunc("/sum", wrapHandler(a.handleSum))
 	s := &http.Server{
-		Addr:           addr,
+		Addr:           c.Addr,
 		Handler:        nil,
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
