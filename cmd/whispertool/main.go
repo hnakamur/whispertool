@@ -325,6 +325,10 @@ func runSumDiffCmd(args []string) error {
 	retID := fs.Int("ret", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
 	interval := fs.Duration("interval", time.Minute, "run interval")
 	intervalOffset := fs.Duration("interval-offset", 7*time.Second, "run interval offset")
+
+	from := time.Unix(0, 0)
+	fs.Var(&utcTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+
 	untilOffset := fs.Duration("until-offset", 0, "until offset")
 	fs.Parse(args)
 
@@ -344,7 +348,7 @@ func runSumDiffCmd(args []string) error {
 		return newRequiredOptionError(fs, "dest")
 	}
 
-	return whispertool.SumDiff(*srcBase, *destBase, *item, *src, *dest, *textOut, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, *interval, *intervalOffset, *untilOffset, *retID)
+	return whispertool.SumDiff(*srcBase, *destBase, *item, *src, *dest, *textOut, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, *interval, *intervalOffset, *untilOffset, *retID, from)
 }
 
 const holeCmdUsage = `Usage: %s hole [options] src.wsp dest.wsp
