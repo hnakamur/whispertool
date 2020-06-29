@@ -55,7 +55,7 @@ func sumDiffOneTime(srcBase, destBase, itemPattern, srcPattern, dest, textOut st
 		if err != nil {
 			return err
 		}
-		//fmt.Printf("itemRel:%s\n", itemRelDir)
+		fmt.Printf("item:%s\n", itemRelDir)
 		err = sumDiffItem(srcBase, destBase, itemRelDir, srcPattern, dest, textOut, ignoreSrcEmpty, ignoreDestEmpty, showAll, untilOffset, retID, from)
 		if err != nil {
 			return err
