@@ -5,6 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -13,10 +17,11 @@ import (
 
 var ErrDiffFound = errors.New("diff found")
 
-func Diff(src, dest string, textOut string, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, now, from, until time.Time, retID int) error {
+func Diff(src, dest string, textOut string, recursive, ignoreSrcEmpty, ignoreDestEmpty, showAll bool, now, from, until time.Time, retID int, srcURL string) error {
 	if recursive {
 		return errors.New("recursive option not implemented yet")
 	}
+	log.Printf("Diff showAll=%v", showAll)
 
 	tsNow := TimestampFromStdTime(now)
 	tsFrom := TimestampFromStdTime(from)
@@ -27,9 +32,16 @@ func Diff(src, dest string, textOut string, recursive, ignoreSrcEmpty, ignoreDes
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
-		srcData, srcPtsList, err = readWhisperFile(src, tsNow, tsFrom, tsUntil, retID)
-		if err != nil {
-			return err
+		if srcURL != "" {
+			srcData, srcPtsList, err = readWhisperFileRemote(srcURL, src, tsNow, tsFrom, tsUntil, retID)
+			if err != nil {
+				return err
+			}
+		} else {
+			srcData, srcPtsList, err = readWhisperFile(src, tsNow, tsFrom, tsUntil, retID)
+			if err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -48,6 +60,8 @@ func Diff(src, dest string, textOut string, recursive, ignoreSrcEmpty, ignoreDes
 	if !Retentions(srcData.Retentions).Equal(destData.Retentions) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
+
+	// log.Printf("diff, srcPtsList.counts=%v, destPtsList.counts=%v", PointsList(srcPtsList).Counts(), PointsList(destPtsList).Counts())
 
 	srcPlDif, destPlDif := PointsList(srcPtsList).Diff(destPtsList)
 	if PointsList(srcPlDif).AllEmpty() && PointsList(destPlDif).AllEmpty() {
@@ -103,8 +117,8 @@ func printDiffTo(w io.Writer, srcData, destData *FileData, srcPtsList, destPtsLi
 					!(srcPt.Time == destPt.Time && ((ignoreSrcEmpty && srcPt.Value.IsNaN()) || (ignoreDestEmpty && destPt.Value.IsNaN()))) {
 					diff = 1
 				}
-				fmt.Fprintf(w, "retID:%d\tt:%s\tsrcVal:%s\tdestVal:%s\tdiff:%d\n",
-					retID, srcPt.Time, srcPt.Value, destPt.Value, diff)
+				fmt.Fprintf(w, "retID:%d\tt:%s\tsrcVal:%s\tdestVal:%s\tdestMinusSrc:%s\tdiff:%d\n",
+					retID, srcPt.Time, srcPt.Value, destPt.Value, destPt.Value.Diff(srcPt.Value), diff)
 			}
 		}
 	}
@@ -117,10 +131,43 @@ func printDiffTo(w io.Writer, srcData, destData *FileData, srcPtsList, destPtsLi
 			if (ignoreSrcEmpty && srcPt.Value.IsNaN()) || (ignoreDestEmpty && destPt.Value.IsNaN()) {
 				continue
 			}
-			fmt.Fprintf(w, "retID:%d\tt:%s\t\tsrcVal:%s\tdestVal:%s\n",
-				retID, srcPt.Time, srcPt.Value, destPt.Value)
+			fmt.Fprintf(w, "retID:%d\tt:%s\t\tsrcVal:%s\tdestVal:%s\tdestMinusSrc:%s\n",
+				retID, srcPt.Time, srcPt.Value, destPt.Value, destPt.Value.Diff(srcPt.Value))
 
 		}
 	}
 	return nil
+}
+
+func readWhisperFileRemote(srcURL, filename string, now, from, until Timestamp, retID int) (*FileData, [][]Point, error) {
+	reqURL := fmt.Sprintf("%s/view?now=%s&file=%s",
+		srcURL, url.QueryEscape(now.String()), url.QueryEscape(filename))
+	d, err := getFileDataFromRemoteHelper(reqURL)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	pointsList, err := fetchPointsList(d, now, from, until, retID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return d, pointsList, nil
+}
+
+func getFileDataFromRemoteHelper(reqURL string) (*FileData, error) {
+	resp, err := http.Get(reqURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	d, err := NewFileDataRead(data)
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
 }

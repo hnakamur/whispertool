@@ -33,25 +33,33 @@ func readWhisperFile(filename string, now, from, until Timestamp, retID int) (*F
 		return nil, nil, err
 	}
 
+	pointsList, err := fetchPointsList(d, now, from, until, retID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return d, pointsList, nil
+}
+
+func fetchPointsList(d *FileData, now, from, until Timestamp, retID int) ([][]Point, error) {
 	pointsList := make([][]Point, len(d.Retentions))
 	if retID == RetIDAll {
 		for i := range d.Retentions {
 			points, err := d.FetchFromArchive(i, from, until, now)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			pointsList[i] = points
 		}
 	} else if retID >= 0 && retID < len(d.Retentions) {
 		points, err := d.FetchFromArchive(retID, from, until, now)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		pointsList[retID] = points
 	} else {
-		return nil, nil, ErrRetentionIDOutOfRange
+		return nil, ErrRetentionIDOutOfRange
 	}
-	return d, pointsList, nil
+	return pointsList, nil
 }
 
 func printFileData(textOut string, d *FileData, pointsList [][]Point, showHeader bool) error {

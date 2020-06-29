@@ -337,6 +337,7 @@ func runSumDiffCmd(args []string) error {
 	}
 
 	item := fs.String("item", "", "glob pattern of whisper directory")
+	srcURL := fs.String("src-url", "", "web app URL for src")
 	srcBase := fs.String("src-base", "", "src base directory")
 	destBase := fs.String("dest-base", "", "dest base directory")
 	src := fs.String("src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
@@ -358,8 +359,8 @@ func runSumDiffCmd(args []string) error {
 	if *item == "" {
 		return newRequiredOptionError(fs, "item")
 	}
-	if *srcBase == "" {
-		return newRequiredOptionError(fs, "src-base")
+	if *srcBase == "" && *srcURL == "" {
+		return newRequiredOptionError(fs, "src-base or src-url")
 	}
 	if *destBase == "" {
 		return newRequiredOptionError(fs, "dest-base")
@@ -371,7 +372,7 @@ func runSumDiffCmd(args []string) error {
 		return newRequiredOptionError(fs, "dest")
 	}
 
-	return whispertool.SumDiff(*srcBase, *destBase, *item, *src, *dest, *textOut, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, *interval, *intervalOffset, *untilOffset, *retID, from)
+	return whispertool.SumDiff(*srcURL, *srcBase, *destBase, *item, *src, *dest, *textOut, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, *interval, *intervalOffset, *untilOffset, *retID, from)
 }
 
 const holeCmdUsage = `Usage: %s hole [options] src.wsp dest.wsp
@@ -434,6 +435,7 @@ func runDiffCmd(args []string) error {
 	textOut := fs.String("text-out", "-", "text output. empty means no output, - means stdout, other means output file.")
 	showAll := fs.Bool("show-all", false, "print all points when diff exists.")
 	retID := fs.Int("ret", whispertool.RetIDAll, "retention ID to diff (-1 is all).")
+	srcURL := fs.String("src-url", "", "web app URL for src")
 
 	now := time.Now()
 	fs.Var(&utcTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
@@ -455,7 +457,7 @@ func runDiffCmd(args []string) error {
 		return errFromIsAfterUntil
 	}
 
-	return whispertool.Diff(fs.Arg(0), fs.Arg(1), *textOut, *recursive, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, now, from, until, *retID)
+	return whispertool.Diff(fs.Arg(0), fs.Arg(1), *textOut, *recursive, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, now, from, until, *retID, *srcURL)
 }
 
 const generateCmdUsage = `Usage: %s generate [options] dest.wsp

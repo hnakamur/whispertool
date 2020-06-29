@@ -877,7 +877,14 @@ func (v Value) Add(u Value) Value {
 	if u.IsNaN() {
 		return v
 	}
-	return u + v
+	return v + u
+}
+
+func (v Value) Diff(u Value) Value {
+	if v.IsNaN() || u.IsNaN() {
+		return Value(math.NaN())
+	}
+	return v - u
 }
 
 func (pl PointsList) AllEmpty() bool {
@@ -887,6 +894,14 @@ func (pl PointsList) AllEmpty() bool {
 		}
 	}
 	return true
+}
+
+func (pl PointsList) Counts() []int {
+	counts := make([]int, len(pl))
+	for i, pts := range pl {
+		counts[i] = len(pts)
+	}
+	return counts
 }
 
 func (pl PointsList) Diff(ql [][]Point) ([][]Point, [][]Point) {
