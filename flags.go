@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+type Command interface {
+	Parse(fs *flag.FlagSet, args []string) error
+	Execute() error
+}
+
 type timestampValue struct {
 	t *Timestamp
 }

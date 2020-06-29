@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
+	"strings"
 
 	"github.com/hnakamur/whispertool"
 )
@@ -29,10 +29,6 @@ subcommands:
 Run %s <subcommand> -h to show help for subcommand.
 `
 
-func main() {
-	os.Exit(run())
-}
-
 var cmdName = filepath.Base(os.Args[0])
 
 var (
@@ -41,24 +37,58 @@ var (
 	date    string
 )
 
-type utcTimeValue struct {
-	t *time.Time
-}
+const copyCmdUsage = `Usage: {{command}} copy [options] src.wsp dest.wsp
 
-func (t utcTimeValue) String() string {
-	if t.t == nil {
-		return ""
-	}
-	return t.t.Format(whispertool.UTCTimeLayout)
-}
+options:
+`
 
-func (t utcTimeValue) Set(s string) error {
-	t2, err := time.Parse(whispertool.UTCTimeLayout, s)
-	if err != nil {
-		return err
-	}
-	*t.t = t2
-	return nil
+const viewCmdUsage = `Usage: {{command}} view [options] file.wsp
+
+options:
+`
+
+const viewRawCmdUsage = `Usage: {{command}} view-raw [options] file.wsp
+
+options:
+`
+
+const serverCmdUsage = `Usage: {{command}} server [options]
+
+options:
+`
+
+const sumCmdUsage = `Usage: {{command}} sum [options]
+
+options:
+`
+
+const sumCopyCmdUsage = `Usage: {{command}} sum-copy [options]
+
+options:
+`
+
+const sumDiffCmdUsage = `Usage: {{command}} sum-diff [options]
+
+options:
+`
+
+const holeCmdUsage = `Usage: {{command}} hole [options]
+
+options:
+`
+
+const diffCmdUsage = `Usage: {{command}} diff [options]
+
+options:
+`
+
+const generateCmdUsage = `Usage: {{command}} generate [options]
+
+options:
+`
+
+func main() {
+	os.Exit(run())
 }
 
 func run() int {
@@ -77,25 +107,25 @@ func run() int {
 	var err error
 	switch args[0] {
 	case "copy":
-		err = runCopyCmd(args[1:])
+		err = runSubcommand(args, &whispertool.CopyCommand{}, copyCmdUsage)
 	case "diff":
-		err = runDiffCmd(args[1:])
+		err = runSubcommand(args, &whispertool.DiffCommand{}, diffCmdUsage)
 	case "generate":
-		err = runGenerateCmd(args[1:])
+		err = runSubcommand(args, &whispertool.GenerateCommand{}, generateCmdUsage)
 	case "hole":
-		err = runHoleCmd(args[1:])
+		err = runSubcommand(args, &whispertool.HoleCommand{}, holeCmdUsage)
 	case "server":
-		err = runServerCmd(args[1:])
+		err = runSubcommand(args, &whispertool.ServerCommand{}, serverCmdUsage)
 	case "sum":
-		err = runSumCmd(args[1:])
+		err = runSubcommand(args, &whispertool.SumCommand{}, sumCmdUsage)
 	case "sum-copy":
-		err = runSumCopyCmd(args[1:])
+		err = runSubcommand(args, &whispertool.SumCopyCommand{}, sumCopyCmdUsage)
 	case "sum-diff":
-		err = runSumDiffCmd(args[1:])
+		err = runSubcommand(args, &whispertool.SumDiffCommand{}, sumDiffCmdUsage)
 	case "view":
-		err = runViewCmd(args[1:])
+		err = runSubcommand(args, &whispertool.ViewCommand{}, viewCmdUsage)
 	case "view-raw":
-		err = runViewRawCmd(args[1:])
+		err = runSubcommand(args, &whispertool.ViewRawCommand{}, viewRawCmdUsage)
 	case "version":
 		err = runShowVersion(args[1:])
 	default:
@@ -125,187 +155,15 @@ func runShowVersion(args []string) error {
 	return nil
 }
 
-const copyCmdUsage = `Usage: %s copy [options] src.wsp dest.wsp
-
-options:
-`
-
-func runCopyCmd(args []string) error {
-	fs := flag.NewFlagSet("copy", flag.ExitOnError)
+func runSubcommand(args []string, c whispertool.Command, usageTemplate string) error {
+	fs := flag.NewFlagSet(args[0], flag.ExitOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), copyCmdUsage, cmdName)
+		usageStr := strings.ReplaceAll(usageTemplate, "{{command}}", cmdName)
+		fmt.Fprintf(fs.Output(), "%s", usageStr)
 		fs.PrintDefaults()
 	}
 
-	var c whispertool.CopyCommand
-	if err := c.Parse(fs, args); err != nil {
-		return err
-	}
-	return c.Execute()
-}
-
-const viewCmdUsage = `Usage: %s view [options] file.wsp
-`
-
-func runViewCmd(args []string) error {
-	fs := flag.NewFlagSet("view", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), viewCmdUsage, cmdName)
-		fs.PrintDefaults()
-	}
-
-	var c whispertool.ViewCommand
-	if err := c.Parse(fs, args); err != nil {
-		return err
-	}
-	return c.Execute()
-}
-
-const viewRawCmdUsage = `Usage: %s view-raw [options] file.wsp
-`
-
-func runViewRawCmd(args []string) error {
-	fs := flag.NewFlagSet("view-raw", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), viewRawCmdUsage, cmdName)
-		fs.PrintDefaults()
-	}
-
-	var c whispertool.ViewRawCommand
-	if err := c.Parse(fs, args); err != nil {
-		return err
-	}
-	return c.Execute()
-}
-
-const serverCmdUsage = `Usage: %s server [options]
-
-options:
-`
-
-func runServerCmd(args []string) error {
-	fs := flag.NewFlagSet("server", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), serverCmdUsage, cmdName)
-		fs.PrintDefaults()
-	}
-
-	var c whispertool.ServerCommand
-	if err := c.Parse(fs, args); err != nil {
-		return err
-	}
-	return c.Execute()
-}
-
-const sumCmdUsage = `Usage: %s sum [options]
-
-options:
-`
-
-func runSumCmd(args []string) error {
-	fs := flag.NewFlagSet("sum", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), sumCmdUsage, cmdName, cmdName)
-		fs.PrintDefaults()
-	}
-
-	var c whispertool.SumCommand
-	if err := c.Parse(fs, args); err != nil {
-		return err
-	}
-	return c.Execute()
-}
-
-const sumCopyCmdUsage = `Usage: %s sum-copy [options]
-
-options:
-`
-
-func runSumCopyCmd(args []string) error {
-	fs := flag.NewFlagSet("sum-copy", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), sumCopyCmdUsage, cmdName)
-		fs.PrintDefaults()
-	}
-
-	var c whispertool.SumCopyCommand
-	if err := c.Parse(fs, args); err != nil {
-		return err
-	}
-	return c.Execute()
-}
-
-const sumDiffCmdUsage = `Usage: %s sum-diff [options]
-
-options:
-`
-
-func runSumDiffCmd(args []string) error {
-	fs := flag.NewFlagSet("sum-diff", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), sumDiffCmdUsage, cmdName)
-		fs.PrintDefaults()
-	}
-
-	var c whispertool.SumDiffCommand
-	if err := c.Parse(fs, args); err != nil {
-		return err
-	}
-	return c.Execute()
-}
-
-const holeCmdUsage = `Usage: %s hole [options]
-
-options:
-`
-
-func runHoleCmd(args []string) error {
-	fs := flag.NewFlagSet("hole", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), holeCmdUsage, cmdName)
-		fs.PrintDefaults()
-	}
-
-	var c whispertool.HoleCommand
-	if err := c.Parse(fs, args); err != nil {
-		return err
-	}
-	return c.Execute()
-}
-
-const diffCmdUsage = `Usage: %s diff [options]
-
-options:
-`
-
-func runDiffCmd(args []string) error {
-	fs := flag.NewFlagSet("diff", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), diffCmdUsage, cmdName)
-		fs.PrintDefaults()
-	}
-
-	var c whispertool.DiffCommand
-	if err := c.Parse(fs, args); err != nil {
-		return err
-	}
-	return c.Execute()
-}
-
-const generateCmdUsage = `Usage: %s generate [options]
-
-options:
-`
-
-func runGenerateCmd(args []string) error {
-	fs := flag.NewFlagSet("generate", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), generateCmdUsage, cmdName)
-		fs.PrintDefaults()
-	}
-
-	var c whispertool.DiffCommand
-	if err := c.Parse(fs, args); err != nil {
+	if err := c.Parse(fs, args[1:]); err != nil {
 		return err
 	}
 	return c.Execute()
