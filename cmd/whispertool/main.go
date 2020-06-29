@@ -38,6 +38,7 @@ subcommands:
   hole                Copy whisper file and make some holes (empty points) in dest file.
   generate            Generate random whisper file.
   merge               Update empty points with value from src whisper file.
+  server              Run web server to respond view and sum query.
   sum                 Sum value of whisper files.
   sum-diff            Sum value of whisper files and compare to another whisper file.
   view                View content of whisper file.
@@ -122,6 +123,8 @@ func run() int {
 		err = runHoleCmd(args[1:])
 	case "merge":
 		err = runMergeCmd(args[1:])
+	case "server":
+		err = runServerCmd(args[1:])
 	case "sum":
 		err = runSumCmd(args[1:])
 	case "sum-diff":
@@ -261,6 +264,26 @@ func runMergeCmd(args []string) error {
 	}
 
 	return whispertool.Merge(fs.Arg(0), fs.Arg(1), *recursive, now, from, until)
+}
+
+const serverCmdUsage = `Usage: %s server [options]
+
+options:
+`
+
+func runServerCmd(args []string) error {
+	fs := flag.NewFlagSet("server", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), serverCmdUsage, cmdName)
+		fs.PrintDefaults()
+	}
+
+	addr := fs.String("addr", ":8080", "listen address")
+	baseDir := fs.String("base", ".", "base directory")
+
+	fs.Parse(args)
+
+	return whispertool.RunWebApp(*addr, *baseDir)
 }
 
 const sumCmdUsage = `Usage: %s sum [options] src.wsp dest.wsp
