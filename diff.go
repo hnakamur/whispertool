@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,7 +20,6 @@ func Diff(src, dest string, textOut string, recursive, ignoreSrcEmpty, ignoreDes
 	if recursive {
 		return errors.New("recursive option not implemented yet")
 	}
-	log.Printf("Diff showAll=%v", showAll)
 
 	tsNow := TimestampFromStdTime(now)
 	tsFrom := TimestampFromStdTime(from)

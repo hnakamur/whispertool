@@ -34,10 +34,10 @@ var errFromIsAfterUntil = errors.New("from time must not be after until time")
 const globalUsage = `Usage: %s <subcommand> [options]
 
 subcommands:
+  copy                Copy points from src to dest whisper file.
   diff                Show diff from src to dest whisper files.
   hole                Copy whisper file and make some holes (empty points) in dest file.
   generate            Generate random whisper file.
-  merge               Update empty points with value from src whisper file.
   server              Run web server to respond view and sum query.
   sum                 Sum value of whisper files.
   sum-diff            Sum value of whisper files and compare to another whisper file.
@@ -115,14 +115,14 @@ func run() int {
 
 	var err error
 	switch args[0] {
+	case "copy":
+		err = runCopyCmd(args[1:])
 	case "diff":
 		err = runDiffCmd(args[1:])
 	case "generate":
 		err = runGenerateCmd(args[1:])
 	case "hole":
 		err = runHoleCmd(args[1:])
-	case "merge":
-		err = runMergeCmd(args[1:])
 	case "server":
 		err = runServerCmd(args[1:])
 	case "sum":
@@ -160,6 +160,48 @@ func runShowVersion(args []string) error {
 	fmt.Printf("Commit:  %s\n", commit)
 	fmt.Printf("Date:    %s\n", date)
 	return nil
+}
+
+const copyCmdUsage = `Usage: %s copy [options] src.wsp dest.wsp
+       %s copy -r [options] srcDir destDir
+
+options:
+`
+
+func runCopyCmd(args []string) error {
+	fs := flag.NewFlagSet("copy", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), copyCmdUsage, cmdName, cmdName)
+		fs.PrintDefaults()
+	}
+
+	recursive := fs.Bool("r", false, "copy files recursively.")
+	srcURL := fs.String("src-url", "", "web app URL for src")
+	textOut := fs.String("text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
+
+	now := time.Now()
+	fs.Var(&utcTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
+
+	from := time.Unix(0, 0)
+	fs.Var(&utcTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
+
+	until := now
+	fs.Var(&utcTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+
+	retID := fs.Int("ret", whispertool.RetIDAll, "retention ID to print (-1 for all retentions)")
+	fs.Parse(args)
+
+	if fs.NArg() != 2 {
+		if *recursive {
+			return errNeedsSrcAndDestDirsArg
+		}
+		return errNeedsSrcAndDestFilesArg
+	}
+	if from.After(until) {
+		return errFromIsAfterUntil
+	}
+
+	return whispertool.Copy(*srcURL, fs.Arg(0), fs.Arg(1), *textOut, *recursive, now, from, until, *retID)
 }
 
 const viewCmdUsage = `Usage: %s view [options] file.wsp
@@ -226,44 +268,6 @@ func runViewRawCmd(args []string) error {
 	}
 
 	return whispertool.ViewRaw(fs.Arg(0), from, until, *retID, *textOut, *showHeader, *sortsByTime)
-}
-
-const mergeCmdUsage = `Usage: %s merge [options] src.wsp dest.wsp
-       %s merge [options] srcDir destDir
-
-options:
-`
-
-func runMergeCmd(args []string) error {
-	fs := flag.NewFlagSet("merge", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), mergeCmdUsage, cmdName, cmdName)
-		fs.PrintDefaults()
-	}
-
-	now := time.Now()
-	fs.Var(&utcTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
-
-	from := time.Unix(0, 0)
-	fs.Var(&utcTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
-
-	until := now
-	fs.Var(&utcTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
-
-	recursive := fs.Bool("r", false, "merge files recursively.")
-	fs.Parse(args)
-
-	if fs.NArg() != 2 {
-		if *recursive {
-			return errNeedsSrcAndDestDirsArg
-		}
-		return errNeedsSrcAndDestFilesArg
-	}
-	if from.After(until) {
-		return errFromIsAfterUntil
-	}
-
-	return whispertool.Merge(fs.Arg(0), fs.Arg(1), *recursive, now, from, until)
 }
 
 const serverCmdUsage = `Usage: %s server [options]

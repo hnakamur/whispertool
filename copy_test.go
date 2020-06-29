@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestMerge(t *testing.T) {
+func TestCopy(t *testing.T) {
 	//	tests := []struct {
 	//		name      string
 	//		fromFn    func(now time.Time) time.Time
