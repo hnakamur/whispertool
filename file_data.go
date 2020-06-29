@@ -429,6 +429,11 @@ func (d *FileData) PrintHeader(w io.Writer) error {
 	return nil
 }
 
+// Bytes returns data for whole file.
+func (d *FileData) Bytes() []byte {
+	return d.buf
+}
+
 func (pp PointsList) Print(w io.Writer) error {
 	for i, points := range pp {
 		for _, p := range points {
