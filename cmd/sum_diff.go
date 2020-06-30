@@ -144,18 +144,18 @@ func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
 		until = c.Now.Add(-whispertool.Duration(c.UntilOffset / time.Second))
 	}
 
-	var sumData, destData *whispertool.FileData
+	var sumDB, destDB *whispertool.Whisper
 	var sumPtsList, destPtsList [][]whispertool.Point
 	var g errgroup.Group
 	g.Go(func() error {
 		var err error
 		if c.SrcURL != "" {
-			sumData, sumPtsList, err = sumWhisperFileRemote(c.SrcURL, srcFullPattern, c.RetID, c.From, until, c.Now)
+			sumDB, sumPtsList, err = sumWhisperFileRemote(c.SrcURL, srcFullPattern, c.RetID, c.From, until, c.Now)
 			if err != nil {
 				return err
 			}
 		} else {
-			sumData, sumPtsList, err = sumWhisperFile(srcFilenames, c.RetID, c.From, until, c.Now)
+			sumDB, sumPtsList, err = sumWhisperFile(srcFilenames, c.RetID, c.From, until, c.Now)
 			if err != nil {
 				return err
 			}
@@ -164,7 +164,7 @@ func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
 	})
 	g.Go(func() error {
 		var err error
-		destData, destPtsList, err = readWhisperFile(destFull, c.RetID, c.From, until, c.Now)
+		destDB, destPtsList, err = readWhisperFile(destFull, c.RetID, c.From, until, c.Now)
 		if err != nil {
 			return err
 		}
@@ -174,7 +174,7 @@ func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
 		return err
 	}
 
-	if !whispertool.Retentions(sumData.Retentions()).Equal(destData.Retentions()) {
+	if !whispertool.Retentions(sumDB.Retentions()).Equal(destDB.Retentions()) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 
@@ -183,7 +183,7 @@ func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
 		return nil
 	}
 
-	err := printDiff(c.TextOut, sumData, destData, sumPtsList, destPtsList, sumPlDif, destPlDif)
+	err := printDiff(c.TextOut, sumDB, destDB, sumPtsList, destPtsList, sumPlDif, destPlDif)
 	if err != nil {
 		return err
 	}
@@ -194,17 +194,17 @@ func formatTime(t time.Time) string {
 	return t.Format(whispertool.UTCTimeLayout)
 }
 
-func sumWhisperFileRemote(srcURL, srcFullPattern string, retID int, from, until, now whispertool.Timestamp) (*whispertool.FileData, [][]whispertool.Point, error) {
+func sumWhisperFileRemote(srcURL, srcFullPattern string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, [][]whispertool.Point, error) {
 	reqURL := fmt.Sprintf("%s/sum?now=%s&pattern=%s",
 		srcURL, url.QueryEscape(now.String()), url.QueryEscape(srcFullPattern))
-	d, err := getFileDataFromRemoteHelper(reqURL)
+	db, err := getFileDataFromRemote(reqURL)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	pointsList, err := fetchPointsList(d, retID, from, until, now)
+	pointsList, err := fetchPointsList(db, retID, from, until, now)
 	if err != nil {
 		return nil, nil, err
 	}
-	return d, pointsList, nil
+	return db, pointsList, nil
 }

@@ -48,19 +48,18 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *CopyCommand) Execute() error {
-	var destDB *whispertool.Whisper
-	var srcData *whispertool.FileData
+	var srcDB, destDB *whispertool.Whisper
 	var srcPtsList [][]whispertool.Point
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
 		if c.SrcURL != "" {
-			srcData, srcPtsList, err = readWhisperFileRemote(c.SrcURL, c.Src, c.RetID, c.From, c.Until, c.Now)
+			srcDB, srcPtsList, err = readWhisperFileRemote(c.SrcURL, c.Src, c.RetID, c.From, c.Until, c.Now)
 			if err != nil {
 				return err
 			}
 		} else {
-			srcData, srcPtsList, err = readWhisperFile(c.Src, c.RetID, c.From, c.Until, c.Now)
+			srcDB, srcPtsList, err = readWhisperFile(c.Src, c.RetID, c.From, c.Until, c.Now)
 			if err != nil {
 				return err
 			}
@@ -69,7 +68,7 @@ func (c *CopyCommand) Execute() error {
 	})
 	eg.Go(func() error {
 		var err error
-		destDB, err = whispertool.OpenForWrite(c.Dest)
+		destDB, err = whispertool.Open(c.Dest)
 		if err != nil {
 			return err
 		}
@@ -80,16 +79,15 @@ func (c *CopyCommand) Execute() error {
 	}
 	defer destDB.Close()
 
-	destData := destDB.FileData()
-	if !whispertool.Retentions(srcData.Retentions()).Equal(destData.Retentions()) {
+	if !whispertool.Retentions(srcDB.Retentions()).Equal(destDB.Retentions()) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 
-	if err := updateFileDataWithPointsList(destData, srcPtsList, c.Now); err != nil {
+	if err := updateFileDataWithPointsList(destDB, srcPtsList, c.Now); err != nil {
 		return err
 	}
 
-	if err := printFileData(c.TextOut, srcData, srcPtsList, true); err != nil {
+	if err := printFileData(c.TextOut, srcDB, srcPtsList, true); err != nil {
 		return err
 	}
 

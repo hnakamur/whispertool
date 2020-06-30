@@ -56,27 +56,27 @@ func (c *HoleCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *HoleCommand) Execute() error {
-	srcData, srcPtsList, err := readWhisperFile(c.Src, RetIDAll, c.From, c.Until, c.Now)
+	srcDB, srcPtsList, err := readWhisperFile(c.Src, RetIDAll, c.From, c.Until, c.Now)
 	if err != nil {
 		return err
 	}
 
 	rnd := rand.New(rand.NewSource(newRandSeed()))
-	destPtsList := emptyRandomPointsList(srcPtsList, rnd, c.EmptyRate, c.From, c.Until, srcData.Retentions())
-	destData, err := whispertool.NewFileData(srcData.Retentions(), srcData.AggregationMethod(), srcData.XFilesFactor())
+	destPtsList := emptyRandomPointsList(srcPtsList, rnd, c.EmptyRate, c.From, c.Until, srcDB.Retentions())
+	destDB, err := whispertool.Create(c.Dest, srcDB.Retentions(), srcDB.AggregationMethod(), srcDB.XFilesFactor())
 	if err != nil {
 		return err
 	}
 
-	if err := updateFileDataWithPointsList(destData, destPtsList, c.Now); err != nil {
+	if err := updateFileDataWithPointsList(destDB, destPtsList, c.Now); err != nil {
 		return err
 	}
 
-	if err = printFileData(c.TextOut, destData, destPtsList, true); err != nil {
+	if err = printFileData(c.TextOut, destDB, destPtsList, true); err != nil {
 		return err
 	}
 
-	if err := whispertool.WriteFile(c.Dest, destData, c.Perm); err != nil {
+	if err := destDB.Sync(); err != nil {
 		return err
 	}
 	return nil

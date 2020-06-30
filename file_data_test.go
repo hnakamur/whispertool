@@ -122,7 +122,7 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			d, err := NewFileData(retentions, Sum, 0)
+			d, err := newFileData(retentions, Sum, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -279,7 +279,7 @@ func randomValWithHighSum(t Timestamp, rnd *rand.Rand, highRndMax int, r, highRe
 	return v + v2
 }
 
-func updateFileDataWithPointsList(d *FileData, pointsList [][]Point, now Timestamp) error {
+func updateFileDataWithPointsList(d *fileData, pointsList [][]Point, now Timestamp) error {
 	for retID := range d.Retentions() {
 		if err := d.UpdatePointsForArchive(retID, pointsList[retID], now); err != nil {
 			return err
