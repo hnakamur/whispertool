@@ -5,16 +5,16 @@ import (
 	"unsafe"
 )
 
-type BufferPool struct {
+type bufferPool struct {
 	bufferSize int
 	pool       sync.Pool
 }
 
-func NewBufferPool(bufferSize int) *BufferPool {
+func newBufferPool(bufferSize int) *bufferPool {
 	if uintptr(bufferSize) < unsafe.Sizeof(uint64(0)) {
 		panic("bufferSize must not be smaller than 8")
 	}
-	return &BufferPool{
+	return &bufferPool{
 		bufferSize: bufferSize,
 		pool: sync.Pool{
 			New: func() interface{} {
@@ -24,15 +24,15 @@ func NewBufferPool(bufferSize int) *BufferPool {
 	}
 }
 
-func (p *BufferPool) BufferSize() int {
+func (p *bufferPool) BufferSize() int {
 	return p.bufferSize
 }
 
-func (p *BufferPool) Get() []byte {
+func (p *bufferPool) Get() []byte {
 	return p.pool.Get().([]byte)
 }
 
-func (p *BufferPool) Put(b []byte) {
+func (p *bufferPool) Put(b []byte) {
 	if cap(b) != p.bufferSize {
 		panic("wrong buffer capacity")
 	}
