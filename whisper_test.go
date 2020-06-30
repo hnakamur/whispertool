@@ -12,76 +12,6 @@ import (
 	"github.com/willf/bitset"
 )
 
-func TestWhisper(t *testing.T) {
-	//	w, err := Open("sv01.wsp", NewBufferPool(os.Getpagesize()))
-	//	if err != nil {
-	//		t.Fatal(err)
-	//	}
-	//	defer w.Close()
-	//
-	//	if err = w.readPagesIfNeeded(7, 8); err != nil {
-	//		t.Fatal(err)
-	//	}
-	//
-	//	if err = w.readPagesIfNeeded(3, 3); err != nil {
-	//		t.Fatal(err)
-	//	}
-	//
-	//	if err = w.readPagesIfNeeded(2, 5); err != nil {
-	//		t.Fatal(err)
-	//	}
-}
-
-func TestParseRetentions(t *testing.T) {
-	//	testCases := []struct {
-	//		input   string
-	//		want    []Retention
-	//		wantErr bool
-	//	}{
-	//		{
-	//			input: "1m:2h",
-	//			want: []Retention{
-	//				{SecondsPerPoint: Minute, NumberOfPoints: 120},
-	//			},
-	//			wantErr: false,
-	//		},
-	//		{
-	//			input: "1m:2h,1h:2d",
-	//			want: []Retention{
-	//				{SecondsPerPoint: Minute, NumberOfPoints: 120},
-	//				{SecondsPerPoint: Hour, NumberOfPoints: 48},
-	//			},
-	//			wantErr: false,
-	//		},
-	//		{
-	//			input: "1m:2h,1h:2d,1d:32d",
-	//			want: []Retention{
-	//				{SecondsPerPoint: Minute, NumberOfPoints: 120},
-	//				{SecondsPerPoint: Hour, NumberOfPoints: 48},
-	//				{SecondsPerPoint: Day, NumberOfPoints: 32},
-	//			},
-	//			wantErr: false,
-	//		},
-	//		{input: "3m:5m", want: nil, wantErr: true},
-	//		{input: "1h:1m", want: nil, wantErr: true},
-	//		{input: "", want: nil, wantErr: true},
-	//	}
-	//	for _, tc := range testCases {
-	//		rr, err := ParseRetentions(tc.input)
-	//		if gotErr := err != nil; gotErr != tc.wantErr {
-	//			t.Errorf("unexpected err for input %q, gotErr=%v, wantErr=%v",
-	//				tc.input, gotErr, tc.wantErr)
-	//		}
-	//
-	//		gotStr := Retentions(rr).String()
-	//		wantStr := Retentions(tc.want).String()
-	//		if gotStr != wantStr {
-	//			t.Errorf("retentions unmatch for input %q, got=%s, want=%s",
-	//				tc.input, gotStr, wantStr)
-	//		}
-	//	}
-}
-
 func TestDirtyPageRanges(t *testing.T) {
 	b := bitset.New(9)
 	b.Set(0).Set(1).Set(3).Set(6).Set(7).Set(8)
@@ -192,7 +122,7 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			d, err := newFileData(retentions, Sum, 0)
+			db, err := Create("", retentions, Sum, 0, WithInMemory())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -202,13 +132,13 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 			tsUntil := tsNow
 			const randMax = 100
 			pointsList := randomPointsList(retentions, rnd, randMax, tsUntil, tsNow)
-			if err := updateFileDataWithPointsList(d, pointsList, tsNow); err != nil {
+			if err := updateFileDataWithPointsList(db, pointsList, tsNow); err != nil {
 				t.Fatal(err)
 			}
 
-			gotPointsList := make([]Points, len(d.retentions))
-			for retID := range d.retentions {
-				gotPointsList[retID] = d.GetAllRawUnsortedPoints(retID)
+			gotPointsList := make([]Points, len(db.Retentions()))
+			for retID := range db.Retentions() {
+				gotPointsList[retID] = db.GetAllRawUnsortedPoints(retID)
 			}
 			sortPointsListByTime(gotPointsList)
 
@@ -225,16 +155,16 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 			}
 
 			retID := 0
-			r := &d.retentions[retID]
+			r := &db.Retentions()[retID]
 			tsFrom := tsNow.Truncate(Minute).Add(-5 * Minute)
 			tsUntil = tsFrom.Add(Minute)
-			gotPoints, err := d.FetchFromArchive(retID, tsFrom, tsUntil, tsNow)
+			gotPoints, err := db.FetchFromArchive(retID, tsFrom, tsUntil, tsNow)
 			if err != nil {
 				t.Fatal(err)
 			}
 			wantPoints := filterPointsByTimeRange(r, pointsList[retID], tsFrom, tsUntil)
-			sort.Stable(Points(wantPoints))
-			wantPtsDif, gotPtsDif := Points(wantPoints).Diff(gotPoints)
+			sort.Stable(wantPoints)
+			wantPtsDif, gotPtsDif := wantPoints.Diff(gotPoints)
 			if len(gotPtsDif) != len(wantPtsDif) {
 				t.Errorf("points count unmatch for retention %d, now=%s, from=%s, until=%s, got=%d, want=%d", retID, tsNow, tsFrom, tsUntil, len(gotPtsDif), len(wantPtsDif))
 			}
@@ -246,13 +176,13 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 
 			tsFrom = tsNow.Add(-5 * Minute)
 			tsUntil = tsFrom.Add(Minute)
-			gotPoints, err = d.FetchFromArchive(retID, tsFrom, tsUntil, tsNow)
+			gotPoints, err = db.FetchFromArchive(retID, tsFrom, tsUntil, tsNow)
 			if err != nil {
 				t.Fatal(err)
 			}
 			wantPoints = filterPointsByTimeRange(r, pointsList[retID], tsFrom, tsUntil)
-			sort.Stable(Points(wantPoints))
-			wantPtsDif, gotPtsDif = Points(wantPoints).Diff(gotPoints)
+			sort.Stable(wantPoints)
+			wantPtsDif, gotPtsDif = wantPoints.Diff(gotPoints)
 			if len(gotPtsDif) != len(wantPtsDif) {
 				t.Errorf("points count unmatch for retention %d, now=%s, from=%s, until=%s, got=%d, want=%d", retID, tsNow, tsFrom, tsUntil, len(gotPtsDif), len(wantPtsDif))
 			}
@@ -349,9 +279,9 @@ func randomValWithHighSum(t Timestamp, rnd *rand.Rand, highRndMax int, r, highRe
 	return v + v2
 }
 
-func updateFileDataWithPointsList(d *fileData, pointsList []Points, now Timestamp) error {
-	for retID := range d.Retentions() {
-		if err := d.UpdatePointsForArchive(retID, pointsList[retID], now); err != nil {
+func updateFileDataWithPointsList(db *Whisper, pointsList []Points, now Timestamp) error {
+	for retID := range db.Retentions() {
+		if err := db.UpdatePointsForArchive(retID, pointsList[retID], now); err != nil {
 			return err
 		}
 	}
@@ -360,11 +290,11 @@ func updateFileDataWithPointsList(d *fileData, pointsList []Points, now Timestam
 
 func sortPointsListByTime(pointsList []Points) {
 	for _, points := range pointsList {
-		sort.Stable(Points(points))
+		sort.Stable(points)
 	}
 }
 
-func filterPointsByTimeRange(r *Retention, points []Point, from, until Timestamp) []Point {
+func filterPointsByTimeRange(r *Retention, points []Point, from, until Timestamp) Points {
 	if until == from {
 		until = until.Add(r.SecondsPerPoint())
 	}

@@ -17,15 +17,52 @@ import (
 
 // Whisper represents a Whisper database file.
 type Whisper struct {
-	file     *os.File
-	fileData *fileData
+	meta       meta
+	retentions []Retention
+
+	buf             []byte
+	dirtyPageBitSet *bitset.BitSet
+
+	file *os.File
 
 	openFileFlag int
 	flock        bool
 	perm         os.FileMode
 	inMemory     bool
-	data         []byte
 }
+
+type fileData struct {
+	meta       meta
+	retentions []Retention
+
+	buf             []byte
+	dirtyPageBitSet *bitset.BitSet
+}
+
+type meta struct {
+	aggregationMethod AggregationMethod
+	maxRetention      Duration
+	xFilesFactor      float32
+	retentionCount    uint32
+}
+
+type pageRange struct {
+	start int
+	end   int
+}
+
+const (
+	uint32Size    = 4
+	uint64Size    = 8
+	float32Size   = 4
+	float64Size   = 8
+	metaSize      = 3*uint32Size + float32Size
+	retentionSize = 3 * uint32Size
+	pointSize     = uint32Size + float64Size
+)
+
+var pageSize = os.Getpagesize()
+var ErrRetentionIDOutOfRange = errors.New("retention ID out of range")
 
 // Option is the type for options for creating or opening a whisper file.
 type Option func(*Whisper)
@@ -52,7 +89,7 @@ func WithFlock() Option {
 // This options is useful for only for Create.
 func WithRawData(data []byte) Option {
 	return func(w *Whisper) {
-		w.data = data
+		w.buf = data
 	}
 }
 
@@ -93,19 +130,15 @@ func Create(filename string, retentions []Retention, aggregationMethod Aggregati
 		}
 	}
 
-	var err error
-	if w.data != nil {
-		d := &fileData{buf: w.data}
-		if err := d.readMetaAndRetentions(); err != nil {
+	if w.buf != nil {
+		if err := w.readMetaAndRetentions(); err != nil {
 			return nil, err
 		}
-		d.setPagesDirtyByOffsetRange(0, uint32(len(d.buf)))
-		w.fileData = d
+		w.setPagesDirtyByOffsetRange(0, uint32(len(w.buf)))
 	} else {
-		w.fileData, err = newFileData(retentions, aggregationMethod, xFilesFactor)
-	}
-	if err != nil {
-		return nil, err
+		if err := w.initNewBuf(retentions, aggregationMethod, xFilesFactor); err != nil {
+			return nil, err
+		}
 	}
 	return w, nil
 }
@@ -137,11 +170,9 @@ func Open(filename string, opts ...Option) (*Whisper, error) {
 		return nil, err
 	}
 
-	fileData, err := newFileDataRead(buf)
-	if err != nil {
+	if err := w.readMetaAndRetentions(); err != nil {
 		return nil, err
 	}
-	w.fileData = fileData
 
 	return w, nil
 }
@@ -172,7 +203,7 @@ func (w *Whisper) Sync() error {
 		return nil
 	}
 
-	if err := w.fileData.FlushTo(w.file); err != nil {
+	if err := w.FlushTo(w.file); err != nil {
 		return err
 	}
 	if err := w.file.Sync(); err != nil {
@@ -192,251 +223,176 @@ func (w *Whisper) Close() error {
 }
 
 // AggregationMethod returns the aggregation method of the whisper file.
-func (w *Whisper) AggregationMethod() AggregationMethod { return w.fileData.meta.aggregationMethod }
+func (w *Whisper) AggregationMethod() AggregationMethod { return w.meta.aggregationMethod }
 
 // XFilesFactor returns the xFilesFactor of the whisper file.
-func (w *Whisper) XFilesFactor() float32 { return w.fileData.meta.xFilesFactor }
+func (w *Whisper) XFilesFactor() float32 { return w.meta.xFilesFactor }
 
 // Retentions returns the retentions of the whisper file.
-func (w *Whisper) Retentions() Retentions { return w.fileData.retentions }
+func (w *Whisper) Retentions() Retentions { return w.retentions }
 
 // RawData returns data for whole file.
 // Note the byte slice returned is the internal work buffer,
 // without cloning in favor of performance.
 // It is caller's responsibility to not modify the data.
 func (w *Whisper) RawData() []byte {
-	return w.fileData.buf
+	return w.buf
 }
 
-// FetchFromArchive fetches point in the specified archive and the time range.
-// If now is zero, the current time is used.
-func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) ([]Point, error) {
-	return w.fileData.FetchFromArchive(retentionID, from, until, now)
-}
-
-// GetAllRawUnsortedPoints returns the raw unsorted points.
-// This is provided for the debugging or investination purpose.
-func (w *Whisper) GetAllRawUnsortedPoints(retentionID int) []Point {
-	return w.fileData.GetAllRawUnsortedPoints(retentionID)
-}
-
-// UpdatePointForArchive updates one point in the specified archive.
-func (w *Whisper) UpdatePointForArchive(retentionID int, t Timestamp, v Value, now Timestamp) error {
-	return w.fileData.UpdatePointForArchive(retentionID, t, v, now)
-}
-
-// UpdatePointForArchive updates points in the specified archive.
-func (w *Whisper) UpdatePointsForArchive(retentionID int, points []Point, now Timestamp) error {
-	return w.fileData.UpdatePointsForArchive(retentionID, points, now)
-}
-
-// PrintHeader prints the header information to the writer in LTSV format [1].
-// [1] Labeled Tab-separated Values http://ltsv.org/
-func (w *Whisper) PrintHeader(wr io.Writer) error {
-	return w.fileData.PrintHeader(wr)
-}
-
-type fileData struct {
-	meta       meta
-	retentions []Retention
-
-	buf             []byte
-	dirtyPageBitSet *bitset.BitSet
-}
-
-type meta struct {
-	aggregationMethod AggregationMethod
-	maxRetention      Duration
-	xFilesFactor      float32
-	retentionCount    uint32
-}
-
-type pageRange struct {
-	start int
-	end   int
-}
-
-const (
-	uint32Size    = 4
-	uint64Size    = 8
-	float32Size   = 4
-	float64Size   = 8
-	metaSize      = 3*uint32Size + float32Size
-	retentionSize = 3 * uint32Size
-	pointSize     = uint32Size + float64Size
-)
-
-var pageSize = os.Getpagesize()
-var ErrRetentionIDOutOfRange = errors.New("retention ID out of range")
-
-func newFileData(retentions []Retention, aggregationMethod AggregationMethod, xFilesFactor float32) (*fileData, error) {
+func (w *Whisper) initNewBuf(retentions []Retention, aggregationMethod AggregationMethod, xFilesFactor float32) error {
 	m := meta{
 		aggregationMethod: aggregationMethod,
 		xFilesFactor:      xFilesFactor,
 	}
 	if err := validateMetaAndRetentions(m, retentions); err != nil {
-		return nil, err
+		return err
 	}
-	d := &fileData{
-		meta:       m,
-		retentions: retentions,
-	}
-	d.fillDerivedValuesInHeader()
-	d.buf = make([]byte, d.fileSizeFromHeader())
-	d.setPagesDirtyByOffsetRange(0, uint32(len(d.buf)))
-	d.putMeta()
-	d.putRetentions()
-	return d, nil
+	w.meta = m
+	w.retentions = retentions
+	w.fillDerivedValuesInHeader()
+	w.buf = make([]byte, w.fileSizeFromHeader())
+	w.setPagesDirtyByOffsetRange(0, uint32(len(w.buf)))
+	w.putMeta()
+	w.putRetentions()
+	return nil
 }
 
-func newFileDataRead(data []byte) (*fileData, error) {
-	d := &fileData{buf: data}
-	if err := d.readMetaAndRetentions(); err != nil {
-		return nil, err
-	}
-	return d, nil
-}
-
-func (d *fileData) AggregationMethod() AggregationMethod { return d.meta.aggregationMethod }
-func (d *fileData) XFilesFactor() float32                { return d.meta.xFilesFactor }
-func (d *fileData) Retentions() []Retention              { return d.retentions }
-
-func (d *fileData) readMetaAndRetentions() error {
+func (w *Whisper) readMetaAndRetentions() error {
 	expectedSize := metaSize
-	if len(d.buf) < expectedSize {
+	if len(w.buf) < expectedSize {
 		return io.ErrUnexpectedEOF
 	}
 
-	d.meta.aggregationMethod = AggregationMethod(d.uint32At(0))
-	d.meta.maxRetention = Duration(d.uint32At(uint32Size))
-	d.meta.xFilesFactor = d.float32At(2 * uint32Size)
+	w.meta.aggregationMethod = AggregationMethod(w.uint32At(0))
+	w.meta.maxRetention = Duration(w.uint32At(uint32Size))
+	w.meta.xFilesFactor = w.float32At(2 * uint32Size)
 
-	d.meta.retentionCount = d.uint32At(3 * uint32Size)
-	if d.meta.retentionCount == 0 {
+	w.meta.retentionCount = w.uint32At(3 * uint32Size)
+	if w.meta.retentionCount == 0 {
 		return errors.New("retention count must not be zero")
 	}
 
-	expectedSize += int(d.meta.retentionCount) * retentionSize
-	if len(d.buf) < expectedSize {
+	expectedSize += int(w.meta.retentionCount) * retentionSize
+	if len(w.buf) < expectedSize {
 		return io.ErrUnexpectedEOF
 	}
 
-	d.retentions = make([]Retention, d.meta.retentionCount)
+	w.retentions = make([]Retention, w.meta.retentionCount)
 	off := uint32(metaSize)
-	for i := 0; i < int(d.meta.retentionCount); i++ {
-		r := &d.retentions[i]
-		r.offset = d.uint32At(off)
+	for i := 0; i < int(w.meta.retentionCount); i++ {
+		r := &w.retentions[i]
+		r.offset = w.uint32At(off)
 		if int(r.offset) != expectedSize {
 			return fmt.Errorf("unexpected offset for retention %d, got: %d, want: %d", i, r.offset, expectedSize)
 		}
-		r.secondsPerPoint = Duration(d.uint32At(off + uint32Size))
-		r.numberOfPoints = d.uint32At(off + 2*uint32Size)
+		r.secondsPerPoint = Duration(w.uint32At(off + uint32Size))
+		r.numberOfPoints = w.uint32At(off + 2*uint32Size)
 
 		off += retentionSize
 		expectedSize += int(r.numberOfPoints) * pointSize
 	}
 
-	if len(d.buf) < expectedSize {
+	if len(w.buf) < expectedSize {
 		return io.ErrUnexpectedEOF
-	} else if len(d.buf) > expectedSize {
-		d.buf = d.buf[:expectedSize]
+	} else if len(w.buf) > expectedSize {
+		w.buf = w.buf[:expectedSize]
 	}
 
-	if d.meta.maxRetention != d.retentions[len(d.retentions)-1].MaxRetention() {
+	if w.meta.maxRetention != w.retentions[len(w.retentions)-1].MaxRetention() {
 		return errors.New("maxRetention in meta unmatch to maxRetention of lowest retention")
 	}
 
-	if err := validateMetaAndRetentions(d.meta, d.retentions); err != nil {
+	if err := validateMetaAndRetentions(w.meta, w.retentions); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (d *fileData) baseInterval(r *Retention) Timestamp {
-	return d.timestampAt(r.offset)
+func (w *Whisper) baseInterval(r *Retention) Timestamp {
+	return w.timestampAt(r.offset)
 }
 
-func (d *fileData) pointAt(offset uint32) Point {
+func (w *Whisper) pointAt(offset uint32) Point {
 	return Point{
-		Time:  d.timestampAt(offset),
-		Value: d.valueAt(offset + uint32Size),
+		Time:  w.timestampAt(offset),
+		Value: w.valueAt(offset + uint32Size),
 	}
 }
 
-func (d *fileData) timestampAt(offset uint32) Timestamp {
-	return Timestamp(d.uint32At(offset))
+func (w *Whisper) timestampAt(offset uint32) Timestamp {
+	return Timestamp(w.uint32At(offset))
 }
 
-func (d *fileData) valueAt(offset uint32) Value {
-	return Value(d.float64At(offset))
+func (w *Whisper) valueAt(offset uint32) Value {
+	return Value(w.float64At(offset))
 }
 
-func (d *fileData) float32At(offset uint32) float32 {
-	return math.Float32frombits(d.uint32At(offset))
+func (w *Whisper) float32At(offset uint32) float32 {
+	return math.Float32frombits(w.uint32At(offset))
 }
 
-func (d *fileData) float64At(offset uint32) float64 {
-	return math.Float64frombits(d.uint64At(offset))
+func (w *Whisper) float64At(offset uint32) float64 {
+	return math.Float64frombits(w.uint64At(offset))
 }
 
-func (d *fileData) uint32At(offset uint32) uint32 {
-	return binary.BigEndian.Uint32(d.buf[offset:])
+func (w *Whisper) uint32At(offset uint32) uint32 {
+	return binary.BigEndian.Uint32(w.buf[offset:])
 }
 
-func (d *fileData) uint64At(offset uint32) uint64 {
-	return binary.BigEndian.Uint64(d.buf[offset:])
+func (w *Whisper) uint64At(offset uint32) uint64 {
+	return binary.BigEndian.Uint64(w.buf[offset:])
 }
 
-func (d *fileData) putPointAt(p Point, offset uint32) {
-	d.putTimestampAt(p.Time, offset)
-	d.putValueAt(p.Value, offset+uint32Size)
+func (w *Whisper) putPointAt(p Point, offset uint32) {
+	w.putTimestampAt(p.Time, offset)
+	w.putValueAt(p.Value, offset+uint32Size)
 }
 
-func (d *fileData) putTimestampAt(t Timestamp, offset uint32) {
-	d.putUint32At(uint32(t), offset)
+func (w *Whisper) putTimestampAt(t Timestamp, offset uint32) {
+	w.putUint32At(uint32(t), offset)
 }
 
-func (d *fileData) putValueAt(v Value, offset uint32) {
-	d.putFloat64At(float64(v), offset)
+func (w *Whisper) putValueAt(v Value, offset uint32) {
+	w.putFloat64At(float64(v), offset)
 }
 
-func (d *fileData) putFloat32At(v float32, offset uint32) {
-	d.putUint32At(math.Float32bits(v), offset)
+func (w *Whisper) putFloat32At(v float32, offset uint32) {
+	w.putUint32At(math.Float32bits(v), offset)
 }
 
-func (d *fileData) putFloat64At(v float64, offset uint32) {
-	d.putUint64At(math.Float64bits(v), offset)
+func (w *Whisper) putFloat64At(v float64, offset uint32) {
+	w.putUint64At(math.Float64bits(v), offset)
 }
 
-func (d *fileData) putUint32At(v uint32, offset uint32) {
-	d.setPagesDirtyByOffsetRange(offset, uint32Size)
-	binary.BigEndian.PutUint32(d.buf[offset:], v)
+func (w *Whisper) putUint32At(v uint32, offset uint32) {
+	w.setPagesDirtyByOffsetRange(offset, uint32Size)
+	binary.BigEndian.PutUint32(w.buf[offset:], v)
 }
 
-func (d *fileData) putUint64At(v uint64, offset uint32) {
-	d.setPagesDirtyByOffsetRange(offset, uint64Size)
-	binary.BigEndian.PutUint64(d.buf[offset:], v)
+func (w *Whisper) putUint64At(v uint64, offset uint32) {
+	w.setPagesDirtyByOffsetRange(offset, uint64Size)
+	binary.BigEndian.PutUint64(w.buf[offset:], v)
 }
 
-func (d *fileData) setPagesDirtyByOffsetRange(offset, size uint32) {
+func (w *Whisper) setPagesDirtyByOffsetRange(offset, size uint32) {
 	startPage := pageForStartOffset(offset)
 	endPage := pageForEndOffset(offset + size)
 	for page := startPage; page <= endPage; page++ {
-		d.setPageDirty(page)
+		w.setPageDirty(page)
 	}
 }
 
-func (d *fileData) initDirtyPageBitSet() {
-	pageCount := (len(d.buf) + pageSize - 1) / pageSize
-	d.dirtyPageBitSet = bitset.New(uint(pageCount))
+func (w *Whisper) initDirtyPageBitSet() {
+	pageCount := (len(w.buf) + pageSize - 1) / pageSize
+	w.dirtyPageBitSet = bitset.New(uint(pageCount))
 }
 
-func (d *fileData) setPageDirty(page int) {
-	if d.dirtyPageBitSet == nil {
-		d.initDirtyPageBitSet()
+func (w *Whisper) setPageDirty(page int) {
+	if w.dirtyPageBitSet == nil {
+		w.initDirtyPageBitSet()
 	}
-	d.dirtyPageBitSet.Set(uint(page))
+	w.dirtyPageBitSet.Set(uint(page))
 }
 
 func pageForStartOffset(offset uint32) int {
@@ -447,18 +403,18 @@ func pageForEndOffset(offset uint32) int {
 	return int(offset-1) / pageSize
 }
 
-func (d *fileData) FlushTo(w io.WriterAt) error {
-	for _, r := range dirtyPageRanges(d.dirtyPageBitSet) {
+func (w *Whisper) FlushTo(wr io.WriterAt) error {
+	for _, r := range dirtyPageRanges(w.dirtyPageBitSet) {
 		off := r.start * pageSize
 		end := r.end * pageSize
-		if end > len(d.buf) {
-			end = len(d.buf)
+		if end > len(w.buf) {
+			end = len(w.buf)
 		}
-		if _, err := w.WriteAt(d.buf[off:end], int64(off)); err != nil {
+		if _, err := wr.WriteAt(w.buf[off:end], int64(off)); err != nil {
 			return err
 		}
 	}
-	d.dirtyPageBitSet.ClearAll()
+	w.dirtyPageBitSet.ClearAll()
 	return nil
 }
 
@@ -492,20 +448,22 @@ func dirtyPageRanges(bitSet *bitset.BitSet) []pageRange {
 	return ranges
 }
 
-func (d *fileData) GetAllRawUnsortedPoints(retentionID int) []Point {
-	r := &d.retentions[retentionID]
+// GetAllRawUnsortedPoints returns the raw unsorted points.
+// This is provided for the debugging or investination purpose.
+func (w *Whisper) GetAllRawUnsortedPoints(retentionID int) []Point {
+	r := &w.retentions[retentionID]
 	points := make([]Point, r.numberOfPoints)
 	off := r.offset
 	for i := 0; i < len(points); i++ {
-		points[i] = d.pointAt(off)
+		points[i] = w.pointAt(off)
 		off += pointSize
 	}
 	return points
 }
 
-func (d *fileData) fetchRawPoints(retentionID int, fromInterval, untilInterval Timestamp) []Point {
-	r := &d.retentions[retentionID]
-	baseInterval := d.baseInterval(r)
+func (w *Whisper) fetchRawPoints(retentionID int, fromInterval, untilInterval Timestamp) []Point {
+	r := &w.retentions[retentionID]
+	baseInterval := w.baseInterval(r)
 
 	step := r.secondsPerPoint
 	points := make([]Point, untilInterval.Sub(fromInterval)/step)
@@ -515,7 +473,7 @@ func (d *fileData) fetchRawPoints(retentionID int, fromInterval, untilInterval T
 	if fromOffset < untilOffset {
 		i := 0
 		for off := fromOffset; off < untilOffset; off += pointSize {
-			points[i] = d.pointAt(off)
+			points[i] = w.pointAt(off)
 			i++
 		}
 		return points
@@ -526,20 +484,23 @@ func (d *fileData) fetchRawPoints(retentionID int, fromInterval, untilInterval T
 
 	i := 0
 	for off := fromOffset; off < arcEndOffset; off += pointSize {
-		points[i] = d.pointAt(off)
+		points[i] = w.pointAt(off)
 		i++
 	}
 	for off := arcStartOffset; off < untilOffset; off += pointSize {
-		points[i] = d.pointAt(off)
+		points[i] = w.pointAt(off)
 		i++
 	}
 	return points
 }
 
+// FetchFromArchive fetches point in the specified archive and the time range.
+// If now is zero, the current time is used.
+//
 // FetchFromArchive fetches points from archive specified with `retentionID`.
 // It fetches points in range between `from` (exclusive) and `until` (inclusive).
 // If `now` is zero, the current time is used.
-func (d *fileData) FetchFromArchive(retentionID int, from, until, now Timestamp) ([]Point, error) {
+func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) ([]Point, error) {
 	if now == 0 {
 		now = TimestampFromStdTime(time.Now())
 	}
@@ -547,10 +508,10 @@ func (d *fileData) FetchFromArchive(retentionID int, from, until, now Timestamp)
 	if from > until {
 		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
 	}
-	if retentionID < 0 || len(d.retentions)-1 < retentionID {
+	if retentionID < 0 || len(w.retentions)-1 < retentionID {
 		return nil, ErrRetentionIDOutOfRange
 	}
-	r := &d.retentions[retentionID]
+	r := &w.retentions[retentionID]
 
 	oldest := now.Add(-r.MaxRetention())
 	// range is in the future
@@ -569,7 +530,7 @@ func (d *fileData) FetchFromArchive(retentionID int, from, until, now Timestamp)
 	}
 	//log.Printf("FetchFromArchive adjusted, from=%s, until=%s, now=%s", from, until, now)
 
-	baseInterval := d.baseInterval(r)
+	baseInterval := w.baseInterval(r)
 	//log.Printf("FetchFromArchive retentionID=%d, baseInterval=%s", retentionID, baseInterval)
 
 	fromInterval := r.Interval(from)
@@ -592,7 +553,7 @@ func (d *fileData) FetchFromArchive(retentionID int, from, until, now Timestamp)
 		untilInterval = untilInterval.Add(step)
 	}
 
-	points := d.fetchRawPoints(retentionID, fromInterval, untilInterval)
+	points := w.fetchRawPoints(retentionID, fromInterval, untilInterval)
 	//log.Printf("FetchFromArchive after fetchRawPoints, retentionID=%d, len(points)=%d", retentionID, len(points))
 	//for i, pt := range points {
 	//	log.Printf("rawPoint i=%d, time=%s, value=%s", i, pt.Time, pt.Value)
@@ -614,9 +575,11 @@ func clearOldPoints(points []Point, fromInterval Timestamp, step Duration) {
 	}
 }
 
-func (d *fileData) PrintHeader(w io.Writer) error {
-	m := &d.meta
-	_, err := fmt.Fprintf(w, "aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%s\tretentionCount:%d\n",
+// PrintHeader prints the header information to the writer in LTSV format [1].
+// [1] Labeled Tab-separated Values http://ltsv.org/
+func (w *Whisper) PrintHeader(wr io.Writer) error {
+	m := &w.meta
+	_, err := fmt.Fprintf(wr, "aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%s\tretentionCount:%d\n",
 		m.aggregationMethod,
 		int(m.aggregationMethod),
 		m.maxRetention,
@@ -626,9 +589,9 @@ func (d *fileData) PrintHeader(w io.Writer) error {
 		return err
 	}
 
-	for i := range d.retentions {
-		r := &d.retentions[i]
-		_, err := fmt.Fprintf(w, "retentionDef:%d\tstep:%s\tnumberOfPoints:%d\toffset:%d\n",
+	for i := range w.retentions {
+		r := &w.retentions[i]
+		_, err := fmt.Fprintf(wr, "retentionDef:%d\tstep:%s\tnumberOfPoints:%d\toffset:%d\n",
 			i,
 			Duration(r.secondsPerPoint),
 			r.numberOfPoints,
@@ -640,26 +603,21 @@ func (d *fileData) PrintHeader(w io.Writer) error {
 	return nil
 }
 
-// Bytes returns data for whole file.
-func (d *fileData) Bytes() []byte {
-	return d.buf
-}
-
-func (d *fileData) fillDerivedValuesInHeader() {
-	d.meta.maxRetention = d.retentions[len(d.retentions)-1].MaxRetention()
-	d.meta.retentionCount = uint32(len(d.retentions))
-	off := metaSize + len(d.retentions)*retentionSize
-	for i := range d.retentions {
-		r := &d.retentions[i]
+func (w *Whisper) fillDerivedValuesInHeader() {
+	w.meta.maxRetention = w.retentions[len(w.retentions)-1].MaxRetention()
+	w.meta.retentionCount = uint32(len(w.retentions))
+	off := metaSize + len(w.retentions)*retentionSize
+	for i := range w.retentions {
+		r := &w.retentions[i]
 		r.offset = uint32(off)
 		off += int(r.numberOfPoints) * pointSize
 	}
 }
 
-func (d *fileData) fileSizeFromHeader() int64 {
+func (w *Whisper) fileSizeFromHeader() int64 {
 	sz := int64(metaSize)
-	for i := range d.retentions {
-		r := &d.retentions[i]
+	for i := range w.retentions {
+		r := &w.retentions[i]
 		sz += retentionSize + int64(r.numberOfPoints)*pointSize
 	}
 	return sz
@@ -701,35 +659,37 @@ func validateAggregationMethod(aggMethod AggregationMethod) error {
 	}
 }
 
-func (d *fileData) putMeta() {
-	d.putUint32At(uint32(d.meta.aggregationMethod), 0)
-	d.putUint32At(uint32(d.meta.maxRetention), uint32Size)
-	d.putFloat32At(d.meta.xFilesFactor, 2*uint32Size)
-	d.putUint32At(uint32(d.meta.retentionCount), 3*uint32Size)
+func (w *Whisper) putMeta() {
+	w.putUint32At(uint32(w.meta.aggregationMethod), 0)
+	w.putUint32At(uint32(w.meta.maxRetention), uint32Size)
+	w.putFloat32At(w.meta.xFilesFactor, 2*uint32Size)
+	w.putUint32At(uint32(w.meta.retentionCount), 3*uint32Size)
 }
 
-func (d *fileData) putRetentions() {
+func (w *Whisper) putRetentions() {
 	off := uint32(metaSize)
-	for i := range d.retentions {
-		r := &d.retentions[i]
-		d.putUint32At(r.offset, off)
-		d.putUint32At(uint32(r.secondsPerPoint), off+uint32Size)
-		d.putUint32At(r.numberOfPoints, off+2*uint32Size)
+	for i := range w.retentions {
+		r := &w.retentions[i]
+		w.putUint32At(r.offset, off)
+		w.putUint32At(uint32(r.secondsPerPoint), off+uint32Size)
+		w.putUint32At(r.numberOfPoints, off+2*uint32Size)
 		off += retentionSize
 	}
 }
 
-func (d *fileData) UpdatePointForArchive(retentionID int, t Timestamp, v Value, now Timestamp) error {
+// UpdatePointForArchive updates one point in the specified archive.
+func (w *Whisper) UpdatePointForArchive(retentionID int, t Timestamp, v Value, now Timestamp) error {
 	points := []Point{{Time: t, Value: v}}
-	return d.UpdatePointsForArchive(retentionID, points, now)
+	return w.UpdatePointsForArchive(retentionID, points, now)
 }
 
-func (d *fileData) UpdatePointsForArchive(retentionID int, points []Point, now Timestamp) error {
+// UpdatePointForArchive updates points in the specified archive.
+func (w *Whisper) UpdatePointsForArchive(retentionID int, points []Point, now Timestamp) error {
 	if now == 0 {
 		now = TimestampFromStdTime(time.Now())
 	}
 
-	r := &d.retentions[retentionID]
+	r := &w.retentions[retentionID]
 	points = r.filterPoints(points, now)
 	if len(points) == 0 {
 		return nil
@@ -738,23 +698,23 @@ func (d *fileData) UpdatePointsForArchive(retentionID int, points []Point, now T
 	sort.Stable(Points(points))
 	alignedPoints := r.alignPoints(points)
 
-	baseInterval := d.baseInterval(r)
+	baseInterval := w.baseInterval(r)
 	if baseInterval == 0 {
 		baseInterval = r.intervalForWrite(now)
 	}
 
 	for _, p := range alignedPoints {
 		offset := r.pointOffsetAt(r.pointIndex(baseInterval, p.Time))
-		d.putPointAt(p, offset)
+		w.putPointAt(p, offset)
 	}
 
 	lowRetID := retentionID + 1
-	if lowRetID < len(d.retentions) {
-		rLow := &d.retentions[lowRetID]
+	if lowRetID < len(w.retentions) {
+		rLow := &w.retentions[lowRetID]
 		ts := rLow.timesToPropagate(alignedPoints)
-		for ; lowRetID < len(d.retentions) && len(ts) > 0; lowRetID++ {
+		for ; lowRetID < len(w.retentions) && len(ts) > 0; lowRetID++ {
 			var err error
-			ts, err = d.propagate(lowRetID, ts, now)
+			ts, err = w.propagate(lowRetID, ts, now)
 			if err != nil {
 				return err
 			}
@@ -764,13 +724,13 @@ func (d *fileData) UpdatePointsForArchive(retentionID int, points []Point, now T
 	return nil
 }
 
-func (d *fileData) propagate(retentionID int, ts []Timestamp, now Timestamp) (propagatedTs []Timestamp, err error) {
+func (w *Whisper) propagate(retentionID int, ts []Timestamp, now Timestamp) (propagatedTs []Timestamp, err error) {
 	if len(ts) == 0 {
 		return nil, nil
 	}
 
-	r := &d.retentions[retentionID]
-	baseInterval := d.baseInterval(r)
+	r := &w.retentions[retentionID]
+	baseInterval := w.baseInterval(r)
 	if baseInterval == 0 {
 		baseInterval = r.intervalForWrite(now)
 	}
@@ -778,24 +738,24 @@ func (d *fileData) propagate(retentionID int, ts []Timestamp, now Timestamp) (pr
 	step := r.secondsPerPoint
 	highRetID := retentionID - 1
 	var rLow *Retention
-	if retentionID+1 < len(d.retentions) {
-		rLow = &d.retentions[retentionID+1]
+	if retentionID+1 < len(w.retentions) {
+		rLow = &w.retentions[retentionID+1]
 	}
 
 	for _, t := range ts {
 		fromInterval := t
 		untilInterval := t.Add(step)
-		points := d.fetchRawPoints(highRetID, fromInterval, untilInterval)
+		points := w.fetchRawPoints(highRetID, fromInterval, untilInterval)
 		values := filterValidValues(points, fromInterval, step)
 		knownFactor := float32(len(values)) / float32(len(points))
-		if knownFactor < d.meta.xFilesFactor {
+		if knownFactor < w.meta.xFilesFactor {
 			continue
 		}
 
-		v := aggregate(d.meta.aggregationMethod, values)
+		v := aggregate(w.meta.aggregationMethod, values)
 		offset := r.pointOffsetAt(r.pointIndex(baseInterval, t))
-		d.putTimestampAt(t, offset)
-		d.putValueAt(v, offset+uint32Size)
+		w.putTimestampAt(t, offset)
+		w.putValueAt(v, offset+uint32Size)
 
 		if rLow != nil {
 			tLow := rLow.intervalForWrite(t)

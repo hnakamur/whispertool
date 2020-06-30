@@ -14,6 +14,13 @@ type Retention struct {
 
 type Retentions []Retention
 
+func NewRetention(secondsPerPoint Duration, numberOfPoints uint32) Retention {
+	return Retention{
+		secondsPerPoint: secondsPerPoint,
+		numberOfPoints:  numberOfPoints,
+	}
+}
+
 func (r *Retention) timesToPropagate(points []Point) []Timestamp {
 	var ts []Timestamp
 	for _, p := range points {
