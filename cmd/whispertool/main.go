@@ -6,48 +6,28 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
+	"strings"
 
-	"github.com/hnakamur/whispertool"
+	"github.com/hnakamur/whispertool/cmd"
 )
-
-type requiredOptionError struct {
-	fs     *flag.FlagSet
-	option string
-}
-
-func newRequiredOptionError(fs *flag.FlagSet, option string) *requiredOptionError {
-	return &requiredOptionError{fs: fs, option: option}
-}
-
-func (e *requiredOptionError) Error() string {
-	return fmt.Sprintf("option -%s is required.", e.option)
-}
-
-var errNeedsOneFileArg = errors.New("expected one whisper filename argument")
-var errNeedsSrcAndDestFilesArg = errors.New("expected source and destination whisper filename arguments")
-var errNeedsSrcAndDestDirsArg = errors.New("expected source and destination whisper directory arguments")
-var errEmptyRateOutOfBounds = errors.New("emptyRate must be 0 <= r <= 1.")
-var errFromIsAfterUntil = errors.New("from time must not be after until time.")
 
 const globalUsage = `Usage: %s <subcommand> [options]
 
 subcommands:
+  copy                Copy points from src to dest whisper file.
   diff                Show diff from src to dest whisper files.
   hole                Copy whisper file and make some holes (empty points) in dest file.
   generate            Generate random whisper file.
-  merge               Update empty points with value from src whisper file.
+  server              Run web server to respond view and sum query.
   sum                 Sum value of whisper files.
+  sum-copy            Copy sum of points from src to dest whisper file.
   sum-diff            Sum value of whisper files and compare to another whisper file.
-  view                View raw content of whisper file.
+  view                View content of whisper file.
+  view-raw            View raw content of whisper file.
   version             Show version
 
 Run %s <subcommand> -h to show help for subcommand.
 `
-
-func main() {
-	os.Exit(run())
-}
 
 var cmdName = filepath.Base(os.Args[0])
 
@@ -57,24 +37,58 @@ var (
 	date    string
 )
 
-type UTCTimeValue struct {
-	t *time.Time
-}
+const copyCmdUsage = `Usage: {{command}} copy [options] src.wsp dest.wsp
 
-func (t UTCTimeValue) String() string {
-	if t.t == nil {
-		return ""
-	}
-	return t.t.Format(whispertool.UTCTimeLayout)
-}
+options:
+`
 
-func (t UTCTimeValue) Set(s string) error {
-	t2, err := time.Parse(whispertool.UTCTimeLayout, s)
-	if err != nil {
-		return err
-	}
-	*t.t = t2
-	return nil
+const viewCmdUsage = `Usage: {{command}} view [options] file.wsp
+
+options:
+`
+
+const viewRawCmdUsage = `Usage: {{command}} view-raw [options] file.wsp
+
+options:
+`
+
+const serverCmdUsage = `Usage: {{command}} server [options]
+
+options:
+`
+
+const sumCmdUsage = `Usage: {{command}} sum [options]
+
+options:
+`
+
+const sumCopyCmdUsage = `Usage: {{command}} sum-copy [options]
+
+options:
+`
+
+const sumDiffCmdUsage = `Usage: {{command}} sum-diff [options]
+
+options:
+`
+
+const holeCmdUsage = `Usage: {{command}} hole [options]
+
+options:
+`
+
+const diffCmdUsage = `Usage: {{command}} diff [options]
+
+options:
+`
+
+const generateCmdUsage = `Usage: {{command}} generate [options]
+
+options:
+`
+
+func main() {
+	os.Exit(run())
 }
 
 func run() int {
@@ -92,20 +106,26 @@ func run() int {
 
 	var err error
 	switch args[0] {
+	case "copy":
+		err = runSubcommand(args, &cmd.CopyCommand{}, copyCmdUsage)
 	case "diff":
-		err = runDiffCmd(args[1:])
+		err = runSubcommand(args, &cmd.DiffCommand{}, diffCmdUsage)
 	case "generate":
-		err = runGenerateCmd(args[1:])
+		err = runSubcommand(args, &cmd.GenerateCommand{}, generateCmdUsage)
 	case "hole":
-		err = runHoleCmd(args[1:])
-	case "merge":
-		err = runMergeCmd(args[1:])
+		err = runSubcommand(args, &cmd.HoleCommand{}, holeCmdUsage)
+	case "server":
+		err = runSubcommand(args, &cmd.ServerCommand{}, serverCmdUsage)
 	case "sum":
-		err = runSumCmd(args[1:])
+		err = runSubcommand(args, &cmd.SumCommand{}, sumCmdUsage)
+	case "sum-copy":
+		err = runSubcommand(args, &cmd.SumCopyCommand{}, sumCopyCmdUsage)
 	case "sum-diff":
-		err = runSumDiffCmd(args[1:])
+		err = runSubcommand(args, &cmd.SumDiffCommand{}, sumDiffCmdUsage)
 	case "view":
-		err = runViewCmd(args[1:])
+		err = runSubcommand(args, &cmd.ViewCommand{}, viewCmdUsage)
+	case "view-raw":
+		err = runSubcommand(args, &cmd.ViewRawCommand{}, viewRawCmdUsage)
 	case "version":
 		err = runShowVersion(args[1:])
 	default:
@@ -113,15 +133,15 @@ func run() int {
 		return 2
 	}
 	if err != nil {
-		if errors.Is(err, whispertool.ErrDiffFound) {
+		if errors.Is(err, cmd.ErrDiffFound) {
 			return 1
 		}
 
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err.Error())
-		var roerr *requiredOptionError
+		var roerr *cmd.RequiredOptionError
 		if errors.As(err, &roerr) {
 			fmt.Fprintf(os.Stderr, "\n")
-			roerr.fs.Usage()
+			roerr.Usage()
 		}
 		return 2
 	}
@@ -135,252 +155,16 @@ func runShowVersion(args []string) error {
 	return nil
 }
 
-const viewCmdUsage = `Usage: %s view file.wsp
-`
-
-func runViewCmd(args []string) error {
-	fs := flag.NewFlagSet("view", flag.ExitOnError)
+func runSubcommand(args []string, c cmd.Command, usageTemplate string) error {
+	fs := flag.NewFlagSet(args[0], flag.ExitOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), viewCmdUsage, cmdName)
-		fs.PrintDefaults()
-	}
-	raw := fs.Bool("raw", false, "View raw data.")
-
-	now := time.Now()
-	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
-
-	from := time.Unix(0, 0)
-	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
-
-	until := now
-	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
-	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to print (-1 for all retentions)")
-	showHeader := fs.Bool("show-header", true, "whether or not to show header (metadata and reteions)")
-	fs.Parse(args)
-
-	if fs.NArg() != 1 {
-		return errNeedsOneFileArg
-	}
-	if from.After(until) {
-		return errFromIsAfterUntil
-	}
-
-	return whispertool.View(fs.Arg(0), *raw, now, from, until, *retId, *showHeader)
-}
-
-const mergeCmdUsage = `Usage: %s merge [options] src.wsp dest.wsp
-       %s merge [options] srcDir destDir
-
-options:
-`
-
-func runMergeCmd(args []string) error {
-	fs := flag.NewFlagSet("merge", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), mergeCmdUsage, cmdName, cmdName)
+		usageStr := strings.ReplaceAll(usageTemplate, "{{command}}", cmdName)
+		fmt.Fprintf(fs.Output(), "%s", usageStr)
 		fs.PrintDefaults()
 	}
 
-	now := time.Now()
-	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
-
-	from := time.Unix(0, 0)
-	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
-
-	until := now
-	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
-
-	recursive := fs.Bool("r", false, "merge files recursively.")
-	fs.Parse(args)
-
-	if fs.NArg() != 2 {
-		if *recursive {
-			return errNeedsSrcAndDestDirsArg
-		} else {
-			return errNeedsSrcAndDestFilesArg
-		}
+	if err := c.Parse(fs, args[1:]); err != nil {
+		return err
 	}
-	if from.After(until) {
-		return errFromIsAfterUntil
-	}
-
-	return whispertool.Merge(fs.Arg(0), fs.Arg(1), *recursive, now, from, until)
-}
-
-const sumCmdUsage = `Usage: %s sum [options] src.wsp dest.wsp
-       %s sum [options] srcDir destDir
-
-options:
-`
-
-func runSumCmd(args []string) error {
-	fs := flag.NewFlagSet("sum", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), sumCmdUsage, cmdName, cmdName)
-		fs.PrintDefaults()
-	}
-
-	src := fs.String("src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
-	dest := fs.String("dest", "", "dest whisper filename (ex. dest.wsp).")
-	textOut := fs.String("text-out", "", "text output. empty means no output, - means stdout, other means output file.")
-	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to diff (-1 is all).")
-	fs.Parse(args)
-
-	if *src == "" {
-		return newRequiredOptionError(fs, "src")
-	}
-
-	return whispertool.RunSum(*src, *dest, *textOut, *retId)
-}
-
-const sumDiffCmdUsage = `Usage: %s sum-diff -item <pattern> -src <pattern> -dest <destname>
-
-Example: %s sum-diff -item '/var/lib/graphite/whisper/test/*/*' -src 'sv*.wsp' -dest 'sum.wsp'
-
-options:
-`
-
-func runSumDiffCmd(args []string) error {
-	fs := flag.NewFlagSet("sum-diff", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), sumDiffCmdUsage, cmdName, cmdName)
-		fs.PrintDefaults()
-	}
-
-	item := fs.String("item", "", "glob pattern of whisper directory")
-	srcBase := fs.String("src-base", "", "src base directory")
-	destBase := fs.String("dest-base", "", "dest base directory")
-	src := fs.String("src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
-	dest := fs.String("dest", "", "dest whisper filename (ex. dest.wsp).")
-	ignoreSrcEmpty := fs.Bool("ignore-src-empty", false, "ignore diff when source point is empty.")
-	ignoreDestEmpty := fs.Bool("ignore-dest-empty", false, "ignore diff when destination point is empty.")
-	showAll := fs.Bool("show-all", false, "print all points when diff exists.")
-	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to diff (-1 is all).")
-	interval := fs.Duration("interval", time.Minute, "run interval")
-	intervalOffset := fs.Duration("interval-offset", 7*time.Second, "run interval offset")
-	untilOffset := fs.Duration("until-offset", 0, "until offset")
-	fs.Parse(args)
-
-	if *item == "" {
-		return newRequiredOptionError(fs, "item")
-	}
-	if *srcBase == "" {
-		return newRequiredOptionError(fs, "src-base")
-	}
-	if *destBase == "" {
-		return newRequiredOptionError(fs, "dest-base")
-	}
-	if *src == "" {
-		return newRequiredOptionError(fs, "src")
-	}
-	if *dest == "" {
-		return newRequiredOptionError(fs, "dest")
-	}
-
-	return whispertool.SumDiff(*srcBase, *destBase, *item, *src, *dest, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, *interval, *intervalOffset, *untilOffset, *retId)
-}
-
-const holeCmdUsage = `Usage: %s hole [options] src.wsp dest.wsp
-
-options:
-`
-
-func runHoleCmd(args []string) error {
-	fs := flag.NewFlagSet("hole", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), holeCmdUsage, cmdName)
-		fs.PrintDefaults()
-	}
-	emptyRate := fs.Float64("empty-rate", 0.2, "empty rate (0 < r <= 1).")
-
-	now := time.Now()
-	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
-
-	from := time.Unix(0, 0)
-	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
-
-	until := now
-	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
-	fs.Parse(args)
-
-	if *emptyRate < 0 || 1 < *emptyRate {
-		return errEmptyRateOutOfBounds
-	}
-	if fs.NArg() != 2 {
-		return errNeedsSrcAndDestFilesArg
-	}
-	if from.After(until) {
-		return errFromIsAfterUntil
-	}
-
-	return whispertool.Hole(fs.Arg(0), fs.Arg(1), *emptyRate, now, from, until)
-}
-
-const diffCmdUsage = `Usage: %s diff [options] src.wsp dest.wsp
-       %s diff [options] srcDir destDir
-
-options:
-`
-
-func runDiffCmd(args []string) error {
-	fs := flag.NewFlagSet("diff", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), diffCmdUsage, cmdName, cmdName)
-		fs.PrintDefaults()
-	}
-	recursive := fs.Bool("r", false, "diff files recursively.")
-	ignoreSrcEmpty := fs.Bool("ignore-src-empty", false, "ignore diff when source point is empty.")
-	ignoreDestEmpty := fs.Bool("ignore-dest-empty", false, "ignore diff when destination point is empty.")
-	showAll := fs.Bool("show-all", false, "print all points when diff exists.")
-	retId := fs.Int("ret-id", whispertool.RetIdAll, "retention ID to diff (-1 is all).")
-
-	now := time.Now()
-	fs.Var(&UTCTimeValue{t: &now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
-
-	from := time.Unix(0, 0)
-	fs.Var(&UTCTimeValue{t: &from}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
-
-	until := now
-	fs.Var(&UTCTimeValue{t: &until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
-	fs.Parse(args)
-
-	if fs.NArg() != 2 {
-		if *recursive {
-			return errNeedsSrcAndDestDirsArg
-		} else {
-			return errNeedsSrcAndDestFilesArg
-		}
-	}
-	if from.After(until) {
-		return errFromIsAfterUntil
-	}
-
-	return whispertool.Diff(fs.Arg(0), fs.Arg(1), *recursive, *ignoreSrcEmpty, *ignoreDestEmpty, *showAll, now, from, until, *retId)
-}
-
-const generateCmdUsage = `Usage: %s generate [options] dest.wsp
-
-options:
-`
-
-func runGenerateCmd(args []string) error {
-	fs := flag.NewFlagSet("generate", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), generateCmdUsage, cmdName)
-		fs.PrintDefaults()
-	}
-	retentionDefs := fs.String("retentions", "1m:2h,1h:2d,1d:30d", "retentions definitions.")
-	randMax := fs.Int("max", 100, "random max value for shortest retention unit.")
-	fill := fs.Bool("fill", true, "fill with random data.")
-	textOut := fs.String("text-out", "", "text output. empty means no output, - means stdout, other means output file.")
-	fs.Parse(args)
-
-	if *retentionDefs == "" {
-		return newRequiredOptionError(fs, "retentions")
-	}
-	if fs.NArg() != 1 {
-		return errNeedsOneFileArg
-	}
-
-	return whispertool.Generate(fs.Arg(0), *retentionDefs, *fill, *randMax, *textOut)
+	return c.Execute()
 }
