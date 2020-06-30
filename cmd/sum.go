@@ -11,7 +11,7 @@ import (
 )
 
 type SumCommand struct {
-	Src        string
+	SrcPattern string
 	From       whispertool.Timestamp
 	Until      whispertool.Timestamp
 	Now        whispertool.Timestamp
@@ -21,7 +21,7 @@ type SumCommand struct {
 }
 
 func (c *SumCommand) Parse(fs *flag.FlagSet, args []string) error {
-	fs.StringVar(&c.Src, "src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
+	fs.StringVar(&c.SrcPattern, "src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
 	fs.BoolVar(&c.ShowHeader, "header", true, "whether or not to show header (metadata and reteions)")
@@ -33,7 +33,7 @@ func (c *SumCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 	fs.Parse(args)
 
-	if c.Src == "" {
+	if c.SrcPattern == "" {
 		return newRequiredOptionError(fs, "src")
 	}
 	if c.From > c.Until {
@@ -44,12 +44,12 @@ func (c *SumCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *SumCommand) Execute() error {
-	srcFilenames, err := filepath.Glob(c.Src)
+	srcFilenames, err := filepath.Glob(c.SrcPattern)
 	if err != nil {
 		return err
 	}
 	if len(srcFilenames) == 0 {
-		return fmt.Errorf("no file matched for -src=%s", c.Src)
+		return fmt.Errorf("no file matched for -src=%s", c.SrcPattern)
 	}
 
 	d, ptsList, err := sumWhisperFile(srcFilenames, c.Now, c.From, c.Until, c.RetID)

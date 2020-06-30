@@ -17,7 +17,6 @@ type SumCopyCommand struct {
 	DestBase    string
 	ItemPattern string
 	SrcPattern  string
-	Src         string
 	Dest        string
 	From        whispertool.Timestamp
 	Until       whispertool.Timestamp
@@ -31,7 +30,7 @@ func (c *SumCopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.SrcBase, "src-base", "", "src base directory")
 	fs.StringVar(&c.ItemPattern, "item", "", "glob pattern of whisper directory")
 	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory")
-	fs.StringVar(&c.Src, "src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
+	fs.StringVar(&c.SrcPattern, "src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
 	fs.StringVar(&c.Dest, "dest", "", "dest whisper filename (ex. dest.wsp).")
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
@@ -52,7 +51,7 @@ func (c *SumCopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	if c.DestBase == "" {
 		return newRequiredOptionError(fs, "dest-base")
 	}
-	if c.Src == "" {
+	if c.SrcPattern == "" {
 		return newRequiredOptionError(fs, "src")
 	}
 	if c.Dest == "" {
