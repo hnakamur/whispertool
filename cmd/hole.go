@@ -63,7 +63,7 @@ func (c *HoleCommand) Execute() error {
 
 	rnd := rand.New(rand.NewSource(newRandSeed()))
 	destPtsList := emptyRandomPointsList(srcPtsList, rnd, c.EmptyRate, c.From, c.Until, srcData.Retentions())
-	destData, err := whispertool.NewFileData(srcData.Meta(), srcData.Retentions())
+	destData, err := whispertool.NewFileData(srcData.Retentions(), srcData.AggregationMethod(), srcData.XFilesFactor())
 	if err != nil {
 		return err
 	}

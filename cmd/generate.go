@@ -53,8 +53,7 @@ func (c *GenerateCommand) Execute() error {
 		return err
 	}
 
-	m := whispertool.NewMeta(whispertool.Sum, 0)
-	d, err := whispertool.NewFileData(m, retentions)
+	d, err := whispertool.NewFileData(retentions, whispertool.Sum, 0)
 	if err != nil {
 		return err
 	}

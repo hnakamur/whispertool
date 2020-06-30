@@ -16,14 +16,14 @@ import (
 )
 
 type FileData struct {
-	meta       Meta
+	meta       meta
 	retentions []Retention
 
 	buf             []byte
 	dirtyPageBitSet *bitset.BitSet
 }
 
-type Meta struct {
+type meta struct {
 	aggregationMethod AggregationMethod
 	maxRetention      Duration
 	xFilesFactor      float32
@@ -66,7 +66,11 @@ const (
 var pageSize = os.Getpagesize()
 var ErrRetentionIDOutOfRange = errors.New("retention ID out of range")
 
-func NewFileData(m Meta, retentions []Retention) (*FileData, error) {
+func NewFileData(retentions []Retention, aggregationMethod AggregationMethod, xFilesFactor float32) (*FileData, error) {
+	m := meta{
+		aggregationMethod: aggregationMethod,
+		xFilesFactor:      xFilesFactor,
+	}
 	if err := validateMetaAndRetentions(m, retentions); err != nil {
 		return nil, err
 	}
@@ -90,8 +94,9 @@ func NewFileDataRead(data []byte) (*FileData, error) {
 	return d, nil
 }
 
-func (d *FileData) Meta() Meta              { return d.meta }
-func (d *FileData) Retentions() []Retention { return d.retentions }
+func (d *FileData) AggregationMethod() AggregationMethod { return d.meta.aggregationMethod }
+func (d *FileData) XFilesFactor() float32                { return d.meta.xFilesFactor }
+func (d *FileData) Retentions() []Retention              { return d.retentions }
 
 func (d *FileData) readMetaAndRetentions() error {
 	expectedSize := metaSize
@@ -469,7 +474,7 @@ func (d *FileData) fileSizeFromHeader() int64 {
 	return sz
 }
 
-func validateMetaAndRetentions(m Meta, retentions []Retention) error {
+func validateMetaAndRetentions(m meta, retentions []Retention) error {
 	if err := m.validate(); err != nil {
 		return err
 	}
@@ -479,7 +484,7 @@ func validateMetaAndRetentions(m Meta, retentions []Retention) error {
 	return nil
 }
 
-func (m Meta) validate() error {
+func (m meta) validate() error {
 	if err := validateXFilesFactor(m.xFilesFactor); err != nil {
 		return err
 	}
@@ -674,16 +679,6 @@ func aggregate(method AggregationMethod, knownValues []Value) Value {
 	}
 	panic("Invalid aggregation method")
 }
-
-func NewMeta(aggregationMethod AggregationMethod, xFilesFactor float32) Meta {
-	return Meta{
-		aggregationMethod: aggregationMethod,
-		xFilesFactor:      xFilesFactor,
-	}
-}
-
-func (m *Meta) AggregationMethod() AggregationMethod { return m.aggregationMethod }
-func (m *Meta) XFilesFactor() float32                { return m.xFilesFactor }
 
 func ParseRetentions(s string) ([]Retention, error) {
 	if len(s) == 0 {

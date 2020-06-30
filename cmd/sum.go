@@ -92,7 +92,7 @@ func sumWhisperFile(srcFilenames []string, retID int, from, until, now whisperto
 		}
 	}
 
-	sumData, err := whispertool.NewFileData(srcDataList[0].Meta(), srcDataList[0].Retentions())
+	sumData, err := whispertool.NewFileData(srcDataList[0].Retentions(), srcDataList[0].AggregationMethod(), srcDataList[0].XFilesFactor())
 	if err != nil {
 		return nil, nil, err
 	}
