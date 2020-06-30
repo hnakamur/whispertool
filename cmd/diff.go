@@ -87,7 +87,7 @@ func (c *DiffCommand) Execute() error {
 		return err
 	}
 
-	if !whispertool.Retentions(srcDB.Retentions()).Equal(destDB.Retentions()) {
+	if !srcDB.Retentions().Equal(destDB.Retentions()) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 

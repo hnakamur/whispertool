@@ -189,7 +189,7 @@ func (w *Whisper) AggregationMethod() AggregationMethod { return w.fileData.meta
 func (w *Whisper) XFilesFactor() float32 { return w.fileData.meta.xFilesFactor }
 
 // Retentions returns the retentions of the whisper file.
-func (w *Whisper) Retentions() []Retention { return w.fileData.retentions }
+func (w *Whisper) Retentions() Retentions { return w.fileData.retentions }
 
 // RawData returns data for whole file.
 // Note the byte slice returned is the internal work buffer,

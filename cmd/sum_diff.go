@@ -174,7 +174,7 @@ func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
 		return err
 	}
 
-	if !whispertool.Retentions(sumDB.Retentions()).Equal(destDB.Retentions()) {
+	if !sumDB.Retentions().Equal(destDB.Retentions()) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 

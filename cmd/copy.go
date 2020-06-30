@@ -80,7 +80,7 @@ func (c *CopyCommand) Execute() error {
 	}
 	defer destDB.Close()
 
-	if !whispertool.Retentions(srcDB.Retentions()).Equal(destDB.Retentions()) {
+	if !srcDB.Retentions().Equal(destDB.Retentions()) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 

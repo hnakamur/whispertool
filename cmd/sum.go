@@ -86,7 +86,7 @@ func sumWhisperFile(srcFilenames []string, retID int, from, until, now whisperto
 	}
 
 	for i := 1; i < len(srcDBList); i++ {
-		if !whispertool.Retentions(srcDBList[0].Retentions()).Equal(srcDBList[i].Retentions()) {
+		if !srcDBList[0].Retentions().Equal(srcDBList[i].Retentions()) {
 			return nil, nil, fmt.Errorf("%s and %s archive confiugrations are unalike. "+
 				"Resize the input before summing", srcFilenames[0], srcFilenames[i])
 		}
