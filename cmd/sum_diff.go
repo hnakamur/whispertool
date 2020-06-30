@@ -13,21 +13,18 @@ import (
 )
 
 type SumDiffCommand struct {
-	SrcURL          string
-	SrcBase         string
-	DestBase        string
-	ItemPattern     string
-	SrcPattern      string
-	Src             string
-	Dest            string
-	From            whispertool.Timestamp
-	Until           whispertool.Timestamp
-	Now             whispertool.Timestamp
-	RetID           int
-	TextOut         string
-	IgnoreSrcEmpty  bool
-	IgnoreDestEmpty bool
-	ShowAll         bool
+	SrcURL      string
+	SrcBase     string
+	DestBase    string
+	ItemPattern string
+	SrcPattern  string
+	Src         string
+	Dest        string
+	From        whispertool.Timestamp
+	Until       whispertool.Timestamp
+	Now         whispertool.Timestamp
+	RetID       int
+	TextOut     string
 
 	Interval       time.Duration
 	IntervalOffset time.Duration
@@ -49,10 +46,6 @@ func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
-
-	fs.BoolVar(&c.IgnoreSrcEmpty, "ignore-src-empty", false, "ignore diff when source point is empty.")
-	fs.BoolVar(&c.IgnoreDestEmpty, "ignore-dest-empty", false, "ignore diff when destination point is empty.")
-	fs.BoolVar(&c.ShowAll, "show-all", false, "print all points when diff exists.")
 
 	fs.DurationVar(&c.Interval, "interval", 0, "run interval (0 means oneshot")
 	fs.DurationVar(&c.IntervalOffset, "interval-offset", 7*time.Second, "run interval offset")
@@ -191,7 +184,7 @@ func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
 		return nil
 	}
 
-	err := printDiff(c.TextOut, sumData, destData, sumPtsList, destPtsList, sumPlDif, destPlDif, c.IgnoreSrcEmpty, c.IgnoreDestEmpty, c.ShowAll)
+	err := printDiff(c.TextOut, sumData, destData, sumPtsList, destPtsList, sumPlDif, destPlDif)
 	if err != nil {
 		return err
 	}
