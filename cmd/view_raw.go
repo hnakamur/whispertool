@@ -102,6 +102,6 @@ func filterPointsByTimeRange(r *whispertool.Retention, points []whispertool.Poin
 
 func sortPointsListByTime(pointsList PointsList) {
 	for _, points := range pointsList {
-		sort.Stable(whispertool.Points(points))
+		sort.Stable(points)
 	}
 }

@@ -667,7 +667,7 @@ func aggregate(method AggregationMethod, knownValues []Value) Value {
 	panic("Invalid aggregation method")
 }
 
-func ParseRetentions(s string) ([]Retention, error) {
+func ParseRetentions(s string) (Retentions, error) {
 	if len(s) == 0 {
 		return nil, fmt.Errorf("invalid retentions: %q", s)
 	}
@@ -777,7 +777,7 @@ func (r Retention) validate() error {
 	return nil
 }
 
-func (rr Retentions) Equal(ss []Retention) bool {
+func (rr Retentions) Equal(ss Retentions) bool {
 	if len(rr) != len(ss) {
 		return false
 	}
@@ -885,7 +885,7 @@ func (v Value) Diff(u Value) Value {
 	return v - u
 }
 
-func (pp Points) Diff(qq []Point) ([]Point, []Point) {
+func (pp Points) Diff(qq Points) (Points, Points) {
 	if len(pp) != len(qq) {
 		return pp, qq
 	}
