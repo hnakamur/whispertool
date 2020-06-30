@@ -61,12 +61,12 @@ func readWhisperFileRaw(filename string, retID int) (*FileData, [][]Point, error
 		return nil, nil, err
 	}
 
-	pointsList := make([][]Point, len(d.Retentions))
+	pointsList := make([][]Point, len(d.retentions))
 	if retID == RetIDAll {
-		for i := range d.Retentions {
+		for i := range d.retentions {
 			pointsList[i] = d.getAllRawUnsortedPoints(i)
 		}
-	} else if retID >= 0 && retID < len(d.Retentions) {
+	} else if retID >= 0 && retID < len(d.retentions) {
 		pointsList[retID] = d.getAllRawUnsortedPoints(retID)
 	} else {
 		return nil, nil, ErrRetentionIDOutOfRange
@@ -76,8 +76,8 @@ func readWhisperFileRaw(filename string, retID int) (*FileData, [][]Point, error
 
 func filterPointsListByTimeRange(d *FileData, pointsList [][]Point, from, until Timestamp) [][]Point {
 	pointsList2 := make([][]Point, len(pointsList))
-	for i := range d.Retentions {
-		r := &d.Retentions[i]
+	for i := range d.retentions {
+		r := &d.retentions[i]
 		pointsList2[i] = filterPointsByTimeRange(r, pointsList[i], from, until)
 	}
 	return pointsList2
@@ -85,7 +85,7 @@ func filterPointsListByTimeRange(d *FileData, pointsList [][]Point, from, until 
 
 func filterPointsByTimeRange(r *Retention, points []Point, from, until Timestamp) []Point {
 	if until == from {
-		until = until.Add(r.SecondsPerPoint)
+		until = until.Add(r.secondsPerPoint)
 	}
 	var points2 []Point
 	for _, p := range points {

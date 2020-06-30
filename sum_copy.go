@@ -140,7 +140,7 @@ func (c *SumCopyCommand) sumCopyItem(itemRelDir string) error {
 	defer destDB.Close()
 
 	destData := destDB.fileData
-	if !Retentions(sumData.Retentions).Equal(destData.Retentions) {
+	if !Retentions(sumData.retentions).Equal(destData.retentions) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 

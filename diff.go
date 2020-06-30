@@ -93,7 +93,7 @@ func (c *DiffCommand) Execute() error {
 		return err
 	}
 
-	if !Retentions(srcData.Retentions).Equal(destData.Retentions) {
+	if !Retentions(srcData.retentions).Equal(destData.retentions) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 
@@ -141,7 +141,7 @@ func printDiff(textOut string, srcData, destData *FileData, srcPtsList, destPtsL
 
 func printDiffTo(w io.Writer, srcData, destData *FileData, srcPtsList, destPtsList, srcPlDif, destPlDif [][]Point, ignoreSrcEmpty, ignoreDestEmpty, showAll bool) error {
 	if showAll {
-		for retID := range srcData.Retentions {
+		for retID := range srcData.retentions {
 			srcPts := srcPtsList[retID]
 			destPts := destPtsList[retID]
 			for i, srcPt := range srcPts {
@@ -157,7 +157,7 @@ func printDiffTo(w io.Writer, srcData, destData *FileData, srcPtsList, destPtsLi
 		}
 	}
 
-	for retID := range srcData.Retentions {
+	for retID := range srcData.retentions {
 		srcPtsDif := srcPlDif[retID]
 		destPtsDif := destPlDif[retID]
 		for i, srcPt := range srcPtsDif {

@@ -26,8 +26,8 @@ func TestDirtyPageRanges(t *testing.T) {
 
 func TestRetention_pointIndex(t *testing.T) {
 	r := &Retention{
-		SecondsPerPoint: Second,
-		NumberOfPoints:  5,
+		secondsPerPoint: Second,
+		numberOfPoints:  5,
 	}
 
 	baseInterval := TimestampFromStdTime(time.Date(2020, 6, 28, 9, 51, 0, 0, time.UTC))
@@ -121,8 +121,8 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 			}
 
 			m := Meta{
-				AggregationMethod: Sum,
-				XFilesFactor:      0,
+				aggregationMethod: Sum,
+				xFilesFactor:      0,
 			}
 			d, err := NewFileData(m, retentions)
 			if err != nil {
@@ -138,8 +138,8 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			gotPointsList := make([][]Point, len(d.Retentions))
-			for retID := range d.Retentions {
+			gotPointsList := make([][]Point, len(d.retentions))
+			for retID := range d.retentions {
 				gotPointsList[retID] = d.getAllRawUnsortedPoints(retID)
 			}
 			sortPointsListByTime(gotPointsList)
@@ -157,7 +157,7 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 			}
 
 			retID := 0
-			r := &d.Retentions[retID]
+			r := &d.retentions[retID]
 			tsFrom := tsNow.Truncate(Minute).Add(-5 * Minute)
 			tsUntil = tsFrom.Add(Minute)
 			gotPoints, err := d.FetchFromArchive(retID, tsFrom, tsUntil, tsNow)

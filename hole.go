@@ -60,8 +60,8 @@ func (c *HoleCommand) Execute() error {
 	}
 
 	rnd := rand.New(rand.NewSource(newRandSeed()))
-	destPtsList := emptyRandomPointsList(srcPtsList, rnd, c.EmptyRate, c.From, c.Until, srcData.Retentions)
-	destData, err := NewFileData(srcData.Meta, srcData.Retentions)
+	destPtsList := emptyRandomPointsList(srcPtsList, rnd, c.EmptyRate, c.From, c.Until, srcData.retentions)
+	destData, err := NewFileData(srcData.meta, srcData.retentions)
 	if err != nil {
 		return err
 	}

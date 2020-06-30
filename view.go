@@ -71,16 +71,16 @@ func readWhisperFile(filename string, now, from, until Timestamp, retID int) (*F
 }
 
 func fetchPointsList(d *FileData, now, from, until Timestamp, retID int) ([][]Point, error) {
-	pointsList := make([][]Point, len(d.Retentions))
+	pointsList := make([][]Point, len(d.retentions))
 	if retID == RetIDAll {
-		for i := range d.Retentions {
+		for i := range d.retentions {
 			points, err := d.FetchFromArchive(i, from, until, now)
 			if err != nil {
 				return nil, err
 			}
 			pointsList[i] = points
 		}
-	} else if retID >= 0 && retID < len(d.Retentions) {
+	} else if retID >= 0 && retID < len(d.retentions) {
 		points, err := d.FetchFromArchive(retID, from, until, now)
 		if err != nil {
 			return nil, err

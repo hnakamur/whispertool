@@ -16,24 +16,24 @@ import (
 )
 
 type FileData struct {
-	Meta       Meta
-	Retentions []Retention
+	meta       Meta
+	retentions []Retention
 
 	buf             []byte
 	dirtyPageBitSet *bitset.BitSet
 }
 
 type Meta struct {
-	AggregationMethod AggregationMethod
+	aggregationMethod AggregationMethod
 	maxRetention      Duration
-	XFilesFactor      float32
+	xFilesFactor      float32
 	retentionCount    uint32
 }
 
 type Retention struct {
 	offset          uint32
-	SecondsPerPoint Duration
-	NumberOfPoints  uint32
+	secondsPerPoint Duration
+	numberOfPoints  uint32
 }
 
 type Retentions []Retention
@@ -71,8 +71,8 @@ func NewFileData(m Meta, retentions []Retention) (*FileData, error) {
 		return nil, err
 	}
 	d := &FileData{
-		Meta:       m,
-		Retentions: retentions,
+		meta:       m,
+		retentions: retentions,
 	}
 	d.fillDerivedValuesInHeader()
 	d.buf = make([]byte, d.fileSizeFromHeader())
@@ -96,33 +96,33 @@ func (d *FileData) readMetaAndRetentions() error {
 		return io.ErrUnexpectedEOF
 	}
 
-	d.Meta.AggregationMethod = AggregationMethod(d.uint32At(0))
-	d.Meta.maxRetention = Duration(d.uint32At(uint32Size))
-	d.Meta.XFilesFactor = d.float32At(2 * uint32Size)
+	d.meta.aggregationMethod = AggregationMethod(d.uint32At(0))
+	d.meta.maxRetention = Duration(d.uint32At(uint32Size))
+	d.meta.xFilesFactor = d.float32At(2 * uint32Size)
 
-	d.Meta.retentionCount = d.uint32At(3 * uint32Size)
-	if d.Meta.retentionCount == 0 {
+	d.meta.retentionCount = d.uint32At(3 * uint32Size)
+	if d.meta.retentionCount == 0 {
 		return errors.New("retention count must not be zero")
 	}
 
-	expectedSize += int(d.Meta.retentionCount) * retentionSize
+	expectedSize += int(d.meta.retentionCount) * retentionSize
 	if len(d.buf) < expectedSize {
 		return io.ErrUnexpectedEOF
 	}
 
-	d.Retentions = make([]Retention, d.Meta.retentionCount)
+	d.retentions = make([]Retention, d.meta.retentionCount)
 	off := uint32(metaSize)
-	for i := 0; i < int(d.Meta.retentionCount); i++ {
-		r := &d.Retentions[i]
+	for i := 0; i < int(d.meta.retentionCount); i++ {
+		r := &d.retentions[i]
 		r.offset = d.uint32At(off)
 		if int(r.offset) != expectedSize {
 			return fmt.Errorf("unexpected offset for retention %d, got: %d, want: %d", i, r.offset, expectedSize)
 		}
-		r.SecondsPerPoint = Duration(d.uint32At(off + uint32Size))
-		r.NumberOfPoints = d.uint32At(off + 2*uint32Size)
+		r.secondsPerPoint = Duration(d.uint32At(off + uint32Size))
+		r.numberOfPoints = d.uint32At(off + 2*uint32Size)
 
 		off += retentionSize
-		expectedSize += int(r.NumberOfPoints) * pointSize
+		expectedSize += int(r.numberOfPoints) * pointSize
 	}
 
 	if len(d.buf) < expectedSize {
@@ -131,11 +131,11 @@ func (d *FileData) readMetaAndRetentions() error {
 		d.buf = d.buf[:expectedSize]
 	}
 
-	if d.Meta.maxRetention != d.Retentions[len(d.Retentions)-1].MaxRetention() {
+	if d.meta.maxRetention != d.retentions[len(d.retentions)-1].MaxRetention() {
 		return errors.New("maxRetention in meta unmatch to maxRetention of lowest retention")
 	}
 
-	if err := validateMetaAndRetentions(d.Meta, d.Retentions); err != nil {
+	if err := validateMetaAndRetentions(d.meta, d.retentions); err != nil {
 		return err
 	}
 
@@ -282,8 +282,8 @@ func dirtyPageRanges(bitSet *bitset.BitSet) []pageRange {
 }
 
 func (d *FileData) getAllRawUnsortedPoints(retentionID int) []Point {
-	r := &d.Retentions[retentionID]
-	points := make([]Point, r.NumberOfPoints)
+	r := &d.retentions[retentionID]
+	points := make([]Point, r.numberOfPoints)
 	off := r.offset
 	for i := 0; i < len(points); i++ {
 		points[i] = d.pointAt(off)
@@ -293,10 +293,10 @@ func (d *FileData) getAllRawUnsortedPoints(retentionID int) []Point {
 }
 
 func (d *FileData) fetchRawPoints(retentionID int, fromInterval, untilInterval Timestamp) []Point {
-	r := &d.Retentions[retentionID]
+	r := &d.retentions[retentionID]
 	baseInterval := d.baseInterval(r)
 
-	step := r.SecondsPerPoint
+	step := r.secondsPerPoint
 	points := make([]Point, untilInterval.Sub(fromInterval)/step)
 
 	fromOffset := r.pointOffsetAt(r.pointIndex(baseInterval, fromInterval))
@@ -311,7 +311,7 @@ func (d *FileData) fetchRawPoints(retentionID int, fromInterval, untilInterval T
 	}
 
 	arcStartOffset := r.offset
-	arcEndOffset := arcStartOffset + r.NumberOfPoints*pointSize
+	arcEndOffset := arcStartOffset + r.numberOfPoints*pointSize
 
 	i := 0
 	for off := fromOffset; off < arcEndOffset; off += pointSize {
@@ -336,10 +336,10 @@ func (d *FileData) FetchFromArchive(retentionID int, from, until, now Timestamp)
 	if from > until {
 		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
 	}
-	if retentionID < 0 || len(d.Retentions)-1 < retentionID {
+	if retentionID < 0 || len(d.retentions)-1 < retentionID {
 		return nil, ErrRetentionIDOutOfRange
 	}
-	r := &d.Retentions[retentionID]
+	r := &d.retentions[retentionID]
 
 	oldest := now.Add(-r.MaxRetention())
 	// range is in the future
@@ -363,7 +363,7 @@ func (d *FileData) FetchFromArchive(retentionID int, from, until, now Timestamp)
 
 	fromInterval := r.Interval(from)
 	untilInterval := r.Interval(until)
-	step := r.SecondsPerPoint
+	step := r.secondsPerPoint
 
 	if baseInterval == 0 {
 		points := make([]Point, (untilInterval-fromInterval)/Timestamp(step))
@@ -404,23 +404,23 @@ func clearOldPoints(points []Point, fromInterval Timestamp, step Duration) {
 }
 
 func (d *FileData) PrintHeader(w io.Writer) error {
-	m := &d.Meta
+	m := &d.meta
 	_, err := fmt.Fprintf(w, "aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%s\tretentionCount:%d\n",
-		m.AggregationMethod,
-		int(m.AggregationMethod),
+		m.aggregationMethod,
+		int(m.aggregationMethod),
 		m.maxRetention,
-		strconv.FormatFloat(float64(m.XFilesFactor), 'f', -1, 32),
+		strconv.FormatFloat(float64(m.xFilesFactor), 'f', -1, 32),
 		m.retentionCount)
 	if err != nil {
 		return err
 	}
 
-	for i := range d.Retentions {
-		r := &d.Retentions[i]
+	for i := range d.retentions {
+		r := &d.retentions[i]
 		_, err := fmt.Fprintf(w, "retentionDef:%d\tstep:%s\tnumberOfPoints:%d\toffset:%d\n",
 			i,
-			Duration(r.SecondsPerPoint),
-			r.NumberOfPoints,
+			Duration(r.secondsPerPoint),
+			r.numberOfPoints,
 			r.offset)
 		if err != nil {
 			return err
@@ -447,21 +447,21 @@ func (pp PointsList) Print(w io.Writer) error {
 }
 
 func (d *FileData) fillDerivedValuesInHeader() {
-	d.Meta.maxRetention = d.Retentions[len(d.Retentions)-1].MaxRetention()
-	d.Meta.retentionCount = uint32(len(d.Retentions))
-	off := metaSize + len(d.Retentions)*retentionSize
-	for i := range d.Retentions {
-		r := &d.Retentions[i]
+	d.meta.maxRetention = d.retentions[len(d.retentions)-1].MaxRetention()
+	d.meta.retentionCount = uint32(len(d.retentions))
+	off := metaSize + len(d.retentions)*retentionSize
+	for i := range d.retentions {
+		r := &d.retentions[i]
 		r.offset = uint32(off)
-		off += int(r.NumberOfPoints) * pointSize
+		off += int(r.numberOfPoints) * pointSize
 	}
 }
 
 func (d *FileData) fileSizeFromHeader() int64 {
 	sz := int64(metaSize)
-	for i := range d.Retentions {
-		r := &d.Retentions[i]
-		sz += retentionSize + int64(r.NumberOfPoints)*pointSize
+	for i := range d.retentions {
+		r := &d.retentions[i]
+		sz += retentionSize + int64(r.numberOfPoints)*pointSize
 	}
 	return sz
 }
@@ -477,10 +477,10 @@ func validateMetaAndRetentions(m Meta, retentions []Retention) error {
 }
 
 func (m Meta) validate() error {
-	if err := validateXFilesFactor(m.XFilesFactor); err != nil {
+	if err := validateXFilesFactor(m.xFilesFactor); err != nil {
 		return err
 	}
-	if err := validateAggregationMethod(m.AggregationMethod); err != nil {
+	if err := validateAggregationMethod(m.aggregationMethod); err != nil {
 		return err
 	}
 	return nil
@@ -503,19 +503,19 @@ func validateAggregationMethod(aggMethod AggregationMethod) error {
 }
 
 func (d *FileData) putMeta() {
-	d.putUint32At(uint32(d.Meta.AggregationMethod), 0)
-	d.putUint32At(uint32(d.Meta.maxRetention), uint32Size)
-	d.putFloat32At(d.Meta.XFilesFactor, 2*uint32Size)
-	d.putUint32At(uint32(d.Meta.retentionCount), 3*uint32Size)
+	d.putUint32At(uint32(d.meta.aggregationMethod), 0)
+	d.putUint32At(uint32(d.meta.maxRetention), uint32Size)
+	d.putFloat32At(d.meta.xFilesFactor, 2*uint32Size)
+	d.putUint32At(uint32(d.meta.retentionCount), 3*uint32Size)
 }
 
 func (d *FileData) putRetentions() {
 	off := uint32(metaSize)
-	for i := range d.Retentions {
-		r := &d.Retentions[i]
+	for i := range d.retentions {
+		r := &d.retentions[i]
 		d.putUint32At(r.offset, off)
-		d.putUint32At(uint32(r.SecondsPerPoint), off+uint32Size)
-		d.putUint32At(r.NumberOfPoints, off+2*uint32Size)
+		d.putUint32At(uint32(r.secondsPerPoint), off+uint32Size)
+		d.putUint32At(r.numberOfPoints, off+2*uint32Size)
 		off += retentionSize
 	}
 }
@@ -530,7 +530,7 @@ func (d *FileData) UpdatePointsForArchive(retentionID int, points []Point, now T
 		now = TimestampFromStdTime(time.Now())
 	}
 
-	r := &d.Retentions[retentionID]
+	r := &d.retentions[retentionID]
 	points = r.filterPoints(points, now)
 	if len(points) == 0 {
 		return nil
@@ -550,10 +550,10 @@ func (d *FileData) UpdatePointsForArchive(retentionID int, points []Point, now T
 	}
 
 	lowRetID := retentionID + 1
-	if lowRetID < len(d.Retentions) {
-		rLow := &d.Retentions[lowRetID]
+	if lowRetID < len(d.retentions) {
+		rLow := &d.retentions[lowRetID]
 		ts := rLow.timesToPropagate(alignedPoints)
-		for ; lowRetID < len(d.Retentions) && len(ts) > 0; lowRetID++ {
+		for ; lowRetID < len(d.retentions) && len(ts) > 0; lowRetID++ {
 			var err error
 			ts, err = d.propagate(lowRetID, ts, now)
 			if err != nil {
@@ -582,17 +582,17 @@ func (d *FileData) propagate(retentionID int, ts []Timestamp, now Timestamp) (pr
 		return nil, nil
 	}
 
-	r := &d.Retentions[retentionID]
+	r := &d.retentions[retentionID]
 	baseInterval := d.baseInterval(r)
 	if baseInterval == 0 {
 		baseInterval = r.intervalForWrite(now)
 	}
 
-	step := r.SecondsPerPoint
+	step := r.secondsPerPoint
 	highRetID := retentionID - 1
 	var rLow *Retention
-	if retentionID+1 < len(d.Retentions) {
-		rLow = &d.Retentions[retentionID+1]
+	if retentionID+1 < len(d.retentions) {
+		rLow = &d.retentions[retentionID+1]
 	}
 
 	for _, t := range ts {
@@ -601,11 +601,11 @@ func (d *FileData) propagate(retentionID int, ts []Timestamp, now Timestamp) (pr
 		points := d.fetchRawPoints(highRetID, fromInterval, untilInterval)
 		values := filterValidValues(points, fromInterval, step)
 		knownFactor := float32(len(values)) / float32(len(points))
-		if knownFactor < d.Meta.XFilesFactor {
+		if knownFactor < d.meta.xFilesFactor {
 			continue
 		}
 
-		v := aggregate(d.Meta.AggregationMethod, values)
+		v := aggregate(d.meta.aggregationMethod, values)
 		offset := r.pointOffsetAt(r.pointIndex(baseInterval, t))
 		d.putTimestampAt(t, offset)
 		d.putValueAt(v, offset+uint32Size)
@@ -689,7 +689,7 @@ func ParseRetentions(s string) ([]Retention, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid retentions: %q", s)
 		}
-		rr = append(rr, *r)
+		rr = append(rr, r)
 
 		if i == -1 {
 			break
@@ -702,26 +702,26 @@ func ParseRetentions(s string) ([]Retention, error) {
 	return rr, nil
 }
 
-func ParseRetention(s string) (*Retention, error) {
+func ParseRetention(s string) (Retention, error) {
 	i := strings.IndexRune(s, ':')
 	if i == -1 || i+1 >= len(s) {
-		return nil, fmt.Errorf("invalid retention: %q", s)
+		return Retention{}, fmt.Errorf("invalid retention: %q", s)
 	}
 
 	step, err := ParseDuration(s[:i])
 	if err != nil {
-		return nil, fmt.Errorf("invalid retention: %q", s)
+		return Retention{}, fmt.Errorf("invalid retention: %q", s)
 	}
 	d, err := ParseDuration(s[i+1:])
 	if err != nil {
-		return nil, fmt.Errorf("invalid retention: %q", s)
+		return Retention{}, fmt.Errorf("invalid retention: %q", s)
 	}
 	if step <= 0 || d <= 0 || d%step != 0 {
-		return nil, fmt.Errorf("invalid retention: %q", s)
+		return Retention{}, fmt.Errorf("invalid retention: %q", s)
 	}
-	return &Retention{
-		SecondsPerPoint: step,
-		NumberOfPoints:  uint32(d / step),
+	return Retention{
+		secondsPerPoint: step,
+		numberOfPoints:  uint32(d / step),
 	}, nil
 }
 
@@ -750,30 +750,30 @@ func (rr Retentions) validate() error {
 		}
 
 		rNext := rr[i+1]
-		if !(r.SecondsPerPoint < rNext.SecondsPerPoint) {
+		if !(r.secondsPerPoint < rNext.secondsPerPoint) {
 			return fmt.Errorf("a Whisper database may not be configured having two archives with the same precision (archive%v: %v, archive%v: %v)", i, r, i+1, rNext)
 		}
 
-		if rNext.SecondsPerPoint%r.SecondsPerPoint != 0 {
-			return fmt.Errorf("higher precision archives' precision must evenly divide all lower precision archives' precision (archive%v: %v, archive%v: %v)", i, r.SecondsPerPoint, i+1, rNext.SecondsPerPoint)
+		if rNext.secondsPerPoint%r.secondsPerPoint != 0 {
+			return fmt.Errorf("higher precision archives' precision must evenly divide all lower precision archives' precision (archive%v: %v, archive%v: %v)", i, r.secondsPerPoint, i+1, rNext.secondsPerPoint)
 		}
 
 		if r.MaxRetention() >= rNext.MaxRetention() {
 			return fmt.Errorf("lower precision archives must cover larger time intervals than higher precision archives (archive%v: %v seconds, archive%v: %v seconds)", i, r.MaxRetention(), i+1, rNext.MaxRetention())
 		}
 
-		if r.NumberOfPoints < uint32(rNext.SecondsPerPoint/r.SecondsPerPoint) {
-			return fmt.Errorf("each archive must have at least enough points to consolidate to the next archive (archive%v consolidates %v of archive%v's points but it has only %v total points)", i+1, rNext.SecondsPerPoint/r.SecondsPerPoint, i, r.NumberOfPoints)
+		if r.numberOfPoints < uint32(rNext.secondsPerPoint/r.secondsPerPoint) {
+			return fmt.Errorf("each archive must have at least enough points to consolidate to the next archive (archive%v consolidates %v of archive%v's points but it has only %v total points)", i+1, rNext.secondsPerPoint/r.secondsPerPoint, i, r.numberOfPoints)
 		}
 	}
 	return nil
 }
 
 func (r Retention) validate() error {
-	if r.SecondsPerPoint <= 0 {
+	if r.secondsPerPoint <= 0 {
 		return errors.New("seconds per point must be positive")
 	}
-	if r.NumberOfPoints <= 0 {
+	if r.numberOfPoints <= 0 {
 		return errors.New("number of points must be positive")
 	}
 	return nil
@@ -792,13 +792,13 @@ func (rr Retentions) Equal(ss []Retention) bool {
 }
 
 func (r Retention) Equal(s Retention) bool {
-	return r.SecondsPerPoint == s.SecondsPerPoint &&
-		r.NumberOfPoints == s.NumberOfPoints
+	return r.secondsPerPoint == s.secondsPerPoint &&
+		r.numberOfPoints == s.numberOfPoints
 }
 
 func (r Retention) String() string {
-	return r.SecondsPerPoint.String() + ":" +
-		(r.SecondsPerPoint * Duration(r.NumberOfPoints)).String()
+	return r.secondsPerPoint.String() + ":" +
+		(r.secondsPerPoint * Duration(r.numberOfPoints)).String()
 }
 
 func (r *Retention) pointIndex(baseInterval, interval Timestamp) int {
@@ -806,12 +806,12 @@ func (r *Retention) pointIndex(baseInterval, interval Timestamp) int {
 	// interval - baseInterval since the latter produces
 	// wrong values because of underflow when interval < baseInterval.
 	// Another solution would be (int64(interval) - int64(baseInterval))
-	pointDistance := int64(interval.Sub(baseInterval)) / int64(r.SecondsPerPoint)
-	return int(floorMod(pointDistance, int64(r.NumberOfPoints)))
+	pointDistance := int64(interval.Sub(baseInterval)) / int64(r.secondsPerPoint)
+	return int(floorMod(pointDistance, int64(r.numberOfPoints)))
 }
 
 func (r *Retention) MaxRetention() Duration {
-	return r.SecondsPerPoint * Duration(r.NumberOfPoints)
+	return r.secondsPerPoint * Duration(r.numberOfPoints)
 }
 
 func (r *Retention) pointOffsetAt(index int) uint32 {
@@ -819,12 +819,12 @@ func (r *Retention) pointOffsetAt(index int) uint32 {
 }
 
 func (r *Retention) Interval(t Timestamp) Timestamp {
-	step := int64(r.SecondsPerPoint)
+	step := int64(r.secondsPerPoint)
 	return Timestamp(int64(t) - floorMod(int64(t), step) + step)
 }
 
 func (r *Retention) intervalForWrite(t Timestamp) Timestamp {
-	step := int64(r.SecondsPerPoint)
+	step := int64(r.secondsPerPoint)
 	return Timestamp(int64(t) - floorMod(int64(t), step))
 }
 

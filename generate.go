@@ -52,8 +52,8 @@ func (c *GenerateCommand) Execute() error {
 	}
 
 	m := Meta{
-		AggregationMethod: Sum,
-		XFilesFactor:      0,
+		aggregationMethod: Sum,
+		xFilesFactor:      0,
 	}
 	d, err := NewFileData(m, retentions)
 	if err != nil {
@@ -95,7 +95,7 @@ func randomPointsList(retentions []Retention, until, now Timestamp, rnd *rand.Ra
 	var highPts []Point
 	for i := range retentions {
 		r := &retentions[i]
-		rndMax := rndMaxForHightestArchive * int(r.SecondsPerPoint) / int(retentions[0].SecondsPerPoint)
+		rndMax := rndMaxForHightestArchive * int(r.secondsPerPoint) / int(retentions[0].secondsPerPoint)
 		pointsList[i] = randomPoints(until, now, r, highRet, rnd, rndMax, highRndMax, highPts)
 
 		highRndMax = rndMax
@@ -107,7 +107,7 @@ func randomPointsList(retentions []Retention, until, now Timestamp, rnd *rand.Ra
 
 func randomPoints(until, now Timestamp, r, highRet *Retention, rnd *rand.Rand, rndMax, highRndMax int, highPts []Point) []Point {
 	// adjust now and until for this archive
-	step := r.SecondsPerPoint
+	step := r.secondsPerPoint
 	thisNow := now.Truncate(step)
 	thisUntil := until.Truncate(step)
 
@@ -119,7 +119,7 @@ func randomPoints(until, now Timestamp, r, highRet *Retention, rnd *rand.Rand, r
 		}
 	}
 
-	n := int((r.MaxRetention() - thisNow.Sub(thisUntil)) / r.SecondsPerPoint)
+	n := int((r.MaxRetention() - thisNow.Sub(thisUntil)) / r.secondsPerPoint)
 	points := make([]Point, n)
 	for i := 0; i < n; i++ {
 		t := thisUntil.Add(-Duration(n-1-i) * step * Second)
@@ -138,7 +138,7 @@ func randomPoints(until, now Timestamp, r, highRet *Retention, rnd *rand.Rand, r
 }
 
 func randomValWithHighSum(t Timestamp, rnd *rand.Rand, highRndMax int, r, highRet *Retention, highPts []Point) Value {
-	step := r.SecondsPerPoint
+	step := r.secondsPerPoint
 
 	v := Value(0)
 	for _, hp := range highPts {
@@ -159,13 +159,13 @@ func randomValWithHighSum(t Timestamp, rnd *rand.Rand, highRndMax int, r, highRe
 	if t >= highStartTime {
 		return v
 	}
-	n := int(highStartTime.Sub(t) / Second / highRet.SecondsPerPoint)
+	n := int(highStartTime.Sub(t) / Second / highRet.secondsPerPoint)
 	v2 := Value(n * rnd.Intn(highRndMax+1))
 	return v + v2
 }
 
 func updateFileDataWithPointsList(d *FileData, pointsList [][]Point, now Timestamp) error {
-	for retID := range d.Retentions {
+	for retID := range d.retentions {
 		if err := d.UpdatePointsForArchive(retID, pointsList[retID], now); err != nil {
 			return err
 		}

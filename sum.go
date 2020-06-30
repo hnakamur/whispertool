@@ -85,13 +85,13 @@ func sumWhisperFile(srcFilenames []string, now, from, until Timestamp, retID int
 	}
 
 	for i := 1; i < len(srcDataList); i++ {
-		if !Retentions(srcDataList[0].Retentions).Equal(srcDataList[i].Retentions) {
+		if !Retentions(srcDataList[0].retentions).Equal(srcDataList[i].retentions) {
 			return nil, nil, fmt.Errorf("%s and %s archive confiugrations are unalike. "+
 				"Resize the input before summing", srcFilenames[0], srcFilenames[i])
 		}
 	}
 
-	sumData, err := NewFileData(srcDataList[0].Meta, srcDataList[0].Retentions)
+	sumData, err := NewFileData(srcDataList[0].meta, srcDataList[0].retentions)
 	if err != nil {
 		return nil, nil, err
 	}
