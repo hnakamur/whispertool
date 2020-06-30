@@ -90,7 +90,7 @@ func (a *app) handleView(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
-	_, err = w.Write(d.Bytes())
+	_, err = w.Write(d.RawData())
 	if err != nil {
 		return err
 	}
@@ -124,17 +124,17 @@ func (a *app) handleSum(w http.ResponseWriter, r *http.Request) error {
 	tsFrom := whispertool.TimestampFromStdTime(from)
 	tsUntil := whispertool.TimestampFromStdTime(until)
 
-	sumData, ptsList, err := sumWhisperFile(srcFilenames, RetIDAll, tsFrom, tsUntil, tsNow)
+	sumDB, ptsList, err := sumWhisperFile(srcFilenames, RetIDAll, tsFrom, tsUntil, tsNow)
 	if err != nil {
 		return err
 	}
 
-	if err := updateFileDataWithPointsList(sumData, ptsList, tsNow); err != nil {
+	if err := updateFileDataWithPointsList(sumDB, ptsList, tsNow); err != nil {
 		return err
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
-	_, err = w.Write(sumData.Bytes())
+	_, err = w.Write(sumDB.RawData())
 	if err != nil {
 		return err
 	}

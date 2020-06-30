@@ -59,31 +59,32 @@ func (c *ViewCommand) Execute() error {
 	return nil
 }
 
-func readWhisperFile(filename string, retID int, from, until, now whispertool.Timestamp) (*whispertool.FileData, [][]whispertool.Point, error) {
-	d, err := whispertool.ReadFile(filename)
+func readWhisperFile(filename string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, [][]whispertool.Point, error) {
+	db, err := whispertool.Open(filename)
 	if err != nil {
 		return nil, nil, err
 	}
+	defer db.Close()
 
-	pointsList, err := fetchPointsList(d, retID, from, until, now)
+	pointsList, err := fetchPointsList(db, retID, from, until, now)
 	if err != nil {
 		return nil, nil, err
 	}
-	return d, pointsList, nil
+	return db, pointsList, nil
 }
 
-func fetchPointsList(d *whispertool.FileData, retID int, from, until, now whispertool.Timestamp) ([][]whispertool.Point, error) {
-	pointsList := make([][]whispertool.Point, len(d.Retentions()))
+func fetchPointsList(db *whispertool.Whisper, retID int, from, until, now whispertool.Timestamp) ([][]whispertool.Point, error) {
+	pointsList := make([][]whispertool.Point, len(db.Retentions()))
 	if retID == RetIDAll {
-		for i := range d.Retentions() {
-			points, err := d.FetchFromArchive(i, from, until, now)
+		for i := range db.Retentions() {
+			points, err := db.FetchFromArchive(i, from, until, now)
 			if err != nil {
 				return nil, err
 			}
 			pointsList[i] = points
 		}
-	} else if retID >= 0 && retID < len(d.Retentions()) {
-		points, err := d.FetchFromArchive(retID, from, until, now)
+	} else if retID >= 0 && retID < len(db.Retentions()) {
+		points, err := db.FetchFromArchive(retID, from, until, now)
 		if err != nil {
 			return nil, err
 		}
@@ -94,13 +95,13 @@ func fetchPointsList(d *whispertool.FileData, retID int, from, until, now whispe
 	return pointsList, nil
 }
 
-func printFileData(textOut string, d *whispertool.FileData, pointsList [][]whispertool.Point, showHeader bool) error {
+func printFileData(textOut string, db *whispertool.Whisper, pointsList [][]whispertool.Point, showHeader bool) error {
 	if textOut == "" {
 		return nil
 	}
 
 	if textOut == "-" {
-		return printHeaderAndPointsList(os.Stdout, d, pointsList, showHeader)
+		return printHeaderAndPointsList(os.Stdout, db, pointsList, showHeader)
 	}
 
 	file, err := os.Create(textOut)
@@ -110,7 +111,7 @@ func printFileData(textOut string, d *whispertool.FileData, pointsList [][]whisp
 	defer file.Close()
 
 	w := bufio.NewWriter(file)
-	if err := printHeaderAndPointsList(w, d, pointsList, showHeader); err != nil {
+	if err := printHeaderAndPointsList(w, db, pointsList, showHeader); err != nil {
 		return err
 	}
 	if err = w.Flush(); err != nil {
@@ -122,9 +123,9 @@ func printFileData(textOut string, d *whispertool.FileData, pointsList [][]whisp
 	return nil
 }
 
-func printHeaderAndPointsList(w io.Writer, d *whispertool.FileData, pointsList [][]whispertool.Point, showHeader bool) error {
+func printHeaderAndPointsList(w io.Writer, db *whispertool.Whisper, pointsList [][]whispertool.Point, showHeader bool) error {
 	if showHeader {
-		if err := d.PrintHeader(w); err != nil {
+		if err := db.PrintHeader(w); err != nil {
 			return err
 		}
 	}

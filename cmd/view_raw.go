@@ -41,42 +41,43 @@ func (c *ViewRawCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *ViewRawCommand) Execute() error {
-	d, pointsList, err := readWhisperFileRaw(c.Filename, c.RetID)
+	db, pointsList, err := readWhisperFileRaw(c.Filename, c.RetID)
 	if err != nil {
 		return err
 	}
 
-	pointsList = filterPointsListByTimeRange(d, pointsList, c.From, c.Until)
+	pointsList = filterPointsListByTimeRange(db, pointsList, c.From, c.Until)
 	if c.SortsByTime {
 		sortPointsListByTime(pointsList)
 	}
 
-	if err := printFileData(c.TextOut, d, pointsList, c.ShowHeader); err != nil {
+	if err := printFileData(c.TextOut, db, pointsList, c.ShowHeader); err != nil {
 		return err
 	}
 	return nil
 }
 
-func readWhisperFileRaw(filename string, retID int) (*whispertool.FileData, [][]whispertool.Point, error) {
-	d, err := whispertool.ReadFile(filename)
+func readWhisperFileRaw(filename string, retID int) (*whispertool.Whisper, [][]whispertool.Point, error) {
+	db, err := whispertool.Open(filename)
 	if err != nil {
 		return nil, nil, err
 	}
+	defer db.Close()
 
-	pointsList := make([][]whispertool.Point, len(d.Retentions()))
+	pointsList := make([][]whispertool.Point, len(db.Retentions()))
 	if retID == RetIDAll {
-		for i := range d.Retentions() {
-			pointsList[i] = d.GetAllRawUnsortedPoints(i)
+		for i := range db.Retentions() {
+			pointsList[i] = db.GetAllRawUnsortedPoints(i)
 		}
-	} else if retID >= 0 && retID < len(d.Retentions()) {
-		pointsList[retID] = d.GetAllRawUnsortedPoints(retID)
+	} else if retID >= 0 && retID < len(db.Retentions()) {
+		pointsList[retID] = db.GetAllRawUnsortedPoints(retID)
 	} else {
 		return nil, nil, whispertool.ErrRetentionIDOutOfRange
 	}
-	return d, pointsList, nil
+	return db, pointsList, nil
 }
 
-func filterPointsListByTimeRange(d *whispertool.FileData, pointsList [][]whispertool.Point, from, until whispertool.Timestamp) [][]whispertool.Point {
+func filterPointsListByTimeRange(d *whispertool.Whisper, pointsList [][]whispertool.Point, from, until whispertool.Timestamp) [][]whispertool.Point {
 	pointsList2 := make([][]whispertool.Point, len(pointsList))
 	for i := range d.Retentions() {
 		r := &d.Retentions()[i]

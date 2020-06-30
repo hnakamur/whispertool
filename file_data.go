@@ -15,15 +15,15 @@ import (
 	"github.com/willf/bitset"
 )
 
-type FileData struct {
-	meta       Meta
+type fileData struct {
+	meta       meta
 	retentions []Retention
 
 	buf             []byte
 	dirtyPageBitSet *bitset.BitSet
 }
 
-type Meta struct {
+type meta struct {
 	aggregationMethod AggregationMethod
 	maxRetention      Duration
 	xFilesFactor      float32
@@ -66,11 +66,15 @@ const (
 var pageSize = os.Getpagesize()
 var ErrRetentionIDOutOfRange = errors.New("retention ID out of range")
 
-func NewFileData(m Meta, retentions []Retention) (*FileData, error) {
+func newFileData(retentions []Retention, aggregationMethod AggregationMethod, xFilesFactor float32) (*fileData, error) {
+	m := meta{
+		aggregationMethod: aggregationMethod,
+		xFilesFactor:      xFilesFactor,
+	}
 	if err := validateMetaAndRetentions(m, retentions); err != nil {
 		return nil, err
 	}
-	d := &FileData{
+	d := &fileData{
 		meta:       m,
 		retentions: retentions,
 	}
@@ -82,18 +86,19 @@ func NewFileData(m Meta, retentions []Retention) (*FileData, error) {
 	return d, nil
 }
 
-func NewFileDataRead(data []byte) (*FileData, error) {
-	d := &FileData{buf: data}
+func newFileDataRead(data []byte) (*fileData, error) {
+	d := &fileData{buf: data}
 	if err := d.readMetaAndRetentions(); err != nil {
 		return nil, err
 	}
 	return d, nil
 }
 
-func (d *FileData) Meta() Meta              { return d.meta }
-func (d *FileData) Retentions() []Retention { return d.retentions }
+func (d *fileData) AggregationMethod() AggregationMethod { return d.meta.aggregationMethod }
+func (d *fileData) XFilesFactor() float32                { return d.meta.xFilesFactor }
+func (d *fileData) Retentions() []Retention              { return d.retentions }
 
-func (d *FileData) readMetaAndRetentions() error {
+func (d *fileData) readMetaAndRetentions() error {
 	expectedSize := metaSize
 	if len(d.buf) < expectedSize {
 		return io.ErrUnexpectedEOF
@@ -145,73 +150,73 @@ func (d *FileData) readMetaAndRetentions() error {
 	return nil
 }
 
-func (d *FileData) baseInterval(r *Retention) Timestamp {
+func (d *fileData) baseInterval(r *Retention) Timestamp {
 	return d.timestampAt(r.offset)
 }
 
-func (d *FileData) pointAt(offset uint32) Point {
+func (d *fileData) pointAt(offset uint32) Point {
 	return Point{
 		Time:  d.timestampAt(offset),
 		Value: d.valueAt(offset + uint32Size),
 	}
 }
 
-func (d *FileData) timestampAt(offset uint32) Timestamp {
+func (d *fileData) timestampAt(offset uint32) Timestamp {
 	return Timestamp(d.uint32At(offset))
 }
 
-func (d *FileData) valueAt(offset uint32) Value {
+func (d *fileData) valueAt(offset uint32) Value {
 	return Value(d.float64At(offset))
 }
 
-func (d *FileData) float32At(offset uint32) float32 {
+func (d *fileData) float32At(offset uint32) float32 {
 	return math.Float32frombits(d.uint32At(offset))
 }
 
-func (d *FileData) float64At(offset uint32) float64 {
+func (d *fileData) float64At(offset uint32) float64 {
 	return math.Float64frombits(d.uint64At(offset))
 }
 
-func (d *FileData) uint32At(offset uint32) uint32 {
+func (d *fileData) uint32At(offset uint32) uint32 {
 	return binary.BigEndian.Uint32(d.buf[offset:])
 }
 
-func (d *FileData) uint64At(offset uint32) uint64 {
+func (d *fileData) uint64At(offset uint32) uint64 {
 	return binary.BigEndian.Uint64(d.buf[offset:])
 }
 
-func (d *FileData) putPointAt(p Point, offset uint32) {
+func (d *fileData) putPointAt(p Point, offset uint32) {
 	d.putTimestampAt(p.Time, offset)
 	d.putValueAt(p.Value, offset+uint32Size)
 }
 
-func (d *FileData) putTimestampAt(t Timestamp, offset uint32) {
+func (d *fileData) putTimestampAt(t Timestamp, offset uint32) {
 	d.putUint32At(uint32(t), offset)
 }
 
-func (d *FileData) putValueAt(v Value, offset uint32) {
+func (d *fileData) putValueAt(v Value, offset uint32) {
 	d.putFloat64At(float64(v), offset)
 }
 
-func (d *FileData) putFloat32At(v float32, offset uint32) {
+func (d *fileData) putFloat32At(v float32, offset uint32) {
 	d.putUint32At(math.Float32bits(v), offset)
 }
 
-func (d *FileData) putFloat64At(v float64, offset uint32) {
+func (d *fileData) putFloat64At(v float64, offset uint32) {
 	d.putUint64At(math.Float64bits(v), offset)
 }
 
-func (d *FileData) putUint32At(v uint32, offset uint32) {
+func (d *fileData) putUint32At(v uint32, offset uint32) {
 	d.setPagesDirtyByOffsetRange(offset, uint32Size)
 	binary.BigEndian.PutUint32(d.buf[offset:], v)
 }
 
-func (d *FileData) putUint64At(v uint64, offset uint32) {
+func (d *fileData) putUint64At(v uint64, offset uint32) {
 	d.setPagesDirtyByOffsetRange(offset, uint64Size)
 	binary.BigEndian.PutUint64(d.buf[offset:], v)
 }
 
-func (d *FileData) setPagesDirtyByOffsetRange(offset, size uint32) {
+func (d *fileData) setPagesDirtyByOffsetRange(offset, size uint32) {
 	startPage := pageForStartOffset(offset)
 	endPage := pageForEndOffset(offset + size)
 	for page := startPage; page <= endPage; page++ {
@@ -219,12 +224,12 @@ func (d *FileData) setPagesDirtyByOffsetRange(offset, size uint32) {
 	}
 }
 
-func (d *FileData) initDirtyPageBitSet() {
+func (d *fileData) initDirtyPageBitSet() {
 	pageCount := (len(d.buf) + pageSize - 1) / pageSize
 	d.dirtyPageBitSet = bitset.New(uint(pageCount))
 }
 
-func (d *FileData) setPageDirty(page int) {
+func (d *fileData) setPageDirty(page int) {
 	if d.dirtyPageBitSet == nil {
 		d.initDirtyPageBitSet()
 	}
@@ -239,7 +244,7 @@ func pageForEndOffset(offset uint32) int {
 	return int(offset-1) / pageSize
 }
 
-func (d *FileData) FlushTo(w io.WriterAt) error {
+func (d *fileData) FlushTo(w io.WriterAt) error {
 	for _, r := range dirtyPageRanges(d.dirtyPageBitSet) {
 		off := r.start * pageSize
 		end := r.end * pageSize
@@ -284,7 +289,7 @@ func dirtyPageRanges(bitSet *bitset.BitSet) []pageRange {
 	return ranges
 }
 
-func (d *FileData) GetAllRawUnsortedPoints(retentionID int) []Point {
+func (d *fileData) GetAllRawUnsortedPoints(retentionID int) []Point {
 	r := &d.retentions[retentionID]
 	points := make([]Point, r.numberOfPoints)
 	off := r.offset
@@ -295,7 +300,7 @@ func (d *FileData) GetAllRawUnsortedPoints(retentionID int) []Point {
 	return points
 }
 
-func (d *FileData) fetchRawPoints(retentionID int, fromInterval, untilInterval Timestamp) []Point {
+func (d *fileData) fetchRawPoints(retentionID int, fromInterval, untilInterval Timestamp) []Point {
 	r := &d.retentions[retentionID]
 	baseInterval := d.baseInterval(r)
 
@@ -331,7 +336,7 @@ func (d *FileData) fetchRawPoints(retentionID int, fromInterval, untilInterval T
 // FetchFromArchive fetches points from archive specified with `retentionID`.
 // It fetches points in range between `from` (exclusive) and `until` (inclusive).
 // If `now` is zero, the current time is used.
-func (d *FileData) FetchFromArchive(retentionID int, from, until, now Timestamp) ([]Point, error) {
+func (d *fileData) FetchFromArchive(retentionID int, from, until, now Timestamp) ([]Point, error) {
 	if now == 0 {
 		now = TimestampFromStdTime(time.Now())
 	}
@@ -406,7 +411,7 @@ func clearOldPoints(points []Point, fromInterval Timestamp, step Duration) {
 	}
 }
 
-func (d *FileData) PrintHeader(w io.Writer) error {
+func (d *fileData) PrintHeader(w io.Writer) error {
 	m := &d.meta
 	_, err := fmt.Fprintf(w, "aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%s\tretentionCount:%d\n",
 		m.aggregationMethod,
@@ -433,7 +438,7 @@ func (d *FileData) PrintHeader(w io.Writer) error {
 }
 
 // Bytes returns data for whole file.
-func (d *FileData) Bytes() []byte {
+func (d *fileData) Bytes() []byte {
 	return d.buf
 }
 
@@ -449,7 +454,7 @@ func (pp PointsList) Print(w io.Writer) error {
 	return nil
 }
 
-func (d *FileData) fillDerivedValuesInHeader() {
+func (d *fileData) fillDerivedValuesInHeader() {
 	d.meta.maxRetention = d.retentions[len(d.retentions)-1].MaxRetention()
 	d.meta.retentionCount = uint32(len(d.retentions))
 	off := metaSize + len(d.retentions)*retentionSize
@@ -460,7 +465,7 @@ func (d *FileData) fillDerivedValuesInHeader() {
 	}
 }
 
-func (d *FileData) fileSizeFromHeader() int64 {
+func (d *fileData) fileSizeFromHeader() int64 {
 	sz := int64(metaSize)
 	for i := range d.retentions {
 		r := &d.retentions[i]
@@ -469,7 +474,7 @@ func (d *FileData) fileSizeFromHeader() int64 {
 	return sz
 }
 
-func validateMetaAndRetentions(m Meta, retentions []Retention) error {
+func validateMetaAndRetentions(m meta, retentions []Retention) error {
 	if err := m.validate(); err != nil {
 		return err
 	}
@@ -479,7 +484,7 @@ func validateMetaAndRetentions(m Meta, retentions []Retention) error {
 	return nil
 }
 
-func (m Meta) validate() error {
+func (m meta) validate() error {
 	if err := validateXFilesFactor(m.xFilesFactor); err != nil {
 		return err
 	}
@@ -505,14 +510,14 @@ func validateAggregationMethod(aggMethod AggregationMethod) error {
 	}
 }
 
-func (d *FileData) putMeta() {
+func (d *fileData) putMeta() {
 	d.putUint32At(uint32(d.meta.aggregationMethod), 0)
 	d.putUint32At(uint32(d.meta.maxRetention), uint32Size)
 	d.putFloat32At(d.meta.xFilesFactor, 2*uint32Size)
 	d.putUint32At(uint32(d.meta.retentionCount), 3*uint32Size)
 }
 
-func (d *FileData) putRetentions() {
+func (d *fileData) putRetentions() {
 	off := uint32(metaSize)
 	for i := range d.retentions {
 		r := &d.retentions[i]
@@ -523,12 +528,12 @@ func (d *FileData) putRetentions() {
 	}
 }
 
-func (d *FileData) UpdatePointForArchive(retentionID int, t Timestamp, v Value, now Timestamp) error {
+func (d *fileData) UpdatePointForArchive(retentionID int, t Timestamp, v Value, now Timestamp) error {
 	points := []Point{{Time: t, Value: v}}
 	return d.UpdatePointsForArchive(retentionID, points, now)
 }
 
-func (d *FileData) UpdatePointsForArchive(retentionID int, points []Point, now Timestamp) error {
+func (d *fileData) UpdatePointsForArchive(retentionID int, points []Point, now Timestamp) error {
 	if now == 0 {
 		now = TimestampFromStdTime(time.Now())
 	}
@@ -580,7 +585,7 @@ func (r *Retention) timesToPropagate(points []Point) []Timestamp {
 	return ts
 }
 
-func (d *FileData) propagate(retentionID int, ts []Timestamp, now Timestamp) (propagatedTs []Timestamp, err error) {
+func (d *fileData) propagate(retentionID int, ts []Timestamp, now Timestamp) (propagatedTs []Timestamp, err error) {
 	if len(ts) == 0 {
 		return nil, nil
 	}
@@ -674,16 +679,6 @@ func aggregate(method AggregationMethod, knownValues []Value) Value {
 	}
 	panic("Invalid aggregation method")
 }
-
-func NewMeta(aggregationMethod AggregationMethod, xFilesFactor float32) Meta {
-	return Meta{
-		aggregationMethod: aggregationMethod,
-		xFilesFactor:      xFilesFactor,
-	}
-}
-
-func (m *Meta) AggregationMethod() AggregationMethod { return m.aggregationMethod }
-func (m *Meta) XFilesFactor() float32                { return m.xFilesFactor }
 
 func ParseRetentions(s string) ([]Retention, error) {
 	if len(s) == 0 {

@@ -53,27 +53,27 @@ func (c *GenerateCommand) Execute() error {
 		return err
 	}
 
-	m := whispertool.NewMeta(whispertool.Sum, 0)
-	d, err := whispertool.NewFileData(m, retentions)
+	db, err := whispertool.Create(c.Dest, retentions, whispertool.Sum, 0)
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
 	var pointsList [][]whispertool.Point
 	if c.Fill {
 		rnd := rand.New(rand.NewSource(newRandSeed()))
 		until := c.Now
 		pointsList = randomPointsList(retentions, rnd, c.RandMax, until, c.Now)
-		if err := updateFileDataWithPointsList(d, pointsList, c.Now); err != nil {
+		if err := updateFileDataWithPointsList(db, pointsList, c.Now); err != nil {
 			return err
 		}
 	}
 
-	if err = printFileData(c.TextOut, d, pointsList, true); err != nil {
+	if err = printFileData(c.TextOut, db, pointsList, true); err != nil {
 		return err
 	}
 
-	if err := whispertool.WriteFile(c.Dest, d, c.Perm); err != nil {
+	if err := db.Sync(); err != nil {
 		return err
 	}
 	return nil
@@ -163,28 +163,11 @@ func randomValWithHighSum(t whispertool.Timestamp, rnd *rand.Rand, highRndMax in
 	return v + v2
 }
 
-func updateFileDataWithPointsList(d *whispertool.FileData, pointsList [][]whispertool.Point, now whispertool.Timestamp) error {
-	for retID := range d.Retentions() {
-		if err := d.UpdatePointsForArchive(retID, pointsList[retID], now); err != nil {
+func updateFileDataWithPointsList(db *whispertool.Whisper, pointsList [][]whispertool.Point, now whispertool.Timestamp) error {
+	for retID := range db.Retentions() {
+		if err := db.UpdatePointsForArchive(retID, pointsList[retID], now); err != nil {
 			return err
 		}
 	}
 	return nil
 }
-
-//func updateWhisperFile(db *whispertool.Whisper, pointsList [][]whispertool.Point, now whispertool.Timestamp) error {
-//	if pointsList == nil {
-//		return nil
-//	}
-//	for i := range db.Retentions {
-//		err := db.UpdatePointsForArchive(i, pointsList[i], now)
-//		if err != nil {
-//			return err
-//		}
-//	}
-//
-//	if err := db.Sync(); err != nil {
-//		return err
-//	}
-//	return nil
-//}

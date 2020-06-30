@@ -63,20 +63,20 @@ func (c *SumCommand) Execute() error {
 	return nil
 }
 
-func sumWhisperFile(srcFilenames []string, retID int, from, until, now whispertool.Timestamp) (*whispertool.FileData, [][]whispertool.Point, error) {
-	srcDataList := make([]*whispertool.FileData, len(srcFilenames))
+func sumWhisperFile(srcFilenames []string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, [][]whispertool.Point, error) {
+	srcDBList := make([]*whispertool.Whisper, len(srcFilenames))
 	ptsListList := make([][][]whispertool.Point, len(srcFilenames))
 	var g errgroup.Group
 	for i, srcFilename := range srcFilenames {
 		i := i
 		srcFilename := srcFilename
 		g.Go(func() error {
-			d, ptsList, err := readWhisperFile(srcFilename, retID, from, until, now)
+			db, ptsList, err := readWhisperFile(srcFilename, retID, from, until, now)
 			if err != nil {
 				return err
 			}
 
-			srcDataList[i] = d
+			srcDBList[i] = db
 			ptsListList[i] = ptsList
 			return nil
 		})
@@ -85,21 +85,23 @@ func sumWhisperFile(srcFilenames []string, retID int, from, until, now whisperto
 		return nil, nil, err
 	}
 
-	for i := 1; i < len(srcDataList); i++ {
-		if !whispertool.Retentions(srcDataList[0].Retentions()).Equal(srcDataList[i].Retentions()) {
+	for i := 1; i < len(srcDBList); i++ {
+		if !whispertool.Retentions(srcDBList[0].Retentions()).Equal(srcDBList[i].Retentions()) {
 			return nil, nil, fmt.Errorf("%s and %s archive confiugrations are unalike. "+
 				"Resize the input before summing", srcFilenames[0], srcFilenames[i])
 		}
 	}
 
-	sumData, err := whispertool.NewFileData(srcDataList[0].Meta(), srcDataList[0].Retentions())
+	srcDB0 := srcDBList[0]
+	sumDB, err := whispertool.Create("", srcDB0.Retentions(), srcDB0.AggregationMethod(), srcDB0.XFilesFactor(),
+		whispertool.WithInMemory())
 	if err != nil {
 		return nil, nil, err
 	}
 
 	sumPtsList := sumPointsLists(ptsListList)
 
-	return sumData, sumPtsList, nil
+	return sumDB, sumPtsList, nil
 }
 
 func sumPointsLists(ptsListList [][][]whispertool.Point) [][]whispertool.Point {

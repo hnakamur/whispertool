@@ -107,19 +107,18 @@ func (c *SumCopyCommand) sumCopyItem(itemRelDir string) error {
 	}
 	destFull := filepath.Join(c.DestBase, itemRelDir, c.Dest)
 
-	var destDB *whispertool.Whisper
-	var sumData *whispertool.FileData
+	var sumDB, destDB *whispertool.Whisper
 	var sumPtsList [][]whispertool.Point
 	var g errgroup.Group
 	g.Go(func() error {
 		var err error
 		if c.SrcURL != "" {
-			sumData, sumPtsList, err = sumWhisperFileRemote(c.SrcURL, srcFullPattern, c.RetID, c.From, c.Until, c.Now)
+			sumDB, sumPtsList, err = sumWhisperFileRemote(c.SrcURL, srcFullPattern, c.RetID, c.From, c.Until, c.Now)
 			if err != nil {
 				return err
 			}
 		} else {
-			sumData, sumPtsList, err = sumWhisperFile(srcFilenames, c.RetID, c.From, c.Until, c.Now)
+			sumDB, sumPtsList, err = sumWhisperFile(srcFilenames, c.RetID, c.From, c.Until, c.Now)
 			if err != nil {
 				return err
 			}
@@ -128,7 +127,7 @@ func (c *SumCopyCommand) sumCopyItem(itemRelDir string) error {
 	})
 	g.Go(func() error {
 		var err error
-		destDB, err = whispertool.OpenForWrite(destFull)
+		destDB, err = whispertool.Open(destFull)
 		if err != nil {
 			return err
 		}
@@ -139,16 +138,15 @@ func (c *SumCopyCommand) sumCopyItem(itemRelDir string) error {
 	}
 	defer destDB.Close()
 
-	destData := destDB.FileData()
-	if !whispertool.Retentions(sumData.Retentions()).Equal(destData.Retentions()) {
+	if !whispertool.Retentions(sumDB.Retentions()).Equal(destDB.Retentions()) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 
-	if err := updateFileDataWithPointsList(destData, sumPtsList, c.Now); err != nil {
+	if err := updateFileDataWithPointsList(destDB, sumPtsList, c.Now); err != nil {
 		return err
 	}
 
-	if err := printFileData(c.TextOut, sumData, sumPtsList, true); err != nil {
+	if err := printFileData(c.TextOut, sumDB, sumPtsList, true); err != nil {
 		return err
 	}
 

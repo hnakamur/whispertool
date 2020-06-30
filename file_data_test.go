@@ -1,6 +1,8 @@
 package whispertool
 
 import (
+	crand "crypto/rand"
+	"encoding/binary"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -120,11 +122,7 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			m := Meta{
-				aggregationMethod: Sum,
-				xFilesFactor:      0,
-			}
-			d, err := NewFileData(m, retentions)
+			d, err := newFileData(retentions, Sum, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -133,14 +131,14 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 			tsNow := tc.now
 			tsUntil := tsNow
 			const randMax = 100
-			pointsList := randomPointsList(retentions, tsUntil, tsNow, rnd, randMax)
+			pointsList := randomPointsList(retentions, rnd, randMax, tsUntil, tsNow)
 			if err := updateFileDataWithPointsList(d, pointsList, tsNow); err != nil {
 				t.Fatal(err)
 			}
 
 			gotPointsList := make([][]Point, len(d.retentions))
 			for retID := range d.retentions {
-				gotPointsList[retID] = d.getAllRawUnsortedPoints(retID)
+				gotPointsList[retID] = d.GetAllRawUnsortedPoints(retID)
 			}
 			sortPointsListByTime(gotPointsList)
 
@@ -195,4 +193,117 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 			t.Logf("now=%s, from=%s, until=%s, gotPoints=%v", tsNow, tsFrom, tsUntil, gotPoints)
 		})
 	}
+}
+
+func newRandSeed() int64 {
+	var b [8]byte
+	if _, err := crand.Read(b[:]); err != nil {
+		return time.Now().UnixNano()
+	}
+	return int64(binary.BigEndian.Uint64(b[:]))
+}
+
+func randomPointsList(retentions []Retention, rnd *rand.Rand, rndMaxForHightestArchive int, until, now Timestamp) [][]Point {
+	pointsList := make([][]Point, len(retentions))
+	var highRet *Retention
+	var highRndMax int
+	var highPts []Point
+	for i := range retentions {
+		r := &retentions[i]
+		rndMax := rndMaxForHightestArchive * int(r.SecondsPerPoint()) / int(retentions[0].SecondsPerPoint())
+		pointsList[i] = randomPoints(r, highRet, highPts, rnd, rndMax, highRndMax, until, now)
+
+		highRndMax = rndMax
+		highPts = pointsList[i]
+		highRet = r
+	}
+	return pointsList
+}
+
+func randomPoints(r, highRet *Retention, highPts []Point, rnd *rand.Rand, rndMax, highRndMax int, until, now Timestamp) []Point {
+	// adjust now and until for this archive
+	step := r.SecondsPerPoint()
+	thisNow := now.Truncate(step)
+	thisUntil := until.Truncate(step)
+
+	var thisHighStartTime Timestamp
+	if highPts != nil {
+		highStartTime := highPts[0].Time
+		if highStartTime < thisUntil {
+			thisHighStartTime = highStartTime.Truncate(step)
+		}
+	}
+
+	n := int((r.MaxRetention() - thisNow.Sub(thisUntil)) / r.SecondsPerPoint())
+	points := make([]Point, n)
+	for i := 0; i < n; i++ {
+		t := thisUntil.Add(-Duration(n-1-i) * step * Second)
+		var v Value
+		if thisHighStartTime == 0 || t < thisHighStartTime {
+			v = Value(rnd.Intn(rndMax + 1))
+		} else {
+			v = randomValWithHighSum(t, rnd, highRndMax, r, highRet, highPts)
+		}
+		points[i] = Point{
+			Time:  t,
+			Value: v,
+		}
+	}
+	return points
+}
+
+func randomValWithHighSum(t Timestamp, rnd *rand.Rand, highRndMax int, r, highRet *Retention, highPts []Point) Value {
+	step := r.SecondsPerPoint()
+
+	v := Value(0)
+	for _, hp := range highPts {
+		thisHighTime := hp.Time.Truncate(step)
+		if thisHighTime < t {
+			continue
+		}
+		if thisHighTime > t {
+			break
+		}
+		v += hp.Value
+	}
+
+	if len(highPts) == 0 {
+		return v
+	}
+	highStartTime := highPts[0].Time
+	if t >= highStartTime {
+		return v
+	}
+	n := int(highStartTime.Sub(t) / Second / highRet.SecondsPerPoint())
+	v2 := Value(n * rnd.Intn(highRndMax+1))
+	return v + v2
+}
+
+func updateFileDataWithPointsList(d *fileData, pointsList [][]Point, now Timestamp) error {
+	for retID := range d.Retentions() {
+		if err := d.UpdatePointsForArchive(retID, pointsList[retID], now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func sortPointsListByTime(pointsList [][]Point) {
+	for _, points := range pointsList {
+		sort.Stable(Points(points))
+	}
+}
+
+func filterPointsByTimeRange(r *Retention, points []Point, from, until Timestamp) []Point {
+	if until == from {
+		until = until.Add(r.SecondsPerPoint())
+	}
+	var points2 []Point
+	for _, p := range points {
+		if (from != 0 && p.Time <= from) || p.Time > until {
+			continue
+		}
+		points2 = append(points2, p)
+	}
+	return points2
 }

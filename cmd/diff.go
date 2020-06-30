@@ -57,18 +57,18 @@ func (c *DiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *DiffCommand) Execute() error {
-	var srcData, destData *whispertool.FileData
+	var srcDB, destDB *whispertool.Whisper
 	var srcPtsList, destPtsList [][]whispertool.Point
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
 		if c.SrcURL != "" {
-			srcData, srcPtsList, err = readWhisperFileRemote(c.SrcURL, c.Src, c.RetID, c.From, c.Until, c.Now)
+			srcDB, srcPtsList, err = readWhisperFileRemote(c.SrcURL, c.Src, c.RetID, c.From, c.Until, c.Now)
 			if err != nil {
 				return err
 			}
 		} else {
-			srcData, srcPtsList, err = readWhisperFile(c.Src, c.RetID, c.From, c.Until, c.Now)
+			srcDB, srcPtsList, err = readWhisperFile(c.Src, c.RetID, c.From, c.Until, c.Now)
 			if err != nil {
 				return err
 			}
@@ -77,7 +77,7 @@ func (c *DiffCommand) Execute() error {
 	})
 	eg.Go(func() error {
 		var err error
-		destData, destPtsList, err = readWhisperFile(c.Dest, c.RetID, c.From, c.Until, c.Now)
+		destDB, destPtsList, err = readWhisperFile(c.Dest, c.RetID, c.From, c.Until, c.Now)
 		if err != nil {
 			return err
 		}
@@ -87,7 +87,7 @@ func (c *DiffCommand) Execute() error {
 		return err
 	}
 
-	if !whispertool.Retentions(srcData.Retentions()).Equal(destData.Retentions()) {
+	if !whispertool.Retentions(srcDB.Retentions()).Equal(destDB.Retentions()) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 
@@ -96,7 +96,7 @@ func (c *DiffCommand) Execute() error {
 		return nil
 	}
 
-	err := printDiff(c.TextOut, srcData, destData, srcPtsList, destPtsList, srcPlDif, destPlDif)
+	err := printDiff(c.TextOut, srcDB, destDB, srcPtsList, destPtsList, srcPlDif, destPlDif)
 	if err != nil {
 		return err
 	}
@@ -104,13 +104,13 @@ func (c *DiffCommand) Execute() error {
 	return ErrDiffFound
 }
 
-func printDiff(textOut string, srcData, destData *whispertool.FileData, srcPtsList, destPtsList, srcPlDif, destPlDif [][]whispertool.Point) error {
+func printDiff(textOut string, srcDB, destDB *whispertool.Whisper, srcPtsList, destPtsList, srcPlDif, destPlDif [][]whispertool.Point) error {
 	if textOut == "" {
 		return nil
 	}
 
 	if textOut == "-" {
-		return printDiffTo(os.Stdout, srcData, destData, srcPtsList, destPtsList, srcPlDif, destPlDif)
+		return printDiffTo(os.Stdout, srcDB, destDB, srcPtsList, destPtsList, srcPlDif, destPlDif)
 	}
 
 	file, err := os.Create(textOut)
@@ -120,7 +120,7 @@ func printDiff(textOut string, srcData, destData *whispertool.FileData, srcPtsLi
 	defer file.Close()
 
 	w := bufio.NewWriter(file)
-	err = printDiffTo(w, srcData, destData, srcPtsList, destPtsList, srcPlDif, destPlDif)
+	err = printDiffTo(w, srcDB, destDB, srcPtsList, destPtsList, srcPlDif, destPlDif)
 	if err != nil {
 		return err
 	}
@@ -133,8 +133,8 @@ func printDiff(textOut string, srcData, destData *whispertool.FileData, srcPtsLi
 	return nil
 }
 
-func printDiffTo(w io.Writer, srcData, destData *whispertool.FileData, srcPtsList, destPtsList, srcPlDif, destPlDif [][]whispertool.Point) error {
-	for retID := range srcData.Retentions() {
+func printDiffTo(w io.Writer, srcDB, destDB *whispertool.Whisper, srcPtsList, destPtsList, srcPlDif, destPlDif [][]whispertool.Point) error {
+	for retID := range srcDB.Retentions() {
 		srcPtsDif := srcPlDif[retID]
 		destPtsDif := destPlDif[retID]
 		for i, srcPt := range srcPtsDif {
@@ -147,22 +147,22 @@ func printDiffTo(w io.Writer, srcData, destData *whispertool.FileData, srcPtsLis
 	return nil
 }
 
-func readWhisperFileRemote(srcURL, filename string, retID int, from, until, now whispertool.Timestamp) (*whispertool.FileData, [][]whispertool.Point, error) {
+func readWhisperFileRemote(srcURL, filename string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, [][]whispertool.Point, error) {
 	reqURL := fmt.Sprintf("%s/view?now=%s&file=%s",
 		srcURL, url.QueryEscape(now.String()), url.QueryEscape(filename))
-	d, err := getFileDataFromRemoteHelper(reqURL)
+	db, err := getFileDataFromRemote(reqURL)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	pointsList, err := fetchPointsList(d, retID, from, until, now)
+	pointsList, err := fetchPointsList(db, retID, from, until, now)
 	if err != nil {
 		return nil, nil, err
 	}
-	return d, pointsList, nil
+	return db, pointsList, nil
 }
 
-func getFileDataFromRemoteHelper(reqURL string) (*whispertool.FileData, error) {
+func getFileDataFromRemote(reqURL string) (*whispertool.Whisper, error) {
 	resp, err := http.Get(reqURL)
 	if err != nil {
 		return nil, err
@@ -173,9 +173,9 @@ func getFileDataFromRemoteHelper(reqURL string) (*whispertool.FileData, error) {
 	if err != nil {
 		return nil, err
 	}
-	d, err := whispertool.NewFileDataRead(data)
+	db, err := whispertool.Create("", nil, 0, 0, whispertool.WithInMemory(), whispertool.WithRawData(data))
 	if err != nil {
 		return nil, err
 	}
-	return d, nil
+	return db, nil
 }
