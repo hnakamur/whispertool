@@ -1,4 +1,4 @@
-package whispertool
+package cmd
 
 import (
 	"flag"
@@ -6,14 +6,15 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/hnakamur/whispertool"
 	"golang.org/x/sync/errgroup"
 )
 
 type SumCommand struct {
 	Src        string
-	From       Timestamp
-	Until      Timestamp
-	Now        Timestamp
+	From       whispertool.Timestamp
+	Until      whispertool.Timestamp
+	Now        whispertool.Timestamp
 	RetID      int
 	TextOut    string
 	ShowHeader bool
@@ -25,7 +26,7 @@ func (c *SumCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
 	fs.BoolVar(&c.ShowHeader, "header", true, "whether or not to show header (metadata and reteions)")
 
-	c.Now = TimestampFromStdTime(time.Now())
+	c.Now = whispertool.TimestampFromStdTime(time.Now())
 	c.Until = c.Now
 	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
@@ -62,9 +63,9 @@ func (c *SumCommand) Execute() error {
 	return nil
 }
 
-func sumWhisperFile(srcFilenames []string, now, from, until Timestamp, retID int) (*FileData, [][]Point, error) {
-	srcDataList := make([]*FileData, len(srcFilenames))
-	ptsListList := make([][][]Point, len(srcFilenames))
+func sumWhisperFile(srcFilenames []string, now, from, until whispertool.Timestamp, retID int) (*whispertool.FileData, [][]whispertool.Point, error) {
+	srcDataList := make([]*whispertool.FileData, len(srcFilenames))
+	ptsListList := make([][][]whispertool.Point, len(srcFilenames))
 	var g errgroup.Group
 	for i, srcFilename := range srcFilenames {
 		i := i
@@ -85,13 +86,13 @@ func sumWhisperFile(srcFilenames []string, now, from, until Timestamp, retID int
 	}
 
 	for i := 1; i < len(srcDataList); i++ {
-		if !Retentions(srcDataList[0].retentions).Equal(srcDataList[i].retentions) {
+		if !whispertool.Retentions(srcDataList[0].Retentions()).Equal(srcDataList[i].Retentions()) {
 			return nil, nil, fmt.Errorf("%s and %s archive confiugrations are unalike. "+
 				"Resize the input before summing", srcFilenames[0], srcFilenames[i])
 		}
 	}
 
-	sumData, err := NewFileData(srcDataList[0].meta, srcDataList[0].retentions)
+	sumData, err := whispertool.NewFileData(srcDataList[0].Meta(), srcDataList[0].Retentions())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -101,24 +102,24 @@ func sumWhisperFile(srcFilenames []string, now, from, until Timestamp, retID int
 	return sumData, sumPtsList, nil
 }
 
-func sumPointsLists(ptsListList [][][]Point) [][]Point {
+func sumPointsLists(ptsListList [][][]whispertool.Point) [][]whispertool.Point {
 	if len(ptsListList) == 0 {
 		return nil
 	}
 	retentionCount := len(ptsListList[0])
-	sumPtsList := make([][]Point, retentionCount)
+	sumPtsList := make([][]whispertool.Point, retentionCount)
 	for retID := range sumPtsList {
 		sumPtsList[retID] = sumPointsListsForRetention(ptsListList, retID)
 	}
 	return sumPtsList
 }
 
-func sumPointsListsForRetention(ptsListList [][][]Point, retID int) []Point {
+func sumPointsListsForRetention(ptsListList [][][]whispertool.Point, retID int) []whispertool.Point {
 	if len(ptsListList) == 0 {
 		return nil
 	}
 	ptsCount := len(ptsListList[0][retID])
-	sumPoints := make([]Point, ptsCount)
+	sumPoints := make([]whispertool.Point, ptsCount)
 	for i := range ptsListList {
 		for j := range sumPoints {
 			if i == 0 {

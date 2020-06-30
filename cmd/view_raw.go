@@ -1,15 +1,17 @@
-package whispertool
+package cmd
 
 import (
 	"flag"
 	"sort"
 	"time"
+
+	"github.com/hnakamur/whispertool"
 )
 
 type ViewRawCommand struct {
 	Filename    string
-	From        Timestamp
-	Until       Timestamp
+	From        whispertool.Timestamp
+	Until       whispertool.Timestamp
 	RetID       int
 	ShowHeader  bool
 	SortsByTime bool
@@ -17,7 +19,7 @@ type ViewRawCommand struct {
 }
 
 func (c *ViewRawCommand) Parse(fs *flag.FlagSet, args []string) error {
-	c.Until = TimestampFromStdTime(time.Now())
+	c.Until = whispertool.TimestampFromStdTime(time.Now())
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all)")
@@ -55,39 +57,39 @@ func (c *ViewRawCommand) Execute() error {
 	return nil
 }
 
-func readWhisperFileRaw(filename string, retID int) (*FileData, [][]Point, error) {
-	d, err := ReadFile(filename)
+func readWhisperFileRaw(filename string, retID int) (*whispertool.FileData, [][]whispertool.Point, error) {
+	d, err := whispertool.ReadFile(filename)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	pointsList := make([][]Point, len(d.retentions))
+	pointsList := make([][]whispertool.Point, len(d.Retentions()))
 	if retID == RetIDAll {
-		for i := range d.retentions {
-			pointsList[i] = d.getAllRawUnsortedPoints(i)
+		for i := range d.Retentions() {
+			pointsList[i] = d.GetAllRawUnsortedPoints(i)
 		}
-	} else if retID >= 0 && retID < len(d.retentions) {
-		pointsList[retID] = d.getAllRawUnsortedPoints(retID)
+	} else if retID >= 0 && retID < len(d.Retentions()) {
+		pointsList[retID] = d.GetAllRawUnsortedPoints(retID)
 	} else {
-		return nil, nil, ErrRetentionIDOutOfRange
+		return nil, nil, whispertool.ErrRetentionIDOutOfRange
 	}
 	return d, pointsList, nil
 }
 
-func filterPointsListByTimeRange(d *FileData, pointsList [][]Point, from, until Timestamp) [][]Point {
-	pointsList2 := make([][]Point, len(pointsList))
-	for i := range d.retentions {
-		r := &d.retentions[i]
+func filterPointsListByTimeRange(d *whispertool.FileData, pointsList [][]whispertool.Point, from, until whispertool.Timestamp) [][]whispertool.Point {
+	pointsList2 := make([][]whispertool.Point, len(pointsList))
+	for i := range d.Retentions() {
+		r := &d.Retentions()[i]
 		pointsList2[i] = filterPointsByTimeRange(r, pointsList[i], from, until)
 	}
 	return pointsList2
 }
 
-func filterPointsByTimeRange(r *Retention, points []Point, from, until Timestamp) []Point {
+func filterPointsByTimeRange(r *whispertool.Retention, points []whispertool.Point, from, until whispertool.Timestamp) []whispertool.Point {
 	if until == from {
-		until = until.Add(r.secondsPerPoint)
+		until = until.Add(r.SecondsPerPoint())
 	}
-	var points2 []Point
+	var points2 []whispertool.Point
 	for _, p := range points {
 		if (from != 0 && p.Time <= from) || p.Time > until {
 			continue
@@ -97,8 +99,8 @@ func filterPointsByTimeRange(r *Retention, points []Point, from, until Timestamp
 	return points2
 }
 
-func sortPointsListByTime(pointsList [][]Point) {
+func sortPointsListByTime(pointsList [][]whispertool.Point) {
 	for _, points := range pointsList {
-		sort.Stable(Points(points))
+		sort.Stable(whispertool.Points(points))
 	}
 }

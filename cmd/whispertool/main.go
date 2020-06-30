@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hnakamur/whispertool"
+	"github.com/hnakamur/whispertool/cmd"
 )
 
 const globalUsage = `Usage: %s <subcommand> [options]
@@ -107,25 +107,25 @@ func run() int {
 	var err error
 	switch args[0] {
 	case "copy":
-		err = runSubcommand(args, &whispertool.CopyCommand{}, copyCmdUsage)
+		err = runSubcommand(args, &cmd.CopyCommand{}, copyCmdUsage)
 	case "diff":
-		err = runSubcommand(args, &whispertool.DiffCommand{}, diffCmdUsage)
+		err = runSubcommand(args, &cmd.DiffCommand{}, diffCmdUsage)
 	case "generate":
-		err = runSubcommand(args, &whispertool.GenerateCommand{}, generateCmdUsage)
+		err = runSubcommand(args, &cmd.GenerateCommand{}, generateCmdUsage)
 	case "hole":
-		err = runSubcommand(args, &whispertool.HoleCommand{}, holeCmdUsage)
+		err = runSubcommand(args, &cmd.HoleCommand{}, holeCmdUsage)
 	case "server":
-		err = runSubcommand(args, &whispertool.ServerCommand{}, serverCmdUsage)
+		err = runSubcommand(args, &cmd.ServerCommand{}, serverCmdUsage)
 	case "sum":
-		err = runSubcommand(args, &whispertool.SumCommand{}, sumCmdUsage)
+		err = runSubcommand(args, &cmd.SumCommand{}, sumCmdUsage)
 	case "sum-copy":
-		err = runSubcommand(args, &whispertool.SumCopyCommand{}, sumCopyCmdUsage)
+		err = runSubcommand(args, &cmd.SumCopyCommand{}, sumCopyCmdUsage)
 	case "sum-diff":
-		err = runSubcommand(args, &whispertool.SumDiffCommand{}, sumDiffCmdUsage)
+		err = runSubcommand(args, &cmd.SumDiffCommand{}, sumDiffCmdUsage)
 	case "view":
-		err = runSubcommand(args, &whispertool.ViewCommand{}, viewCmdUsage)
+		err = runSubcommand(args, &cmd.ViewCommand{}, viewCmdUsage)
 	case "view-raw":
-		err = runSubcommand(args, &whispertool.ViewRawCommand{}, viewRawCmdUsage)
+		err = runSubcommand(args, &cmd.ViewRawCommand{}, viewRawCmdUsage)
 	case "version":
 		err = runShowVersion(args[1:])
 	default:
@@ -133,12 +133,12 @@ func run() int {
 		return 2
 	}
 	if err != nil {
-		if errors.Is(err, whispertool.ErrDiffFound) {
+		if errors.Is(err, cmd.ErrDiffFound) {
 			return 1
 		}
 
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err.Error())
-		var roerr *whispertool.RequiredOptionError
+		var roerr *cmd.RequiredOptionError
 		if errors.As(err, &roerr) {
 			fmt.Fprintf(os.Stderr, "\n")
 			roerr.Usage()
@@ -155,7 +155,7 @@ func runShowVersion(args []string) error {
 	return nil
 }
 
-func runSubcommand(args []string, c whispertool.Command, usageTemplate string) error {
+func runSubcommand(args []string, c cmd.Command, usageTemplate string) error {
 	fs := flag.NewFlagSet(args[0], flag.ExitOnError)
 	fs.Usage = func() {
 		usageStr := strings.ReplaceAll(usageTemplate, "{{command}}", cmdName)

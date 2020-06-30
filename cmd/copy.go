@@ -1,10 +1,11 @@
-package whispertool
+package cmd
 
 import (
 	"errors"
 	"flag"
 	"time"
 
+	"github.com/hnakamur/whispertool"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -12,9 +13,9 @@ type CopyCommand struct {
 	SrcURL  string
 	Src     string
 	Dest    string
-	From    Timestamp
-	Until   Timestamp
-	Now     Timestamp
+	From    whispertool.Timestamp
+	Until   whispertool.Timestamp
+	Now     whispertool.Timestamp
 	RetID   int
 	TextOut string
 }
@@ -26,7 +27,7 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
 
-	c.Now = TimestampFromStdTime(time.Now())
+	c.Now = whispertool.TimestampFromStdTime(time.Now())
 	c.Until = c.Now
 	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
@@ -47,9 +48,9 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *CopyCommand) Execute() error {
-	var destDB *Whisper
-	var srcData *FileData
-	var srcPtsList [][]Point
+	var destDB *whispertool.Whisper
+	var srcData *whispertool.FileData
+	var srcPtsList [][]whispertool.Point
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
@@ -68,7 +69,7 @@ func (c *CopyCommand) Execute() error {
 	})
 	eg.Go(func() error {
 		var err error
-		destDB, err = OpenForWrite(c.Dest)
+		destDB, err = whispertool.OpenForWrite(c.Dest)
 		if err != nil {
 			return err
 		}
@@ -79,8 +80,8 @@ func (c *CopyCommand) Execute() error {
 	}
 	defer destDB.Close()
 
-	destData := destDB.fileData
-	if !Retentions(srcData.retentions).Equal(destData.retentions) {
+	destData := destDB.FileData()
+	if !whispertool.Retentions(srcData.Retentions()).Equal(destData.Retentions()) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 

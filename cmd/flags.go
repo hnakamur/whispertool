@@ -1,4 +1,4 @@
-package whispertool
+package cmd
 
 import (
 	"errors"
@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/hnakamur/whispertool"
 )
 
 type Command interface {
@@ -15,22 +17,22 @@ type Command interface {
 }
 
 type timestampValue struct {
-	t *Timestamp
+	t *whispertool.Timestamp
 }
 
 func (t timestampValue) String() string {
 	if t.t == nil {
 		return ""
 	}
-	return t.t.ToStdTime().Format(UTCTimeLayout)
+	return t.t.ToStdTime().Format(whispertool.UTCTimeLayout)
 }
 
 func (t timestampValue) Set(s string) error {
-	t2, err := time.Parse(UTCTimeLayout, s)
+	t2, err := time.Parse(whispertool.UTCTimeLayout, s)
 	if err != nil {
 		return err
 	}
-	*t.t = TimestampFromStdTime(t2)
+	*t.t = whispertool.TimestampFromStdTime(t2)
 	return nil
 }
 

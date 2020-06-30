@@ -1,4 +1,4 @@
-package whispertool
+package cmd
 
 import (
 	"flag"
@@ -6,6 +6,8 @@ import (
 	"math/rand"
 	"os"
 	"time"
+
+	"github.com/hnakamur/whispertool"
 )
 
 type HoleCommand struct {
@@ -13,9 +15,9 @@ type HoleCommand struct {
 	Dest      string
 	Perm      os.FileMode
 	EmptyRate float64
-	From      Timestamp
-	Until     Timestamp
-	Now       Timestamp
+	From      whispertool.Timestamp
+	Until     whispertool.Timestamp
+	Now       whispertool.Timestamp
 	RetID     int
 	TextOut   string
 }
@@ -26,7 +28,7 @@ func (c *HoleCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
 
-	c.Now = TimestampFromStdTime(time.Now())
+	c.Now = whispertool.TimestampFromStdTime(time.Now())
 	c.Until = c.Now
 	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
@@ -60,8 +62,8 @@ func (c *HoleCommand) Execute() error {
 	}
 
 	rnd := rand.New(rand.NewSource(newRandSeed()))
-	destPtsList := emptyRandomPointsList(srcPtsList, rnd, c.EmptyRate, c.From, c.Until, srcData.retentions)
-	destData, err := NewFileData(srcData.meta, srcData.retentions)
+	destPtsList := emptyRandomPointsList(srcPtsList, rnd, c.EmptyRate, c.From, c.Until, srcData.Retentions())
+	destData, err := whispertool.NewFileData(srcData.Meta(), srcData.Retentions())
 	if err != nil {
 		return err
 	}
@@ -74,14 +76,14 @@ func (c *HoleCommand) Execute() error {
 		return err
 	}
 
-	if err := WriteFile(c.Dest, destData, c.Perm); err != nil {
+	if err := whispertool.WriteFile(c.Dest, destData, c.Perm); err != nil {
 		return err
 	}
 	return nil
 }
 
-func emptyRandomPointsList(ptsList [][]Point, rnd *rand.Rand, emptyRate float64, from, until Timestamp, retentions []Retention) [][]Point {
-	ptsList2 := make([][]Point, len(ptsList))
+func emptyRandomPointsList(ptsList [][]whispertool.Point, rnd *rand.Rand, emptyRate float64, from, until whispertool.Timestamp, retentions []whispertool.Retention) [][]whispertool.Point {
+	ptsList2 := make([][]whispertool.Point, len(ptsList))
 	for i, pts := range ptsList {
 		r := &retentions[i]
 		ptsList2[i] = emptyRandomPoints(pts, rnd, emptyRate, from, until, r)
@@ -89,14 +91,14 @@ func emptyRandomPointsList(ptsList [][]Point, rnd *rand.Rand, emptyRate float64,
 	return ptsList2
 }
 
-func emptyRandomPoints(pts []Point, rnd *rand.Rand, empyRate float64, from, until Timestamp, r *Retention) []Point {
-	var pts2 []Point
+func emptyRandomPoints(pts []whispertool.Point, rnd *rand.Rand, empyRate float64, from, until whispertool.Timestamp, r *whispertool.Retention) []whispertool.Point {
+	var pts2 []whispertool.Point
 	for _, p := range pts {
 		if from < p.Time && p.Time <= until && rnd.Float64() < empyRate {
 			log.Printf("skip r=%s, p.Time=%s", r, p.Time)
 			continue
 		}
-		pts2 = append(pts2, Point{
+		pts2 = append(pts2, whispertool.Point{
 			Time:  p.Time,
 			Value: p.Value,
 		})

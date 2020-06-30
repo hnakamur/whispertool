@@ -90,6 +90,9 @@ func NewFileDataRead(data []byte) (*FileData, error) {
 	return d, nil
 }
 
+func (d *FileData) Meta() Meta              { return d.meta }
+func (d *FileData) Retentions() []Retention { return d.retentions }
+
 func (d *FileData) readMetaAndRetentions() error {
 	expectedSize := metaSize
 	if len(d.buf) < expectedSize {
@@ -281,7 +284,7 @@ func dirtyPageRanges(bitSet *bitset.BitSet) []pageRange {
 	return ranges
 }
 
-func (d *FileData) getAllRawUnsortedPoints(retentionID int) []Point {
+func (d *FileData) GetAllRawUnsortedPoints(retentionID int) []Point {
 	r := &d.retentions[retentionID]
 	points := make([]Point, r.numberOfPoints)
 	off := r.offset
@@ -672,6 +675,16 @@ func aggregate(method AggregationMethod, knownValues []Value) Value {
 	panic("Invalid aggregation method")
 }
 
+func NewMeta(aggregationMethod AggregationMethod, xFilesFactor float32) Meta {
+	return Meta{
+		aggregationMethod: aggregationMethod,
+		xFilesFactor:      xFilesFactor,
+	}
+}
+
+func (m *Meta) AggregationMethod() AggregationMethod { return m.aggregationMethod }
+func (m *Meta) XFilesFactor() float32                { return m.xFilesFactor }
+
 func ParseRetentions(s string) ([]Retention, error) {
 	if len(s) == 0 {
 		return nil, fmt.Errorf("invalid retentions: %q", s)
@@ -768,6 +781,9 @@ func (rr Retentions) validate() error {
 	}
 	return nil
 }
+
+func (r *Retention) SecondsPerPoint() Duration { return r.secondsPerPoint }
+func (r *Retention) NumberOfPoints() uint32    { return r.numberOfPoints }
 
 func (r Retention) validate() error {
 	if r.secondsPerPoint <= 0 {

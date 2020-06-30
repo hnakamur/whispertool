@@ -1,4 +1,4 @@
-package whispertool_test
+package cmd_test
 
 import (
 	"testing"

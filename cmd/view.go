@@ -1,4 +1,4 @@
-package whispertool
+package cmd
 
 import (
 	"bufio"
@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"time"
+
+	"github.com/hnakamur/whispertool"
 )
 
 const RetIDAll = -1
@@ -14,16 +16,16 @@ var debug = os.Getenv("DEBUG") != ""
 
 type ViewCommand struct {
 	Filename   string
-	From       Timestamp
-	Until      Timestamp
-	Now        Timestamp
+	From       whispertool.Timestamp
+	Until      whispertool.Timestamp
+	Now        whispertool.Timestamp
 	RetID      int
 	ShowHeader bool
 	TextOut    string
 }
 
 func (c *ViewCommand) Parse(fs *flag.FlagSet, args []string) error {
-	c.Now = TimestampFromStdTime(time.Now())
+	c.Now = whispertool.TimestampFromStdTime(time.Now())
 	c.Until = c.Now
 	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
@@ -57,8 +59,8 @@ func (c *ViewCommand) Execute() error {
 	return nil
 }
 
-func readWhisperFile(filename string, now, from, until Timestamp, retID int) (*FileData, [][]Point, error) {
-	d, err := ReadFile(filename)
+func readWhisperFile(filename string, now, from, until whispertool.Timestamp, retID int) (*whispertool.FileData, [][]whispertool.Point, error) {
+	d, err := whispertool.ReadFile(filename)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -70,29 +72,29 @@ func readWhisperFile(filename string, now, from, until Timestamp, retID int) (*F
 	return d, pointsList, nil
 }
 
-func fetchPointsList(d *FileData, now, from, until Timestamp, retID int) ([][]Point, error) {
-	pointsList := make([][]Point, len(d.retentions))
+func fetchPointsList(d *whispertool.FileData, now, from, until whispertool.Timestamp, retID int) ([][]whispertool.Point, error) {
+	pointsList := make([][]whispertool.Point, len(d.Retentions()))
 	if retID == RetIDAll {
-		for i := range d.retentions {
+		for i := range d.Retentions() {
 			points, err := d.FetchFromArchive(i, from, until, now)
 			if err != nil {
 				return nil, err
 			}
 			pointsList[i] = points
 		}
-	} else if retID >= 0 && retID < len(d.retentions) {
+	} else if retID >= 0 && retID < len(d.Retentions()) {
 		points, err := d.FetchFromArchive(retID, from, until, now)
 		if err != nil {
 			return nil, err
 		}
 		pointsList[retID] = points
 	} else {
-		return nil, ErrRetentionIDOutOfRange
+		return nil, whispertool.ErrRetentionIDOutOfRange
 	}
 	return pointsList, nil
 }
 
-func printFileData(textOut string, d *FileData, pointsList [][]Point, showHeader bool) error {
+func printFileData(textOut string, d *whispertool.FileData, pointsList [][]whispertool.Point, showHeader bool) error {
 	if textOut == "" {
 		return nil
 	}
@@ -120,13 +122,13 @@ func printFileData(textOut string, d *FileData, pointsList [][]Point, showHeader
 	return nil
 }
 
-func printHeaderAndPointsList(w io.Writer, d *FileData, pointsList [][]Point, showHeader bool) error {
+func printHeaderAndPointsList(w io.Writer, d *whispertool.FileData, pointsList [][]whispertool.Point, showHeader bool) error {
 	if showHeader {
 		if err := d.PrintHeader(w); err != nil {
 			return err
 		}
 	}
-	if err := PointsList(pointsList).Print(w); err != nil {
+	if err := whispertool.PointsList(pointsList).Print(w); err != nil {
 		return err
 	}
 	return nil

@@ -12,6 +12,8 @@ type Whisper struct {
 	fileData *FileData
 }
 
+func (w *Whisper) FileData() *FileData { return w.fileData }
+
 func WriteFile(filename string, fileData *FileData, perm os.FileMode) error {
 	w, err := Create(filename, fileData, perm)
 	if err != nil {

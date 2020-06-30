@@ -1,4 +1,4 @@
-package whispertool
+package cmd
 
 import (
 	"errors"
@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"path/filepath"
 	"time"
+
+	"github.com/hnakamur/whispertool"
 )
 
 type ServerCommand struct {
@@ -66,7 +68,7 @@ func (a *app) handleView(w http.ResponseWriter, r *http.Request) error {
 	if err := r.ParseForm(); err != nil {
 		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse form"))
 	}
-	now, err := time.Parse(UTCTimeLayout, r.Form.Get("now"))
+	now, err := time.Parse(whispertool.UTCTimeLayout, r.Form.Get("now"))
 	if err != nil {
 		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse \"now\" parameter"))
 	}
@@ -78,9 +80,9 @@ func (a *app) handleView(w http.ResponseWriter, r *http.Request) error {
 
 	from := time.Unix(0, 0)
 	until := now
-	tsNow := TimestampFromStdTime(now)
-	tsFrom := TimestampFromStdTime(from)
-	tsUntil := TimestampFromStdTime(until)
+	tsNow := whispertool.TimestampFromStdTime(now)
+	tsFrom := whispertool.TimestampFromStdTime(from)
+	tsUntil := whispertool.TimestampFromStdTime(until)
 
 	d, _, err := readWhisperFile(filename, tsNow, tsFrom, tsUntil, RetIDAll)
 	if err != nil {
@@ -99,7 +101,7 @@ func (a *app) handleSum(w http.ResponseWriter, r *http.Request) error {
 	if err := r.ParseForm(); err != nil {
 		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse form"))
 	}
-	now, err := time.Parse(UTCTimeLayout, r.Form.Get("now"))
+	now, err := time.Parse(whispertool.UTCTimeLayout, r.Form.Get("now"))
 	if err != nil {
 		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse \"now\" parameter"))
 	}
@@ -118,9 +120,9 @@ func (a *app) handleSum(w http.ResponseWriter, r *http.Request) error {
 
 	from := time.Unix(0, 0)
 	until := now
-	tsNow := TimestampFromStdTime(now)
-	tsFrom := TimestampFromStdTime(from)
-	tsUntil := TimestampFromStdTime(until)
+	tsNow := whispertool.TimestampFromStdTime(now)
+	tsFrom := whispertool.TimestampFromStdTime(from)
+	tsUntil := whispertool.TimestampFromStdTime(until)
 
 	sumData, ptsList, err := sumWhisperFile(srcFilenames, tsNow, tsFrom, tsUntil, RetIDAll)
 	if err != nil {

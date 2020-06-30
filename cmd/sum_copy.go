@@ -1,4 +1,4 @@
-package whispertool
+package cmd
 
 import (
 	"errors"
@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/hnakamur/whispertool"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -18,9 +19,9 @@ type SumCopyCommand struct {
 	SrcPattern  string
 	Src         string
 	Dest        string
-	From        Timestamp
-	Until       Timestamp
-	Now         Timestamp
+	From        whispertool.Timestamp
+	Until       whispertool.Timestamp
+	Now         whispertool.Timestamp
 	RetID       int
 	TextOut     string
 }
@@ -35,7 +36,7 @@ func (c *SumCopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
 
-	c.Now = TimestampFromStdTime(time.Now())
+	c.Now = whispertool.TimestampFromStdTime(time.Now())
 	c.Until = c.Now
 	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
@@ -107,9 +108,9 @@ func (c *SumCopyCommand) sumCopyItem(itemRelDir string) error {
 	}
 	destFull := filepath.Join(c.DestBase, itemRelDir, c.Dest)
 
-	var destDB *Whisper
-	var sumData *FileData
-	var sumPtsList [][]Point
+	var destDB *whispertool.Whisper
+	var sumData *whispertool.FileData
+	var sumPtsList [][]whispertool.Point
 	var g errgroup.Group
 	g.Go(func() error {
 		var err error
@@ -128,7 +129,7 @@ func (c *SumCopyCommand) sumCopyItem(itemRelDir string) error {
 	})
 	g.Go(func() error {
 		var err error
-		destDB, err = OpenForWrite(destFull)
+		destDB, err = whispertool.OpenForWrite(destFull)
 		if err != nil {
 			return err
 		}
@@ -139,8 +140,8 @@ func (c *SumCopyCommand) sumCopyItem(itemRelDir string) error {
 	}
 	defer destDB.Close()
 
-	destData := destDB.fileData
-	if !Retentions(sumData.retentions).Equal(destData.retentions) {
+	destData := destDB.FileData()
+	if !whispertool.Retentions(sumData.Retentions()).Equal(destData.Retentions()) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 

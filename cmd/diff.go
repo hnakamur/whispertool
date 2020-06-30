@@ -1,4 +1,4 @@
-package whispertool
+package cmd
 
 import (
 	"bufio"
@@ -12,6 +12,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/hnakamur/whispertool"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -21,9 +22,9 @@ type DiffCommand struct {
 	SrcURL          string
 	Src             string
 	Dest            string
-	From            Timestamp
-	Until           Timestamp
-	Now             Timestamp
+	From            whispertool.Timestamp
+	Until           whispertool.Timestamp
+	Now             whispertool.Timestamp
 	RetID           int
 	TextOut         string
 	IgnoreSrcEmpty  bool
@@ -38,7 +39,7 @@ func (c *DiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
 
-	c.Now = TimestampFromStdTime(time.Now())
+	c.Now = whispertool.TimestampFromStdTime(time.Now())
 	c.Until = c.Now
 	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
@@ -63,8 +64,8 @@ func (c *DiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *DiffCommand) Execute() error {
-	var srcData, destData *FileData
-	var srcPtsList, destPtsList [][]Point
+	var srcData, destData *whispertool.FileData
+	var srcPtsList, destPtsList [][]whispertool.Point
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
@@ -93,12 +94,12 @@ func (c *DiffCommand) Execute() error {
 		return err
 	}
 
-	if !Retentions(srcData.retentions).Equal(destData.retentions) {
+	if !whispertool.Retentions(srcData.Retentions()).Equal(destData.Retentions()) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 
-	srcPlDif, destPlDif := PointsList(srcPtsList).Diff(destPtsList)
-	if PointsList(srcPlDif).AllEmpty() && PointsList(destPlDif).AllEmpty() {
+	srcPlDif, destPlDif := whispertool.PointsList(srcPtsList).Diff(destPtsList)
+	if whispertool.PointsList(srcPlDif).AllEmpty() && whispertool.PointsList(destPlDif).AllEmpty() {
 		return nil
 	}
 
@@ -110,7 +111,7 @@ func (c *DiffCommand) Execute() error {
 	return ErrDiffFound
 }
 
-func printDiff(textOut string, srcData, destData *FileData, srcPtsList, destPtsList, srcPlDif, destPlDif [][]Point, ignoreSrcEmpty, ignoreDestEmpty, showAll bool) error {
+func printDiff(textOut string, srcData, destData *whispertool.FileData, srcPtsList, destPtsList, srcPlDif, destPlDif [][]whispertool.Point, ignoreSrcEmpty, ignoreDestEmpty, showAll bool) error {
 	if textOut == "" {
 		return nil
 	}
@@ -139,9 +140,9 @@ func printDiff(textOut string, srcData, destData *FileData, srcPtsList, destPtsL
 	return nil
 }
 
-func printDiffTo(w io.Writer, srcData, destData *FileData, srcPtsList, destPtsList, srcPlDif, destPlDif [][]Point, ignoreSrcEmpty, ignoreDestEmpty, showAll bool) error {
+func printDiffTo(w io.Writer, srcData, destData *whispertool.FileData, srcPtsList, destPtsList, srcPlDif, destPlDif [][]whispertool.Point, ignoreSrcEmpty, ignoreDestEmpty, showAll bool) error {
 	if showAll {
-		for retID := range srcData.retentions {
+		for retID := range srcData.Retentions() {
 			srcPts := srcPtsList[retID]
 			destPts := destPtsList[retID]
 			for i, srcPt := range srcPts {
@@ -157,7 +158,7 @@ func printDiffTo(w io.Writer, srcData, destData *FileData, srcPtsList, destPtsLi
 		}
 	}
 
-	for retID := range srcData.retentions {
+	for retID := range srcData.Retentions() {
 		srcPtsDif := srcPlDif[retID]
 		destPtsDif := destPlDif[retID]
 		for i, srcPt := range srcPtsDif {
@@ -173,7 +174,7 @@ func printDiffTo(w io.Writer, srcData, destData *FileData, srcPtsList, destPtsLi
 	return nil
 }
 
-func readWhisperFileRemote(srcURL, filename string, now, from, until Timestamp, retID int) (*FileData, [][]Point, error) {
+func readWhisperFileRemote(srcURL, filename string, now, from, until whispertool.Timestamp, retID int) (*whispertool.FileData, [][]whispertool.Point, error) {
 	reqURL := fmt.Sprintf("%s/view?now=%s&file=%s",
 		srcURL, url.QueryEscape(now.String()), url.QueryEscape(filename))
 	d, err := getFileDataFromRemoteHelper(reqURL)
@@ -188,7 +189,7 @@ func readWhisperFileRemote(srcURL, filename string, now, from, until Timestamp, 
 	return d, pointsList, nil
 }
 
-func getFileDataFromRemoteHelper(reqURL string) (*FileData, error) {
+func getFileDataFromRemoteHelper(reqURL string) (*whispertool.FileData, error) {
 	resp, err := http.Get(reqURL)
 	if err != nil {
 		return nil, err
@@ -199,7 +200,7 @@ func getFileDataFromRemoteHelper(reqURL string) (*FileData, error) {
 	if err != nil {
 		return nil, err
 	}
-	d, err := NewFileDataRead(data)
+	d, err := whispertool.NewFileDataRead(data)
 	if err != nil {
 		return nil, err
 	}
