@@ -63,10 +63,16 @@ func (c *HoleCommand) Execute() error {
 
 	rnd := rand.New(rand.NewSource(newRandSeed()))
 	destPtsList := emptyRandomPointsList(srcPtsList, rnd, c.EmptyRate, c.From, c.Until, srcDB.Retentions())
-	destDB, err := whispertool.Create(c.Dest, srcDB.Retentions(), srcDB.AggregationMethod(), srcDB.XFilesFactor())
+	var destDB *whispertool.Whisper
+	if c.Dest != c.Src {
+		destDB, err = whispertool.Create(c.Dest, srcDB.Retentions(), srcDB.AggregationMethod(), srcDB.XFilesFactor(), whispertool.WithFlock())
+	} else {
+		destDB, err = whispertool.Open(c.Dest, whispertool.WithFlock())
+	}
 	if err != nil {
 		return err
 	}
+	defer destDB.Close()
 
 	if err := updateFileDataWithPointsList(destDB, destPtsList, c.Now); err != nil {
 		return err

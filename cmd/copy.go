@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"flag"
+	"os"
 	"time"
 
 	"github.com/hnakamur/whispertool"
@@ -68,7 +69,7 @@ func (c *CopyCommand) Execute() error {
 	})
 	eg.Go(func() error {
 		var err error
-		destDB, err = whispertool.Open(c.Dest)
+		destDB, err = openOrCreateCopyDestFile(c.Dest, srcDB)
 		if err != nil {
 			return err
 		}
@@ -95,4 +96,20 @@ func (c *CopyCommand) Execute() error {
 		return err
 	}
 	return nil
+}
+
+func openOrCreateCopyDestFile(filename string, srcDB *whispertool.Whisper) (*whispertool.Whisper, error) {
+	destDB, err := whispertool.Open(filename, whispertool.WithFlock())
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+
+		destDB, err = whispertool.Create(filename, srcDB.Retentions(),
+			srcDB.AggregationMethod(), srcDB.XFilesFactor(), whispertool.WithFlock())
+		if err != nil {
+			return nil, err
+		}
+	}
+	return destDB, nil
 }

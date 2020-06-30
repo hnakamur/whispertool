@@ -53,7 +53,7 @@ func (c *GenerateCommand) Execute() error {
 		return err
 	}
 
-	db, err := whispertool.Create(c.Dest, retentions, whispertool.Sum, 0)
+	db, err := whispertool.Create(c.Dest, retentions, whispertool.Sum, 0, whispertool.WithFlock())
 	if err != nil {
 		return err
 	}

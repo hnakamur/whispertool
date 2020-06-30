@@ -114,20 +114,17 @@ func (c *SumCopyCommand) sumCopyItem(itemRelDir string) error {
 		var err error
 		if c.SrcURL != "" {
 			sumDB, sumPtsList, err = sumWhisperFileRemote(c.SrcURL, srcFullPattern, c.RetID, c.From, c.Until, c.Now)
-			if err != nil {
-				return err
-			}
 		} else {
 			sumDB, sumPtsList, err = sumWhisperFile(srcFilenames, c.RetID, c.From, c.Until, c.Now)
-			if err != nil {
-				return err
-			}
+		}
+		if err != nil {
+			return err
 		}
 		return nil
 	})
 	g.Go(func() error {
 		var err error
-		destDB, err = whispertool.Open(destFull)
+		destDB, err = openOrCreateCopyDestFile(destFull, sumDB)
 		if err != nil {
 			return err
 		}

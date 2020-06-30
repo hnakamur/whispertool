@@ -6,57 +6,82 @@ import (
 	"syscall"
 )
 
+// Whisper represents a Whisper database file.
 type Whisper struct {
 	file     *os.File
 	fileData *fileData
 
-	inMemory bool
-	readOnly bool
-	data     []byte
+	openFileFlag int
+	flock        bool
+	perm         os.FileMode
+	inMemory     bool
+	data         []byte
 }
 
-type CreateOption func(*Whisper)
+// Option is the type for options for creating or opening a whisper file.
+type Option func(*Whisper)
 
-func WithInMemory() CreateOption {
+// WithInMemory enables to create a whisper database in memory without creating a file.
+// This options is useful for only for `Create`.
+func WithInMemory() Option {
 	return func(w *Whisper) {
 		w.inMemory = true
+	}
+}
+
+// WithFlock enables flock for the file.
+// This option is useful only when no WithInMemory is passed.
+func WithFlock() Option {
+	return func(w *Whisper) {
+		w.flock = true
 	}
 }
 
 // WithRawData set the raw data for the whisper file.
 // If this option is used, retentions, aggregationMethod, and xFilesFactor arguments
 // passed to Create will be ignored.
-func WithRawData(data []byte) CreateOption {
+// This options is useful for only for Create.
+func WithRawData(data []byte) Option {
 	return func(w *Whisper) {
 		w.data = data
 	}
 }
 
-type OpenOption func(*Whisper)
-
-func WithReadOnly() OpenOption {
+// WithOpenFileFlag sets the flag for opening the file.
+// This option is useful only when no WithInMemory is passed.
+// Without this option, the default value is
+// os.O_RDWR | os.O_CREATE | os.O_EXCL for Create and
+// os.O_RDWR for Open.
+func WithOpenFileFlag(flag int) Option {
 	return func(w *Whisper) {
-		w.readOnly = true
+		w.openFileFlag = flag
 	}
 }
 
-func Create(filename string, retentions []Retention, aggregationMethod AggregationMethod, xFilesFactor float32, opts ...CreateOption) (*Whisper, error) {
-	w := &Whisper{}
+// WithPerm sets the permission for the file.
+// This option is useful only when no WithInMemory is passed.
+// Without this option, the default value is 0644.
+func WithPerm(perm os.FileMode) Option {
+	return func(w *Whisper) {
+		w.perm = perm
+	}
+}
+
+// Create creates a whisper database file.
+func Create(filename string, retentions []Retention, aggregationMethod AggregationMethod, xFilesFactor float32, opts ...Option) (*Whisper, error) {
+	w := &Whisper{
+		openFileFlag: os.O_RDWR | os.O_CREATE | os.O_EXCL,
+		perm:         0644,
+	}
 	for _, opt := range opts {
 		opt(w)
 	}
 
 	if !w.inMemory {
-		file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0644)
+		err := w.openAndLockFile(filename)
 		if err != nil {
 			return nil, err
 		}
-
-		if err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
-			file.Close()
-			return nil, err
-		}
-		w.file = file
 	}
 
 	var err error
@@ -76,28 +101,21 @@ func Create(filename string, retentions []Retention, aggregationMethod Aggregati
 	return w, nil
 }
 
-func Open(filename string, opts ...OpenOption) (*Whisper, error) {
-	w := &Whisper{}
+// Open opens an existing whisper database file.
+// In the current implementation, the whole content is read after opening the file.
+// This behavior may be changed in the future.
+func Open(filename string, opts ...Option) (*Whisper, error) {
+	w := &Whisper{
+		openFileFlag: os.O_RDWR,
+		perm:         0644,
+	}
 	for _, opt := range opts {
 		opt(w)
 	}
 
-	if w.readOnly {
-		file, err := os.Open(filename)
-		if err != nil {
-			return nil, err
-		}
-		w.file = file
-	} else {
-		file, err := os.OpenFile(filename, os.O_RDWR, 0644)
-		if err != nil {
-			return nil, err
-		}
-
-		if err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
-			file.Close()
-			return nil, err
-		}
+	err := w.openAndLockFile(filename)
+	if err != nil {
+		return nil, err
 	}
 
 	st, err := w.file.Stat()
@@ -119,6 +137,27 @@ func Open(filename string, opts ...OpenOption) (*Whisper, error) {
 	return w, nil
 }
 
+func (w *Whisper) openAndLockFile(filename string) error {
+	file, err := os.OpenFile(filename, w.openFileFlag, w.perm)
+	if err != nil {
+		return err
+	}
+	w.file = file
+
+	if w.flock {
+		if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+			file.Close()
+			return err
+		}
+	}
+	return nil
+}
+
+// Sync flushes modifications on the memory buffer to the file and
+// sync commits the content to the storage by calling os.File.Sync().
+// Note it is caller's responsibility to call Sync and the modification
+// will be lost without calling Sync.
+// For the file created with WithInMemory, this is a no-op.
 func (w *Whisper) Sync() error {
 	if w.inMemory {
 		return nil
@@ -133,6 +172,8 @@ func (w *Whisper) Sync() error {
 	return nil
 }
 
+// Close closes the file.
+// For the file created with WithInMemory, this is a no-op.
 func (w *Whisper) Close() error {
 	if w.inMemory {
 		return nil
@@ -141,31 +182,47 @@ func (w *Whisper) Close() error {
 	return w.file.Close()
 }
 
+// AggregationMethod returns the aggregation method of the whisper file.
 func (w *Whisper) AggregationMethod() AggregationMethod { return w.fileData.meta.aggregationMethod }
-func (w *Whisper) XFilesFactor() float32                { return w.fileData.meta.xFilesFactor }
-func (w *Whisper) Retentions() []Retention              { return w.fileData.retentions }
+
+// XFilesFactor returns the xFilesFactor of the whisper file.
+func (w *Whisper) XFilesFactor() float32 { return w.fileData.meta.xFilesFactor }
+
+// Retentions returns the retentions of the whisper file.
+func (w *Whisper) Retentions() []Retention { return w.fileData.retentions }
 
 // RawData returns data for whole file.
+// Note the byte slice returned is the internal work buffer,
+// without cloning in favor of performance.
+// It is caller's responsibility to not modify the data.
 func (w *Whisper) RawData() []byte {
 	return w.fileData.buf
 }
 
+// FetchFromArchive fetches point in the specified archive and the time range.
+// If now is zero, the current time is used.
 func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) ([]Point, error) {
 	return w.fileData.FetchFromArchive(retentionID, from, until, now)
 }
 
+// GetAllRawUnsortedPoints returns the raw unsorted points.
+// This is provided for the debugging or investination purpose.
 func (w *Whisper) GetAllRawUnsortedPoints(retentionID int) []Point {
 	return w.fileData.GetAllRawUnsortedPoints(retentionID)
 }
 
+// UpdatePointForArchive updates one point in the specified archive.
 func (w *Whisper) UpdatePointForArchive(retentionID int, t Timestamp, v Value, now Timestamp) error {
 	return w.fileData.UpdatePointForArchive(retentionID, t, v, now)
 }
 
+// UpdatePointForArchive updates points in the specified archive.
 func (w *Whisper) UpdatePointsForArchive(retentionID int, points []Point, now Timestamp) error {
 	return w.fileData.UpdatePointsForArchive(retentionID, points, now)
 }
 
+// PrintHeader prints the header information to the writer in LTSV format [1].
+// [1] Labeled Tab-separated Values http://ltsv.org/
 func (w *Whisper) PrintHeader(wr io.Writer) error {
 	return w.fileData.PrintHeader(wr)
 }
