@@ -108,7 +108,7 @@ func (c *SumCopyCommand) sumCopyItem(itemRelDir string) error {
 	destFull := filepath.Join(c.DestBase, itemRelDir, c.Dest)
 
 	var sumDB, destDB *whispertool.Whisper
-	var sumPtsList [][]whispertool.Point
+	var sumPtsList PointsList
 	var g errgroup.Group
 	g.Go(func() error {
 		var err error

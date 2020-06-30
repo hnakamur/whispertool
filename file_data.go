@@ -46,7 +46,6 @@ type Point struct {
 }
 
 type Points []Point
-type PointsList [][]Point
 
 type pageRange struct {
 	start int
@@ -440,18 +439,6 @@ func (d *fileData) PrintHeader(w io.Writer) error {
 // Bytes returns data for whole file.
 func (d *fileData) Bytes() []byte {
 	return d.buf
-}
-
-func (pp PointsList) Print(w io.Writer) error {
-	for i, points := range pp {
-		for _, p := range points {
-			_, err := fmt.Fprintf(w, "retID:%d\tt:%s\tval:%s\n", i, p.Time, p.Value)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 func (d *fileData) fillDerivedValuesInHeader() {
@@ -896,36 +883,6 @@ func (v Value) Diff(u Value) Value {
 		return Value(math.NaN())
 	}
 	return v - u
-}
-
-func (pl PointsList) AllEmpty() bool {
-	for _, pts := range pl {
-		if len(pts) != 0 {
-			return false
-		}
-	}
-	return true
-}
-
-func (pl PointsList) Counts() []int {
-	counts := make([]int, len(pl))
-	for i, pts := range pl {
-		counts[i] = len(pts)
-	}
-	return counts
-}
-
-func (pl PointsList) Diff(ql [][]Point) ([][]Point, [][]Point) {
-	if len(pl) != len(ql) {
-		return pl, ql
-	}
-
-	pl2 := make([][]Point, len(pl))
-	ql2 := make([][]Point, len(ql))
-	for i, pp := range pl {
-		pl2[i], ql2[i] = Points(pp).Diff(ql[i])
-	}
-	return pl2, ql2
 }
 
 func (pp Points) Diff(qq []Point) ([]Point, []Point) {

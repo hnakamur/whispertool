@@ -88,8 +88,8 @@ func (c *HoleCommand) Execute() error {
 	return nil
 }
 
-func emptyRandomPointsList(ptsList [][]whispertool.Point, rnd *rand.Rand, emptyRate float64, from, until whispertool.Timestamp, retentions []whispertool.Retention) [][]whispertool.Point {
-	ptsList2 := make([][]whispertool.Point, len(ptsList))
+func emptyRandomPointsList(ptsList PointsList, rnd *rand.Rand, emptyRate float64, from, until whispertool.Timestamp, retentions []whispertool.Retention) PointsList {
+	ptsList2 := make([]whispertool.Points, len(ptsList))
 	for i, pts := range ptsList {
 		r := &retentions[i]
 		ptsList2[i] = emptyRandomPoints(pts, rnd, emptyRate, from, until, r)

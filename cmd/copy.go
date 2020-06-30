@@ -50,7 +50,7 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 
 func (c *CopyCommand) Execute() error {
 	var srcDB, destDB *whispertool.Whisper
-	var srcPtsList [][]whispertool.Point
+	var srcPtsList []whispertool.Points
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error

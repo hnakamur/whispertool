@@ -58,7 +58,7 @@ func (c *DiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 
 func (c *DiffCommand) Execute() error {
 	var srcDB, destDB *whispertool.Whisper
-	var srcPtsList, destPtsList [][]whispertool.Point
+	var srcPtsList, destPtsList PointsList
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
@@ -91,8 +91,8 @@ func (c *DiffCommand) Execute() error {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 
-	srcPlDif, destPlDif := whispertool.PointsList(srcPtsList).Diff(destPtsList)
-	if whispertool.PointsList(srcPlDif).AllEmpty() && whispertool.PointsList(destPlDif).AllEmpty() {
+	srcPlDif, destPlDif := PointsList(srcPtsList).Diff(destPtsList)
+	if PointsList(srcPlDif).AllEmpty() && PointsList(destPlDif).AllEmpty() {
 		return nil
 	}
 
@@ -104,7 +104,7 @@ func (c *DiffCommand) Execute() error {
 	return ErrDiffFound
 }
 
-func printDiff(textOut string, srcDB, destDB *whispertool.Whisper, srcPtsList, destPtsList, srcPlDif, destPlDif [][]whispertool.Point) error {
+func printDiff(textOut string, srcDB, destDB *whispertool.Whisper, srcPtsList, destPtsList, srcPlDif, destPlDif PointsList) error {
 	if textOut == "" {
 		return nil
 	}
@@ -133,7 +133,7 @@ func printDiff(textOut string, srcDB, destDB *whispertool.Whisper, srcPtsList, d
 	return nil
 }
 
-func printDiffTo(w io.Writer, srcDB, destDB *whispertool.Whisper, srcPtsList, destPtsList, srcPlDif, destPlDif [][]whispertool.Point) error {
+func printDiffTo(w io.Writer, srcDB, destDB *whispertool.Whisper, srcPtsList, destPtsList, srcPlDif, destPlDif PointsList) error {
 	for retID := range srcDB.Retentions() {
 		srcPtsDif := srcPlDif[retID]
 		destPtsDif := destPlDif[retID]
@@ -147,7 +147,7 @@ func printDiffTo(w io.Writer, srcDB, destDB *whispertool.Whisper, srcPtsList, de
 	return nil
 }
 
-func readWhisperFileRemote(srcURL, filename string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, [][]whispertool.Point, error) {
+func readWhisperFileRemote(srcURL, filename string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {
 	reqURL := fmt.Sprintf("%s/view?now=%s&file=%s",
 		srcURL, url.QueryEscape(now.String()), url.QueryEscape(filename))
 	db, err := getFileDataFromRemote(reqURL)

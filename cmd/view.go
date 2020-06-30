@@ -59,7 +59,7 @@ func (c *ViewCommand) Execute() error {
 	return nil
 }
 
-func readWhisperFile(filename string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, [][]whispertool.Point, error) {
+func readWhisperFile(filename string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {
 	db, err := whispertool.Open(filename)
 	if err != nil {
 		return nil, nil, err
@@ -73,8 +73,8 @@ func readWhisperFile(filename string, retID int, from, until, now whispertool.Ti
 	return db, pointsList, nil
 }
 
-func fetchPointsList(db *whispertool.Whisper, retID int, from, until, now whispertool.Timestamp) ([][]whispertool.Point, error) {
-	pointsList := make([][]whispertool.Point, len(db.Retentions()))
+func fetchPointsList(db *whispertool.Whisper, retID int, from, until, now whispertool.Timestamp) (PointsList, error) {
+	pointsList := make([]whispertool.Points, len(db.Retentions()))
 	if retID == RetIDAll {
 		for i := range db.Retentions() {
 			points, err := db.FetchFromArchive(i, from, until, now)
@@ -95,7 +95,7 @@ func fetchPointsList(db *whispertool.Whisper, retID int, from, until, now whispe
 	return pointsList, nil
 }
 
-func printFileData(textOut string, db *whispertool.Whisper, pointsList [][]whispertool.Point, showHeader bool) error {
+func printFileData(textOut string, db *whispertool.Whisper, pointsList PointsList, showHeader bool) error {
 	if textOut == "" {
 		return nil
 	}
@@ -123,13 +123,13 @@ func printFileData(textOut string, db *whispertool.Whisper, pointsList [][]whisp
 	return nil
 }
 
-func printHeaderAndPointsList(w io.Writer, db *whispertool.Whisper, pointsList [][]whispertool.Point, showHeader bool) error {
+func printHeaderAndPointsList(w io.Writer, db *whispertool.Whisper, pointsList []whispertool.Points, showHeader bool) error {
 	if showHeader {
 		if err := db.PrintHeader(w); err != nil {
 			return err
 		}
 	}
-	if err := whispertool.PointsList(pointsList).Print(w); err != nil {
+	if err := PointsList(pointsList).Print(w); err != nil {
 		return err
 	}
 	return nil

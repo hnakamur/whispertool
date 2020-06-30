@@ -59,7 +59,7 @@ func (c *GenerateCommand) Execute() error {
 	}
 	defer db.Close()
 
-	var pointsList [][]whispertool.Point
+	var pointsList PointsList
 	if c.Fill {
 		rnd := rand.New(rand.NewSource(newRandSeed()))
 		until := c.Now
@@ -87,8 +87,8 @@ func newRandSeed() int64 {
 	return int64(binary.BigEndian.Uint64(b[:]))
 }
 
-func randomPointsList(retentions []whispertool.Retention, rnd *rand.Rand, rndMaxForHightestArchive int, until, now whispertool.Timestamp) [][]whispertool.Point {
-	pointsList := make([][]whispertool.Point, len(retentions))
+func randomPointsList(retentions []whispertool.Retention, rnd *rand.Rand, rndMaxForHightestArchive int, until, now whispertool.Timestamp) PointsList {
+	pointsList := make([]whispertool.Points, len(retentions))
 	var highRet *whispertool.Retention
 	var highRndMax int
 	var highPts []whispertool.Point
@@ -163,7 +163,7 @@ func randomValWithHighSum(t whispertool.Timestamp, rnd *rand.Rand, highRndMax in
 	return v + v2
 }
 
-func updateFileDataWithPointsList(db *whispertool.Whisper, pointsList [][]whispertool.Point, now whispertool.Timestamp) error {
+func updateFileDataWithPointsList(db *whispertool.Whisper, pointsList PointsList, now whispertool.Timestamp) error {
 	for retID := range db.Retentions() {
 		if err := db.UpdatePointsForArchive(retID, pointsList[retID], now); err != nil {
 			return err

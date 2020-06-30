@@ -136,13 +136,13 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			gotPointsList := make([][]Point, len(d.retentions))
+			gotPointsList := make([]Points, len(d.retentions))
 			for retID := range d.retentions {
 				gotPointsList[retID] = d.GetAllRawUnsortedPoints(retID)
 			}
 			sortPointsListByTime(gotPointsList)
 
-			wantPlDif, gotPlDif := PointsList(pointsList).Diff(gotPointsList)
+			wantPlDif, gotPlDif := diffPointsList(pointsList, gotPointsList)
 			for retID, gotPtsDif := range gotPlDif {
 				wantPtsDif := wantPlDif[retID]
 				if len(gotPtsDif) != len(wantPtsDif) {
@@ -203,8 +203,8 @@ func newRandSeed() int64 {
 	return int64(binary.BigEndian.Uint64(b[:]))
 }
 
-func randomPointsList(retentions []Retention, rnd *rand.Rand, rndMaxForHightestArchive int, until, now Timestamp) [][]Point {
-	pointsList := make([][]Point, len(retentions))
+func randomPointsList(retentions []Retention, rnd *rand.Rand, rndMaxForHightestArchive int, until, now Timestamp) []Points {
+	pointsList := make([]Points, len(retentions))
 	var highRet *Retention
 	var highRndMax int
 	var highPts []Point
@@ -279,7 +279,7 @@ func randomValWithHighSum(t Timestamp, rnd *rand.Rand, highRndMax int, r, highRe
 	return v + v2
 }
 
-func updateFileDataWithPointsList(d *fileData, pointsList [][]Point, now Timestamp) error {
+func updateFileDataWithPointsList(d *fileData, pointsList []Points, now Timestamp) error {
 	for retID := range d.Retentions() {
 		if err := d.UpdatePointsForArchive(retID, pointsList[retID], now); err != nil {
 			return err
@@ -288,7 +288,7 @@ func updateFileDataWithPointsList(d *fileData, pointsList [][]Point, now Timesta
 	return nil
 }
 
-func sortPointsListByTime(pointsList [][]Point) {
+func sortPointsListByTime(pointsList []Points) {
 	for _, points := range pointsList {
 		sort.Stable(Points(points))
 	}
@@ -306,4 +306,17 @@ func filterPointsByTimeRange(r *Retention, points []Point, from, until Timestamp
 		points2 = append(points2, p)
 	}
 	return points2
+}
+
+func diffPointsList(pl, ql []Points) ([]Points, []Points) {
+	if len(pl) != len(ql) {
+		return pl, ql
+	}
+
+	pl2 := make([]Points, len(pl))
+	ql2 := make([]Points, len(ql))
+	for i, pp := range pl {
+		pl2[i], ql2[i] = pp.Diff(ql[i])
+	}
+	return pl2, ql2
 }

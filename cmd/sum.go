@@ -63,9 +63,9 @@ func (c *SumCommand) Execute() error {
 	return nil
 }
 
-func sumWhisperFile(srcFilenames []string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, [][]whispertool.Point, error) {
+func sumWhisperFile(srcFilenames []string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {
 	srcDBList := make([]*whispertool.Whisper, len(srcFilenames))
-	ptsListList := make([][][]whispertool.Point, len(srcFilenames))
+	ptsListList := make([]PointsList, len(srcFilenames))
 	var g errgroup.Group
 	for i, srcFilename := range srcFilenames {
 		i := i
@@ -104,19 +104,19 @@ func sumWhisperFile(srcFilenames []string, retID int, from, until, now whisperto
 	return sumDB, sumPtsList, nil
 }
 
-func sumPointsLists(ptsListList [][][]whispertool.Point) [][]whispertool.Point {
+func sumPointsLists(ptsListList []PointsList) PointsList {
 	if len(ptsListList) == 0 {
 		return nil
 	}
 	retentionCount := len(ptsListList[0])
-	sumPtsList := make([][]whispertool.Point, retentionCount)
+	sumPtsList := make([]whispertool.Points, retentionCount)
 	for retID := range sumPtsList {
 		sumPtsList[retID] = sumPointsListsForRetention(ptsListList, retID)
 	}
 	return sumPtsList
 }
 
-func sumPointsListsForRetention(ptsListList [][][]whispertool.Point, retID int) []whispertool.Point {
+func sumPointsListsForRetention(ptsListList []PointsList, retID int) []whispertool.Point {
 	if len(ptsListList) == 0 {
 		return nil
 	}

@@ -57,14 +57,14 @@ func (c *ViewRawCommand) Execute() error {
 	return nil
 }
 
-func readWhisperFileRaw(filename string, retID int) (*whispertool.Whisper, [][]whispertool.Point, error) {
+func readWhisperFileRaw(filename string, retID int) (*whispertool.Whisper, PointsList, error) {
 	db, err := whispertool.Open(filename)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer db.Close()
 
-	pointsList := make([][]whispertool.Point, len(db.Retentions()))
+	pointsList := make([]whispertool.Points, len(db.Retentions()))
 	if retID == RetIDAll {
 		for i := range db.Retentions() {
 			pointsList[i] = db.GetAllRawUnsortedPoints(i)
@@ -77,8 +77,8 @@ func readWhisperFileRaw(filename string, retID int) (*whispertool.Whisper, [][]w
 	return db, pointsList, nil
 }
 
-func filterPointsListByTimeRange(d *whispertool.Whisper, pointsList [][]whispertool.Point, from, until whispertool.Timestamp) [][]whispertool.Point {
-	pointsList2 := make([][]whispertool.Point, len(pointsList))
+func filterPointsListByTimeRange(d *whispertool.Whisper, pointsList PointsList, from, until whispertool.Timestamp) PointsList {
+	pointsList2 := make([]whispertool.Points, len(pointsList))
 	for i := range d.Retentions() {
 		r := &d.Retentions()[i]
 		pointsList2[i] = filterPointsByTimeRange(r, pointsList[i], from, until)
@@ -100,7 +100,7 @@ func filterPointsByTimeRange(r *whispertool.Retention, points []whispertool.Poin
 	return points2
 }
 
-func sortPointsListByTime(pointsList [][]whispertool.Point) {
+func sortPointsListByTime(pointsList PointsList) {
 	for _, points := range pointsList {
 		sort.Stable(whispertool.Points(points))
 	}
