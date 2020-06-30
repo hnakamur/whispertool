@@ -56,7 +56,7 @@ func (c *HoleCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *HoleCommand) Execute() error {
-	srcData, srcPtsList, err := readWhisperFile(c.Src, c.Now, c.From, c.Until, RetIDAll)
+	srcData, srcPtsList, err := readWhisperFile(c.Src, RetIDAll, c.From, c.Until, c.Now)
 	if err != nil {
 		return err
 	}

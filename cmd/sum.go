@@ -52,7 +52,7 @@ func (c *SumCommand) Execute() error {
 		return fmt.Errorf("no file matched for -src=%s", c.SrcPattern)
 	}
 
-	d, ptsList, err := sumWhisperFile(srcFilenames, c.Now, c.From, c.Until, c.RetID)
+	d, ptsList, err := sumWhisperFile(srcFilenames, c.RetID, c.From, c.Until, c.Now)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func (c *SumCommand) Execute() error {
 	return nil
 }
 
-func sumWhisperFile(srcFilenames []string, now, from, until whispertool.Timestamp, retID int) (*whispertool.FileData, [][]whispertool.Point, error) {
+func sumWhisperFile(srcFilenames []string, retID int, from, until, now whispertool.Timestamp) (*whispertool.FileData, [][]whispertool.Point, error) {
 	srcDataList := make([]*whispertool.FileData, len(srcFilenames))
 	ptsListList := make([][][]whispertool.Point, len(srcFilenames))
 	var g errgroup.Group
@@ -71,7 +71,7 @@ func sumWhisperFile(srcFilenames []string, now, from, until whispertool.Timestam
 		i := i
 		srcFilename := srcFilename
 		g.Go(func() error {
-			d, ptsList, err := readWhisperFile(srcFilename, now, from, until, retID)
+			d, ptsList, err := readWhisperFile(srcFilename, retID, from, until, now)
 			if err != nil {
 				return err
 			}

@@ -48,7 +48,7 @@ func (c *ViewCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *ViewCommand) Execute() error {
-	d, pointsList, err := readWhisperFile(c.Filename, c.Now, c.From, c.Until, c.RetID)
+	d, pointsList, err := readWhisperFile(c.Filename, c.RetID, c.From, c.Until, c.Now)
 	if err != nil {
 		return err
 	}
@@ -59,20 +59,20 @@ func (c *ViewCommand) Execute() error {
 	return nil
 }
 
-func readWhisperFile(filename string, now, from, until whispertool.Timestamp, retID int) (*whispertool.FileData, [][]whispertool.Point, error) {
+func readWhisperFile(filename string, retID int, from, until, now whispertool.Timestamp) (*whispertool.FileData, [][]whispertool.Point, error) {
 	d, err := whispertool.ReadFile(filename)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	pointsList, err := fetchPointsList(d, now, from, until, retID)
+	pointsList, err := fetchPointsList(d, retID, from, until, now)
 	if err != nil {
 		return nil, nil, err
 	}
 	return d, pointsList, nil
 }
 
-func fetchPointsList(d *whispertool.FileData, now, from, until whispertool.Timestamp, retID int) ([][]whispertool.Point, error) {
+func fetchPointsList(d *whispertool.FileData, retID int, from, until, now whispertool.Timestamp) ([][]whispertool.Point, error) {
 	pointsList := make([][]whispertool.Point, len(d.Retentions()))
 	if retID == RetIDAll {
 		for i := range d.Retentions() {

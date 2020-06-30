@@ -55,12 +55,12 @@ func (c *CopyCommand) Execute() error {
 	eg.Go(func() error {
 		var err error
 		if c.SrcURL != "" {
-			srcData, srcPtsList, err = readWhisperFileRemote(c.SrcURL, c.Src, c.Now, c.From, c.Until, c.RetID)
+			srcData, srcPtsList, err = readWhisperFileRemote(c.SrcURL, c.Src, c.RetID, c.From, c.Until, c.Now)
 			if err != nil {
 				return err
 			}
 		} else {
-			srcData, srcPtsList, err = readWhisperFile(c.Src, c.Now, c.From, c.Until, c.RetID)
+			srcData, srcPtsList, err = readWhisperFile(c.Src, c.RetID, c.From, c.Until, c.Now)
 			if err != nil {
 				return err
 			}

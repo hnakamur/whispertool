@@ -84,7 +84,7 @@ func (a *app) handleView(w http.ResponseWriter, r *http.Request) error {
 	tsFrom := whispertool.TimestampFromStdTime(from)
 	tsUntil := whispertool.TimestampFromStdTime(until)
 
-	d, _, err := readWhisperFile(filename, tsNow, tsFrom, tsUntil, RetIDAll)
+	d, _, err := readWhisperFile(filename, RetIDAll, tsFrom, tsUntil, tsNow)
 	if err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func (a *app) handleSum(w http.ResponseWriter, r *http.Request) error {
 	tsFrom := whispertool.TimestampFromStdTime(from)
 	tsUntil := whispertool.TimestampFromStdTime(until)
 
-	sumData, ptsList, err := sumWhisperFile(srcFilenames, tsNow, tsFrom, tsUntil, RetIDAll)
+	sumData, ptsList, err := sumWhisperFile(srcFilenames, RetIDAll, tsFrom, tsUntil, tsNow)
 	if err != nil {
 		return err
 	}

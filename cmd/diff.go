@@ -63,12 +63,12 @@ func (c *DiffCommand) Execute() error {
 	eg.Go(func() error {
 		var err error
 		if c.SrcURL != "" {
-			srcData, srcPtsList, err = readWhisperFileRemote(c.SrcURL, c.Src, c.Now, c.From, c.Until, c.RetID)
+			srcData, srcPtsList, err = readWhisperFileRemote(c.SrcURL, c.Src, c.RetID, c.From, c.Until, c.Now)
 			if err != nil {
 				return err
 			}
 		} else {
-			srcData, srcPtsList, err = readWhisperFile(c.Src, c.Now, c.From, c.Until, c.RetID)
+			srcData, srcPtsList, err = readWhisperFile(c.Src, c.RetID, c.From, c.Until, c.Now)
 			if err != nil {
 				return err
 			}
@@ -77,7 +77,7 @@ func (c *DiffCommand) Execute() error {
 	})
 	eg.Go(func() error {
 		var err error
-		destData, destPtsList, err = readWhisperFile(c.Dest, c.Now, c.From, c.Until, c.RetID)
+		destData, destPtsList, err = readWhisperFile(c.Dest, c.RetID, c.From, c.Until, c.Now)
 		if err != nil {
 			return err
 		}
@@ -147,7 +147,7 @@ func printDiffTo(w io.Writer, srcData, destData *whispertool.FileData, srcPtsLis
 	return nil
 }
 
-func readWhisperFileRemote(srcURL, filename string, now, from, until whispertool.Timestamp, retID int) (*whispertool.FileData, [][]whispertool.Point, error) {
+func readWhisperFileRemote(srcURL, filename string, retID int, from, until, now whispertool.Timestamp) (*whispertool.FileData, [][]whispertool.Point, error) {
 	reqURL := fmt.Sprintf("%s/view?now=%s&file=%s",
 		srcURL, url.QueryEscape(now.String()), url.QueryEscape(filename))
 	d, err := getFileDataFromRemoteHelper(reqURL)
@@ -155,7 +155,7 @@ func readWhisperFileRemote(srcURL, filename string, now, from, until whispertool
 		return nil, nil, err
 	}
 
-	pointsList, err := fetchPointsList(d, now, from, until, retID)
+	pointsList, err := fetchPointsList(d, retID, from, until, now)
 	if err != nil {
 		return nil, nil, err
 	}

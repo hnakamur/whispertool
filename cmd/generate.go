@@ -63,7 +63,7 @@ func (c *GenerateCommand) Execute() error {
 	if c.Fill {
 		rnd := rand.New(rand.NewSource(newRandSeed()))
 		until := c.Now
-		pointsList = randomPointsList(retentions, until, c.Now, rnd, c.RandMax)
+		pointsList = randomPointsList(retentions, rnd, c.RandMax, until, c.Now)
 		if err := updateFileDataWithPointsList(d, pointsList, c.Now); err != nil {
 			return err
 		}
@@ -87,7 +87,7 @@ func newRandSeed() int64 {
 	return int64(binary.BigEndian.Uint64(b[:]))
 }
 
-func randomPointsList(retentions []whispertool.Retention, until, now whispertool.Timestamp, rnd *rand.Rand, rndMaxForHightestArchive int) [][]whispertool.Point {
+func randomPointsList(retentions []whispertool.Retention, rnd *rand.Rand, rndMaxForHightestArchive int, until, now whispertool.Timestamp) [][]whispertool.Point {
 	pointsList := make([][]whispertool.Point, len(retentions))
 	var highRet *whispertool.Retention
 	var highRndMax int
@@ -95,7 +95,7 @@ func randomPointsList(retentions []whispertool.Retention, until, now whispertool
 	for i := range retentions {
 		r := &retentions[i]
 		rndMax := rndMaxForHightestArchive * int(r.SecondsPerPoint()) / int(retentions[0].SecondsPerPoint())
-		pointsList[i] = randomPoints(until, now, r, highRet, rnd, rndMax, highRndMax, highPts)
+		pointsList[i] = randomPoints(r, highRet, highPts, rnd, rndMax, highRndMax, until, now)
 
 		highRndMax = rndMax
 		highPts = pointsList[i]
@@ -104,7 +104,7 @@ func randomPointsList(retentions []whispertool.Retention, until, now whispertool
 	return pointsList
 }
 
-func randomPoints(until, now whispertool.Timestamp, r, highRet *whispertool.Retention, rnd *rand.Rand, rndMax, highRndMax int, highPts []whispertool.Point) []whispertool.Point {
+func randomPoints(r, highRet *whispertool.Retention, highPts []whispertool.Point, rnd *rand.Rand, rndMax, highRndMax int, until, now whispertool.Timestamp) []whispertool.Point {
 	// adjust now and until for this archive
 	step := r.SecondsPerPoint()
 	thisNow := now.Truncate(step)
