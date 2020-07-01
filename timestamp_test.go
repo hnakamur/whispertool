@@ -217,9 +217,6 @@ func TestTimestamp_Truncate(t *testing.T) {
 		got := tc.t.Truncate(tc.d)
 		if got != tc.want {
 			t.Errorf("timestamp for t=%s, d=%s, got=%s, want=%s", tc.t, tc.d, got, tc.want)
-		} else {
-			t.Logf("t=%s, d=%s, got=%s", tc.t, tc.d, got)
 		}
 	}
-
 }

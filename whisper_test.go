@@ -172,7 +172,6 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 				wantPt := wantPtsDif[i]
 				t.Errorf("point unmatch for retention %d, now=%s, from=%s, until=%s, got=%s, want=%s", retID, tsNow, tsFrom, tsUntil, gotPt, wantPt)
 			}
-			t.Logf("now=%s, from=%s, until=%s, gotPoints=%v", tsNow, tsFrom, tsUntil, gotPoints)
 
 			tsFrom = tsNow.Add(-5 * Minute)
 			tsUntil = tsFrom.Add(Minute)
@@ -190,7 +189,6 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 				wantPt := wantPtsDif[i]
 				t.Errorf("point unmatch for retention %d, now=%s, from=%s, until=%s, got=%s, want=%s", retID, tsNow, tsFrom, tsUntil, gotPt, wantPt)
 			}
-			t.Logf("now=%s, from=%s, until=%s, gotPoints=%v", tsNow, tsFrom, tsUntil, gotPoints)
 		})
 	}
 }
