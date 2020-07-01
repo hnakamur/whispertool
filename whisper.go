@@ -203,7 +203,7 @@ func (w *Whisper) Sync() error {
 		return nil
 	}
 
-	if err := w.FlushTo(w.file); err != nil {
+	if err := w.flushTo(w.file); err != nil {
 		return err
 	}
 	if err := w.file.Sync(); err != nil {
@@ -403,7 +403,7 @@ func pageForEndOffset(offset uint32) int {
 	return int(offset-1) / pageSize
 }
 
-func (w *Whisper) FlushTo(wr io.WriterAt) error {
+func (w *Whisper) flushTo(wr io.WriterAt) error {
 	for _, r := range dirtyPageRanges(w.dirtyPageBitSet) {
 		off := r.start * pageSize
 		end := r.end * pageSize
@@ -533,8 +533,8 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 	baseInterval := w.baseInterval(r)
 	//log.Printf("FetchFromArchive retentionID=%d, baseInterval=%s", retentionID, baseInterval)
 
-	fromInterval := r.Interval(from)
-	untilInterval := r.Interval(until)
+	fromInterval := r.interval(from)
+	untilInterval := r.interval(until)
 	step := r.secondsPerPoint
 
 	if baseInterval == 0 {

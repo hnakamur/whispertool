@@ -14,8 +14,11 @@ type Timestamp uint32
 // Duration is seconds between two Timestamps.
 type Duration int32
 
+// Timestamp format layout used in this package.
+// Note time zone is fixed to "Z".
 const UTCTimeLayout = "2006-01-02T15:04:05Z"
 
+// Duration constants
 const (
 	Second Duration = 1
 	Minute          = 60 * Second
@@ -48,6 +51,7 @@ func (t Timestamp) ToStdTime() time.Time {
 	return time.Unix(int64(t), 0).UTC()
 }
 
+// String returns the string representation of t with UTCTimeLayout format.
 func (t Timestamp) String() string {
 	return t.ToStdTime().Format(UTCTimeLayout)
 }
@@ -77,6 +81,7 @@ func (t Timestamp) Truncate(d Duration) Timestamp {
 	return t.Add(-Duration(int64(t) % int64(d)))
 }
 
+// ParseDuration parses a Duration string.
 func ParseDuration(s string) (Duration, error) {
 	x, rem, err := leadingInt(s)
 	if err != nil || len(rem) != 1 {
@@ -147,6 +152,7 @@ func unitMultiplier(s string) (d Duration, err error) {
 	}
 }
 
+// String returns the string representation of d.
 func (d Duration) String() string {
 	if d == 0 {
 		return "0s"
