@@ -1,11 +1,15 @@
 package cmd
 
 import (
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/url"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hnakamur/whispertool"
@@ -24,6 +28,8 @@ type SumDiffCommand struct {
 	Now         whispertool.Timestamp
 	RetID       int
 	TextOut     string
+	SumTextOut  string
+	DestTextOut string
 
 	Interval       time.Duration
 	IntervalOffset time.Duration
@@ -38,7 +44,9 @@ func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.SrcPattern, "src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
 	fs.StringVar(&c.Dest, "dest", "", "dest whisper filename (ex. dest.wsp).")
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
-	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
+	fs.StringVar(&c.TextOut, "text-out", "", "text output of diff. empty means no output, - means stdout, other means output file.")
+	fs.StringVar(&c.SumTextOut, "sum-text-out", "", "text output of sum. empty means no output, - means stdout, other means output file.")
+	fs.StringVar(&c.DestTextOut, "dest-text-out", "", "text output of destination. empty means no output, - means stdout, other means output file.")
 
 	c.Now = whispertool.TimestampFromStdTime(time.Now())
 	c.Until = c.Now
@@ -187,6 +195,13 @@ func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
 	if err != nil {
 		return err
 	}
+	itemName := strings.ReplaceAll(itemRelDir, string(filepath.Separator), ".")
+	if err := printPointsListAppend(c.SumTextOut, itemName, sumDB, sumPtsList); err != nil {
+		return err
+	}
+	if err := printPointsListAppend(c.DestTextOut, itemName, destDB, destPtsList); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -207,4 +222,49 @@ func sumWhisperFileRemote(srcURL, srcFullPattern string, retID int, from, until,
 		return nil, nil, err
 	}
 	return db, pointsList, nil
+}
+
+func printPointsListAppend(textOut string, itemName string, db *whispertool.Whisper, ptsList PointsList) error {
+	if textOut == "" {
+		return nil
+	}
+
+	if textOut == "-" {
+		return printPointsListAppendTo(os.Stdout, itemName, db, ptsList)
+	}
+
+	file, err := os.OpenFile(textOut, os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	w := bufio.NewWriter(file)
+	err = printPointsListAppendTo(w, itemName, db, ptsList)
+	if err != nil {
+		return err
+	}
+	if err = w.Flush(); err != nil {
+		return err
+	}
+	if err = file.Sync(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func printPointsListAppendTo(w io.Writer, itemName string, db *whispertool.Whisper, ptsList PointsList) error {
+	if _, err := fmt.Fprintf(w, "item:%s\n", itemName); err != nil {
+		return err
+	}
+	for retID := range db.Retentions() {
+		for _, pts := range ptsList {
+			for _, pt := range pts {
+				if _, err := fmt.Fprintf(w, "retID:%d\tt:%s\tvalue:%s\n", retID, pt.Time, pt.Value); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
