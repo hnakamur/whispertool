@@ -73,8 +73,5 @@ func (e *RequiredOptionError) Usage() {
 	e.fs.Usage()
 }
 
-var errNeedsOneFileArg = errors.New("expected one whisper filename argument")
-var errNeedsSrcAndDestFilesArg = errors.New("expected source and destination whisper filename arguments")
-var errNeedsSrcAndDestDirsArg = errors.New("expected source and destination whisper directory arguments")
 var errEmptyRateOutOfBounds = errors.New("emptyRate must be 0 <= r <= 1")
 var errFromIsAfterUntil = errors.New("from time must not be after until time")

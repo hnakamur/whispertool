@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"flag"
+	"fmt"
+	"net/url"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -9,7 +12,8 @@ import (
 )
 
 type ViewRawCommand struct {
-	Filename    string
+	SrcBase     string
+	SrcRelPath  string
 	From        whispertool.Timestamp
 	Until       whispertool.Timestamp
 	RetID       int
@@ -20,6 +24,8 @@ type ViewRawCommand struct {
 
 func (c *ViewRawCommand) Parse(fs *flag.FlagSet, args []string) error {
 	c.Until = whispertool.TimestampFromStdTime(time.Now())
+	fs.StringVar(&c.SrcBase, "src-base", "", "src base directory or URL of \"whispertool server\"")
+	fs.StringVar(&c.SrcRelPath, "src", "", "whisper file relative path to src base")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all)")
@@ -27,11 +33,6 @@ func (c *ViewRawCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.BoolVar(&c.SortsByTime, "sort", false, "whether or not to sorts points by time")
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
 	fs.Parse(args)
-
-	if fs.NArg() != 1 {
-		return errNeedsOneFileArg
-	}
-	c.Filename = fs.Arg(0)
 
 	if c.From > c.Until {
 		return errFromIsAfterUntil
@@ -41,7 +42,7 @@ func (c *ViewRawCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *ViewRawCommand) Execute() error {
-	db, pointsList, err := readWhisperFileRaw(c.Filename, c.RetID)
+	db, pointsList, err := readWhisperFileRaw(c.SrcBase, c.SrcRelPath, c.RetID)
 	if err != nil {
 		return err
 	}
@@ -57,13 +58,43 @@ func (c *ViewRawCommand) Execute() error {
 	return nil
 }
 
-func readWhisperFileRaw(filename string, retID int) (*whispertool.Whisper, PointsList, error) {
+func readWhisperFileRaw(baseDirOrURL, srcRelPath string, retID int) (*whispertool.Whisper, PointsList, error) {
+	if isBaseURL(baseDirOrURL) {
+		return readWhisperFileRawRemote(baseDirOrURL, srcRelPath, retID)
+	}
+	return readWhisperFileRawLocal(filepath.Join(baseDirOrURL, srcRelPath), retID)
+}
+
+func readWhisperFileRawRemote(srcURL, srcRelPath string, retID int) (*whispertool.Whisper, PointsList, error) {
+	reqURL := fmt.Sprintf("%s/view-raw?file=%s&retention=%d",
+		srcURL, url.QueryEscape(srcRelPath), retID)
+	db, err := getFileDataFromRemote(reqURL)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ptsList, err := fetchRawPointsLists(db, retID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return db, ptsList, nil
+}
+
+func readWhisperFileRawLocal(filename string, retID int) (*whispertool.Whisper, PointsList, error) {
 	db, err := whispertool.Open(filename)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer db.Close()
 
+	ptsList, err := fetchRawPointsLists(db, retID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return db, ptsList, nil
+}
+
+func fetchRawPointsLists(db *whispertool.Whisper, retID int) (PointsList, error) {
 	pointsList := make([]whispertool.Points, len(db.Retentions()))
 	if retID == RetIDAll {
 		for i := range db.Retentions() {
@@ -72,9 +103,9 @@ func readWhisperFileRaw(filename string, retID int) (*whispertool.Whisper, Point
 	} else if retID >= 0 && retID < len(db.Retentions()) {
 		pointsList[retID] = db.GetAllRawUnsortedPoints(retID)
 	} else {
-		return nil, nil, whispertool.ErrRetentionIDOutOfRange
+		return nil, whispertool.ErrRetentionIDOutOfRange
 	}
-	return db, pointsList, nil
+	return pointsList, nil
 }
 
 func filterPointsListByTimeRange(d *whispertool.Whisper, pointsList PointsList, from, until whispertool.Timestamp) PointsList {

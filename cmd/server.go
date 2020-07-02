@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/hnakamur/whispertool"
@@ -40,7 +41,9 @@ func (c *ServerCommand) Execute() error {
 		baseDir: c.BaseDir,
 	}
 	http.HandleFunc("/view", wrapHandler(a.handleView))
+	http.HandleFunc("/view-raw", wrapHandler(a.handleViewRaw))
 	http.HandleFunc("/sum", wrapHandler(a.handleSum))
+	http.HandleFunc("/items", wrapHandler(a.handleItems))
 	s := &http.Server{
 		Addr:           c.Addr,
 		Handler:        nil,
@@ -64,27 +67,60 @@ func wrapHandler(h func(w http.ResponseWriter, r *http.Request) error) func(w ht
 	}
 }
 
-func (a *app) handleView(w http.ResponseWriter, r *http.Request) error {
+func (a *app) handleViewRaw(w http.ResponseWriter, r *http.Request) error {
 	if err := r.ParseForm(); err != nil {
 		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse form"))
 	}
-	now, err := time.Parse(whispertool.UTCTimeLayout, r.Form.Get("now"))
+	retID, err := getFormInt(r, "retention")
 	if err != nil {
-		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse \"now\" parameter"))
+		return err
 	}
 	fileParam := r.Form.Get("file")
 	if fileParam == "" {
 		return newHTTPError(http.StatusBadRequest, errors.New("\"file\" parameter must not be empty"))
 	}
+
 	filename := filepath.Join(a.baseDir, fileParam)
+	d, _, err := readWhisperFileRawLocal(filename, retID)
+	if err != nil {
+		return err
+	}
 
-	from := time.Unix(0, 0)
-	until := now
-	tsNow := whispertool.TimestampFromStdTime(now)
-	tsFrom := whispertool.TimestampFromStdTime(from)
-	tsUntil := whispertool.TimestampFromStdTime(until)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	_, err = w.Write(d.RawData())
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
-	d, _, err := readWhisperFile(filename, RetIDAll, tsFrom, tsUntil, tsNow)
+func (a *app) handleView(w http.ResponseWriter, r *http.Request) error {
+	if err := r.ParseForm(); err != nil {
+		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse form"))
+	}
+	retID, err := getFormInt(r, "retention")
+	if err != nil {
+		return err
+	}
+	fileParam := r.Form.Get("file")
+	if fileParam == "" {
+		return newHTTPError(http.StatusBadRequest, errors.New("\"file\" parameter must not be empty"))
+	}
+	from, err := whispertool.ParseTimestamp(r.Form.Get("from"))
+	if err != nil {
+		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse \"from\" parameter"))
+	}
+	until, err := whispertool.ParseTimestamp(r.Form.Get("until"))
+	if err != nil {
+		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse \"until\" parameter"))
+	}
+	now, err := whispertool.ParseTimestamp(r.Form.Get("now"))
+	if err != nil {
+		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse \"now\" parameter"))
+	}
+
+	filename := filepath.Join(a.baseDir, fileParam)
+	d, _, err := readWhisperFileLocal(filename, retID, from, until, now)
 	if err != nil {
 		return err
 	}
@@ -101,35 +137,37 @@ func (a *app) handleSum(w http.ResponseWriter, r *http.Request) error {
 	if err := r.ParseForm(); err != nil {
 		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse form"))
 	}
-	now, err := time.Parse(whispertool.UTCTimeLayout, r.Form.Get("now"))
-	if err != nil {
-		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse \"now\" parameter"))
+	item := r.Form.Get("item")
+	if item == "" {
+		return newHTTPError(http.StatusBadRequest, errors.New("\"item\" parameter must not be empty"))
 	}
 	pattern := r.Form.Get("pattern")
 	if pattern == "" {
 		return newHTTPError(http.StatusBadRequest, errors.New("\"pattern\" parameter must not be empty"))
 	}
-	srcFilenames, err := filepath.Glob(filepath.Join(a.baseDir, pattern))
+	retID, err := getFormInt(r, "retention")
 	if err != nil {
-		return newHTTPError(http.StatusBadRequest, err)
+		return err
 	}
-	if len(srcFilenames) == 0 {
-		return newHTTPError(http.StatusBadRequest,
-			fmt.Errorf("no file matched for pattern=%s", pattern))
+	from, err := whispertool.ParseTimestamp(r.Form.Get("from"))
+	if err != nil {
+		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse \"from\" parameter"))
+	}
+	until, err := whispertool.ParseTimestamp(r.Form.Get("until"))
+	if err != nil {
+		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse \"until\" parameter"))
+	}
+	now, err := whispertool.ParseTimestamp(r.Form.Get("now"))
+	if err != nil {
+		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse \"now\" parameter"))
 	}
 
-	from := time.Unix(0, 0)
-	until := now
-	tsNow := whispertool.TimestampFromStdTime(now)
-	tsFrom := whispertool.TimestampFromStdTime(from)
-	tsUntil := whispertool.TimestampFromStdTime(until)
-
-	sumDB, ptsList, err := sumWhisperFile(srcFilenames, RetIDAll, tsFrom, tsUntil, tsNow)
+	sumDB, ptsList, err := sumWhisperFileLocal(a.baseDir, item, pattern, retID, from, until, now)
 	if err != nil {
 		return err
 	}
 
-	if err := updateFileDataWithPointsList(sumDB, ptsList, tsNow); err != nil {
+	if err := updateFileDataWithPointsList(sumDB, ptsList, now); err != nil {
 		return err
 	}
 
@@ -139,6 +177,44 @@ func (a *app) handleSum(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return nil
+}
+
+func (a *app) handleItems(w http.ResponseWriter, r *http.Request) error {
+	if err := r.ParseForm(); err != nil {
+		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse form"))
+	}
+	pattern := r.Form.Get("pattern")
+	if pattern == "" {
+		return newHTTPError(http.StatusBadRequest, errors.New("\"pattern\" parameter must not be empty"))
+	}
+
+	items, err := globItems(a.baseDir, pattern)
+	if err != nil {
+		return newHTTPError(http.StatusBadRequest, err)
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	for _, item := range items {
+		if _, err := fmt.Fprintf(w, "%s\n", item); err != nil {
+			return newHTTPError(http.StatusInternalServerError,
+				fmt.Errorf("cannot write item name: %s", err))
+		}
+	}
+	return nil
+}
+
+func getFormInt(r *http.Request, paramName string) (int, error) {
+	strValue := r.Form.Get(paramName)
+	if strValue == "" {
+		return 0, newHTTPError(http.StatusBadRequest,
+			fmt.Errorf("%q parameter must not be empty", paramName))
+	}
+	value, err := strconv.Atoi(strValue)
+	if err != nil {
+		return 0, newHTTPError(http.StatusBadRequest,
+			fmt.Errorf("invalid integer %s for %q parameter", strValue, paramName))
+	}
+	return value, nil
 }
 
 func newHTTPError(statusCode int, err error) *httpError {

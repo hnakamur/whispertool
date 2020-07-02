@@ -4,27 +4,29 @@ import (
 	"errors"
 	"flag"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/hnakamur/whispertool"
-	"golang.org/x/sync/errgroup"
 )
 
 type CopyCommand struct {
-	SrcURL  string
-	Src     string
-	Dest    string
-	From    whispertool.Timestamp
-	Until   whispertool.Timestamp
-	Now     whispertool.Timestamp
-	RetID   int
-	TextOut string
+	SrcBase     string
+	SrcRelPath  string
+	DestBase    string
+	DestRelPath string
+	From        whispertool.Timestamp
+	Until       whispertool.Timestamp
+	Now         whispertool.Timestamp
+	RetID       int
+	TextOut     string
 }
 
 func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
-	fs.StringVar(&c.SrcURL, "src-url", "", "web app URL for src")
-	fs.StringVar(&c.Src, "src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
-	fs.StringVar(&c.Dest, "dest", "", "dest whisper filename (ex. dest.wsp).")
+	fs.StringVar(&c.SrcBase, "src-base", "", "src base directory or URL of \"whispertool server\"")
+	fs.StringVar(&c.SrcRelPath, "src", "", "whisper file relative path to src base")
+	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory or URL of \"whispertool server\"")
+	fs.StringVar(&c.DestRelPath, "dest", "", "whisper file relative path to dest base")
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
 
@@ -35,11 +37,20 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 	fs.Parse(args)
 
-	if c.Src == "" && c.SrcURL == "" {
-		return newRequiredOptionError(fs, "src or src-url")
+	if c.SrcBase == "" {
+		return newRequiredOptionError(fs, "src-base")
 	}
-	if c.Dest == "" {
+	if c.SrcRelPath == "" {
+		return newRequiredOptionError(fs, "src")
+	}
+	if c.DestBase == "" {
+		return newRequiredOptionError(fs, "dest-base")
+	}
+	if c.DestRelPath == "" {
 		return newRequiredOptionError(fs, "dest")
+	}
+	if isBaseURL(c.DestBase) {
+		return errors.New("not implemented yet for remote destination, currently only local destination is supported")
 	}
 	if c.From > c.Until {
 		return errFromIsAfterUntil
@@ -49,33 +60,14 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *CopyCommand) Execute() error {
-	var srcDB, destDB *whispertool.Whisper
-	var srcPtsList []whispertool.Points
-	var eg errgroup.Group
-	eg.Go(func() error {
-		var err error
-		if c.SrcURL != "" {
-			srcDB, srcPtsList, err = readWhisperFileRemote(c.SrcURL, c.Src, c.RetID, c.From, c.Until, c.Now)
-			if err != nil {
-				return err
-			}
-		} else {
-			srcDB, srcPtsList, err = readWhisperFile(c.Src, c.RetID, c.From, c.Until, c.Now)
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	eg.Go(func() error {
-		var err error
-		destDB, err = openOrCreateCopyDestFile(c.Dest, srcDB)
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-	if err := eg.Wait(); err != nil {
+	srcDB, srcPtsList, err := readWhisperFile(c.SrcBase, c.SrcRelPath, c.RetID, c.From, c.Until, c.Now)
+	if err != nil {
+		return err
+	}
+
+	destFullPath := filepath.Join(c.DestBase, c.DestRelPath)
+	destDB, err := openOrCreateCopyDestFile(destFullPath, srcDB)
+	if err != nil {
 		return err
 	}
 	defer destDB.Close()

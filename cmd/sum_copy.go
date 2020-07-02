@@ -12,12 +12,11 @@ import (
 )
 
 type SumCopyCommand struct {
-	SrcURL      string
 	SrcBase     string
 	DestBase    string
 	ItemPattern string
 	SrcPattern  string
-	Dest        string
+	DestRelPath string
 	From        whispertool.Timestamp
 	Until       whispertool.Timestamp
 	Now         whispertool.Timestamp
@@ -26,12 +25,11 @@ type SumCopyCommand struct {
 }
 
 func (c *SumCopyCommand) Parse(fs *flag.FlagSet, args []string) error {
-	fs.StringVar(&c.SrcURL, "src-url", "", "web app URL for src")
-	fs.StringVar(&c.SrcBase, "src-base", "", "src base directory")
-	fs.StringVar(&c.ItemPattern, "item", "", "glob pattern of whisper directory")
+	fs.StringVar(&c.SrcBase, "src-base", "", "src base directory or web app URL of \"whispertool server\"")
+	fs.StringVar(&c.ItemPattern, "item", "", "item directory glob pattern relative to src base")
+	fs.StringVar(&c.SrcPattern, "src", "", "whisper file glob pattern relative to item directory (ex. *.wsp).")
 	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory")
-	fs.StringVar(&c.SrcPattern, "src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
-	fs.StringVar(&c.Dest, "dest", "", "dest whisper filename (ex. dest.wsp).")
+	fs.StringVar(&c.DestRelPath, "dest", "", "dest whisper relative filename to item directory (ex. dest.wsp).")
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
 
@@ -45,16 +43,16 @@ func (c *SumCopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	if c.ItemPattern == "" {
 		return newRequiredOptionError(fs, "item")
 	}
-	if c.SrcBase == "" && c.SrcURL == "" {
-		return newRequiredOptionError(fs, "src-base or src-url")
-	}
-	if c.DestBase == "" {
-		return newRequiredOptionError(fs, "dest-base")
+	if c.SrcBase == "" {
+		return newRequiredOptionError(fs, "src-base")
 	}
 	if c.SrcPattern == "" {
 		return newRequiredOptionError(fs, "src")
 	}
-	if c.Dest == "" {
+	if c.DestBase == "" {
+		return newRequiredOptionError(fs, "dest-base")
+	}
+	if c.DestRelPath == "" {
 		return newRequiredOptionError(fs, "dest")
 	}
 	return nil
@@ -69,22 +67,12 @@ func (c *SumCopyCommand) Execute() error {
 		fmt.Printf("time:%s\tmsg:finish\tduration:%s\ttotalItemCount:%d\n", formatTime(t1), t1.Sub(t0).String(), totalItemCount)
 	}()
 
-	itemDirnames, err := filepath.Glob(filepath.Join(c.DestBase, c.ItemPattern))
+	items, err := globItems(c.SrcBase, c.ItemPattern)
 	if err != nil {
 		return err
 	}
-	if len(itemDirnames) == 0 {
-		return fmt.Errorf("itemPattern match no directries, itemPattern=%s", c.ItemPattern)
-	}
-	totalItemCount = len(itemDirnames)
-
-	for _, itemDirname := range itemDirnames {
-		itemRelDir, err := filepath.Rel(c.DestBase, itemDirname)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("item:%s\n", itemRelDir)
-		err = c.sumCopyItem(itemRelDir)
+	for _, item := range items {
+		err = c.sumCopyItem(item)
 		if err != nil {
 			return err
 		}
@@ -92,43 +80,22 @@ func (c *SumCopyCommand) Execute() error {
 	return nil
 }
 
-func (c *SumCopyCommand) sumCopyItem(itemRelDir string) error {
-	srcFullPattern := filepath.Join(c.SrcBase, itemRelDir, c.SrcPattern)
-	var srcFilenames []string
-	if c.SrcURL == "" {
-		var err error
-		srcFilenames, err = filepath.Glob(srcFullPattern)
-		if err != nil {
-			return err
-		}
-		if len(srcFilenames) == 0 {
-			return fmt.Errorf("no file matched for -src=%s", c.SrcPattern)
-		}
-	}
-	destFull := filepath.Join(c.DestBase, itemRelDir, c.Dest)
+func (c *SumCopyCommand) sumCopyItem(item string) error {
+	fmt.Printf("item:%s\n", item)
 
 	var sumDB, destDB *whispertool.Whisper
 	var sumPtsList PointsList
 	var g errgroup.Group
 	g.Go(func() error {
 		var err error
-		if c.SrcURL != "" {
-			sumDB, sumPtsList, err = sumWhisperFileRemote(c.SrcURL, srcFullPattern, c.RetID, c.From, c.Until, c.Now)
-		} else {
-			sumDB, sumPtsList, err = sumWhisperFile(srcFilenames, c.RetID, c.From, c.Until, c.Now)
-		}
-		if err != nil {
-			return err
-		}
-		return nil
+		sumDB, sumPtsList, err = sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.RetID, c.From, c.Until, c.Now)
+		return err
 	})
 	g.Go(func() error {
+		destFullPath := filepath.Join(c.DestBase, item, c.DestRelPath)
 		var err error
-		destDB, err = openOrCreateCopyDestFile(destFull, sumDB)
-		if err != nil {
-			return err
-		}
-		return nil
+		destDB, err = openOrCreateCopyDestFile(destFullPath, sumDB)
+		return err
 	})
 	if err := g.Wait(); err != nil {
 		return err

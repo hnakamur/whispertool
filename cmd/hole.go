@@ -1,30 +1,36 @@
 package cmd
 
 import (
+	"errors"
 	"flag"
 	"log"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/hnakamur/whispertool"
 )
 
 type HoleCommand struct {
-	Src       string
-	Dest      string
-	Perm      os.FileMode
-	EmptyRate float64
-	From      whispertool.Timestamp
-	Until     whispertool.Timestamp
-	Now       whispertool.Timestamp
-	RetID     int
-	TextOut   string
+	SrcBase     string
+	SrcRelPath  string
+	DestBase    string
+	DestRelPath string
+	Perm        os.FileMode
+	EmptyRate   float64
+	From        whispertool.Timestamp
+	Until       whispertool.Timestamp
+	Now         whispertool.Timestamp
+	RetID       int
+	TextOut     string
 }
 
 func (c *HoleCommand) Parse(fs *flag.FlagSet, args []string) error {
-	fs.StringVar(&c.Src, "src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
-	fs.StringVar(&c.Dest, "dest", "", "dest whisper filename (ex. dest.wsp).")
+	fs.StringVar(&c.SrcBase, "src-base", "", "src base directory or URL of \"whispertool server\"")
+	fs.StringVar(&c.SrcRelPath, "src", "", "whisper file relative path to src base")
+	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory or URL of \"whispertool server\"")
+	fs.StringVar(&c.DestRelPath, "dest", "", "whisper file relative path to dest base")
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
 
@@ -39,14 +45,23 @@ func (c *HoleCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.Float64Var(&c.EmptyRate, "empty-rate", 0.2, "empty rate (0 <= r <= 1).")
 	fs.Parse(args)
 
-	if c.EmptyRate < 0 || 1 < c.EmptyRate {
-		return errEmptyRateOutOfBounds
+	if c.SrcBase == "" {
+		return newRequiredOptionError(fs, "src-base")
 	}
-	if c.Src == "" {
+	if c.SrcRelPath == "" {
 		return newRequiredOptionError(fs, "src")
 	}
-	if c.Dest == "" {
+	if c.DestBase == "" {
+		return newRequiredOptionError(fs, "dest-base")
+	}
+	if c.DestRelPath == "" {
 		return newRequiredOptionError(fs, "dest")
+	}
+	if isBaseURL(c.DestBase) {
+		return errors.New("not implemented yet for remote destination, currently only local destination is supported")
+	}
+	if c.EmptyRate < 0 || 1 < c.EmptyRate {
+		return errEmptyRateOutOfBounds
 	}
 	if c.From > c.Until {
 		return errFromIsAfterUntil
@@ -56,19 +71,16 @@ func (c *HoleCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *HoleCommand) Execute() error {
-	srcDB, srcPtsList, err := readWhisperFile(c.Src, RetIDAll, c.From, c.Until, c.Now)
+	srcDB, srcPtsList, err := readWhisperFile(c.SrcBase, c.SrcRelPath, c.RetID, c.From, c.Until, c.Now)
 	if err != nil {
 		return err
 	}
 
 	rnd := rand.New(rand.NewSource(newRandSeed()))
 	destPtsList := emptyRandomPointsList(srcPtsList, rnd, c.EmptyRate, c.From, c.Until, srcDB.Retentions())
-	var destDB *whispertool.Whisper
-	if c.Dest != c.Src {
-		destDB, err = whispertool.Create(c.Dest, srcDB.Retentions(), srcDB.AggregationMethod(), srcDB.XFilesFactor(), whispertool.WithFlock())
-	} else {
-		destDB, err = whispertool.Open(c.Dest, whispertool.WithFlock())
-	}
+
+	destFullPath := filepath.Join(c.DestBase, c.DestRelPath)
+	destDB, err := openOrCreateCopyDestFile(destFullPath, srcDB)
 	if err != nil {
 		return err
 	}

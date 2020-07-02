@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,12 +16,11 @@ import (
 )
 
 type SumDiffCommand struct {
-	SrcURL      string
 	SrcBase     string
-	DestBase    string
 	ItemPattern string
 	SrcPattern  string
-	Dest        string
+	DestBase    string
+	DestRelPath string
 	From        whispertool.Timestamp
 	Until       whispertool.Timestamp
 	Now         whispertool.Timestamp
@@ -37,12 +35,11 @@ type SumDiffCommand struct {
 }
 
 func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
-	fs.StringVar(&c.SrcURL, "src-url", "", "web app URL for src")
-	fs.StringVar(&c.SrcBase, "src-base", "", "src base directory")
-	fs.StringVar(&c.ItemPattern, "item", "", "glob pattern of whisper directory")
-	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory")
-	fs.StringVar(&c.SrcPattern, "src", "", "glob pattern of source whisper files (ex. src/*.wsp).")
-	fs.StringVar(&c.Dest, "dest", "", "dest whisper filename (ex. dest.wsp).")
+	fs.StringVar(&c.SrcBase, "src-base", "", "src base directory or URL of \"whispertool server\"")
+	fs.StringVar(&c.ItemPattern, "item", "", "item directory glob pattern relative to src base")
+	fs.StringVar(&c.SrcPattern, "src", "", "whisper file glob pattern relative to item directory (ex. *.wsp).")
+	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory or URL of \"whispertool server\"")
+	fs.StringVar(&c.DestRelPath, "dest", "", "dest whisper filename relative to item directory (ex. sum.wsp).")
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "", "text output of diff. empty means no output, - means stdout, other means output file.")
 	fs.StringVar(&c.SumTextOut, "sum-text-out", "", "text output of sum. empty means no output, - means stdout, other means output file.")
@@ -62,16 +59,16 @@ func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	if c.ItemPattern == "" {
 		return newRequiredOptionError(fs, "item")
 	}
-	if c.SrcBase == "" && c.SrcURL == "" {
-		return newRequiredOptionError(fs, "src-base or src-url")
-	}
-	if c.DestBase == "" {
-		return newRequiredOptionError(fs, "dest-base")
+	if c.SrcBase == "" {
+		return newRequiredOptionError(fs, "src-base")
 	}
 	if c.SrcPattern == "" {
 		return newRequiredOptionError(fs, "src")
 	}
-	if c.Dest == "" {
+	if c.DestBase == "" {
+		return newRequiredOptionError(fs, "dest-base")
+	}
+	if c.DestRelPath == "" {
 		return newRequiredOptionError(fs, "dest")
 	}
 	return nil
@@ -109,6 +106,17 @@ func (c *SumDiffCommand) sumDiffOneTime() error {
 		fmt.Printf("time:%s\tmsg:finish\tduration:%s\ttotalItemCount:%d\n", formatTime(t1), t1.Sub(t0).String(), totalItemCount)
 	}()
 
+	items, err := globItems(c.SrcBase, c.ItemPattern)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		err = c.sumDiffItem(item)
+		if err != nil {
+			return err
+		}
+	}
+
 	itemDirnames, err := filepath.Glob(filepath.Join(c.DestBase, c.ItemPattern))
 	if err != nil {
 		return err
@@ -123,8 +131,9 @@ func (c *SumDiffCommand) sumDiffOneTime() error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("item:%s\n", itemRelDir)
-		err = c.sumDiffItem(itemRelDir)
+		item := relDirToItem(itemRelDir)
+		fmt.Printf("item:%s\n", item)
+		err = c.sumDiffItem(item)
 		if err != nil {
 			return err
 		}
@@ -132,20 +141,8 @@ func (c *SumDiffCommand) sumDiffOneTime() error {
 	return nil
 }
 
-func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
-	srcFullPattern := filepath.Join(c.SrcBase, itemRelDir, c.SrcPattern)
-	var srcFilenames []string
-	if c.SrcURL == "" {
-		var err error
-		srcFilenames, err = filepath.Glob(srcFullPattern)
-		if err != nil {
-			return err
-		}
-		if len(srcFilenames) == 0 {
-			return fmt.Errorf("no file matched for -src=%s", c.SrcPattern)
-		}
-	}
-	destFull := filepath.Join(c.DestBase, itemRelDir, c.Dest)
+func (c *SumDiffCommand) sumDiffItem(item string) error {
+	fmt.Printf("item:%s\n", item)
 
 	until := c.Until
 	if c.UntilOffset != 0 {
@@ -157,26 +154,14 @@ func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
 	var g errgroup.Group
 	g.Go(func() error {
 		var err error
-		if c.SrcURL != "" {
-			sumDB, sumPtsList, err = sumWhisperFileRemote(c.SrcURL, srcFullPattern, c.RetID, c.From, until, c.Now)
-			if err != nil {
-				return err
-			}
-		} else {
-			sumDB, sumPtsList, err = sumWhisperFile(srcFilenames, c.RetID, c.From, until, c.Now)
-			if err != nil {
-				return err
-			}
-		}
-		return nil
+		sumDB, sumPtsList, err = sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.RetID, c.From, until, c.Now)
+		return err
 	})
 	g.Go(func() error {
 		var err error
-		destDB, destPtsList, err = readWhisperFile(destFull, c.RetID, c.From, until, c.Now)
-		if err != nil {
-			return err
-		}
-		return nil
+		destRelPath := filepath.Join(itemToRelDir(item), c.DestRelPath)
+		destDB, destPtsList, err = readWhisperFile(c.DestBase, destRelPath, c.RetID, c.From, until, c.Now)
+		return err
 	})
 	if err := g.Wait(); err != nil {
 		return err
@@ -195,11 +180,10 @@ func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
 	if err != nil {
 		return err
 	}
-	itemName := strings.ReplaceAll(itemRelDir, string(filepath.Separator), ".")
-	if err := printPointsListAppend(c.SumTextOut, itemName, sumDB, sumPtsList); err != nil {
+	if err := printPointsListAppend(c.SumTextOut, item, sumDB, sumPtsList); err != nil {
 		return err
 	}
-	if err := printPointsListAppend(c.DestTextOut, itemName, destDB, destPtsList); err != nil {
+	if err := printPointsListAppend(c.DestTextOut, item, destDB, destPtsList); err != nil {
 		return err
 	}
 	return nil
@@ -207,21 +191,6 @@ func (c *SumDiffCommand) sumDiffItem(itemRelDir string) error {
 
 func formatTime(t time.Time) string {
 	return t.Format(whispertool.UTCTimeLayout)
-}
-
-func sumWhisperFileRemote(srcURL, srcFullPattern string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {
-	reqURL := fmt.Sprintf("%s/sum?now=%s&pattern=%s",
-		srcURL, url.QueryEscape(now.String()), url.QueryEscape(srcFullPattern))
-	db, err := getFileDataFromRemote(reqURL)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	pointsList, err := fetchPointsList(db, retID, from, until, now)
-	if err != nil {
-		return nil, nil, err
-	}
-	return db, pointsList, nil
 }
 
 func printPointsListAppend(textOut string, itemName string, db *whispertool.Whisper, ptsList PointsList) error {
@@ -267,4 +236,12 @@ func printPointsListAppendTo(w io.Writer, itemName string, db *whispertool.Whisp
 		}
 	}
 	return nil
+}
+
+func itemToRelDir(item string) string {
+	return strings.ReplaceAll(item, ".", string(filepath.Separator))
+}
+
+func relDirToItem(relDir string) string {
+	return strings.ReplaceAll(relDir, string(filepath.Separator), ".")
 }

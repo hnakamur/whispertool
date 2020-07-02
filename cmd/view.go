@@ -3,8 +3,13 @@ package cmd
 import (
 	"bufio"
 	"flag"
+	"fmt"
 	"io"
+	"io/ioutil"
+	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/hnakamur/whispertool"
@@ -15,7 +20,8 @@ const RetIDAll = -1
 var debug = os.Getenv("DEBUG") != ""
 
 type ViewCommand struct {
-	Filename   string
+	SrcBase    string
+	SrcRelPath string
 	From       whispertool.Timestamp
 	Until      whispertool.Timestamp
 	Now        whispertool.Timestamp
@@ -27,6 +33,8 @@ type ViewCommand struct {
 func (c *ViewCommand) Parse(fs *flag.FlagSet, args []string) error {
 	c.Now = whispertool.TimestampFromStdTime(time.Now())
 	c.Until = c.Now
+	fs.StringVar(&c.SrcBase, "src-base", "", "src base directory or URL of \"whispertool server\"")
+	fs.StringVar(&c.SrcRelPath, "src", "", "whisper file relative path to src base")
 	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
@@ -34,11 +42,6 @@ func (c *ViewCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
 	fs.BoolVar(&c.ShowHeader, "header", true, "whether or not to show header (metadata and reteions)")
 	fs.Parse(args)
-
-	if fs.NArg() != 1 {
-		return errNeedsOneFileArg
-	}
-	c.Filename = fs.Arg(0)
 
 	if c.From > c.Until {
 		return errFromIsAfterUntil
@@ -48,7 +51,7 @@ func (c *ViewCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *ViewCommand) Execute() error {
-	d, pointsList, err := readWhisperFile(c.Filename, c.RetID, c.From, c.Until, c.Now)
+	d, pointsList, err := readWhisperFile(c.SrcBase, c.SrcRelPath, c.RetID, c.From, c.Until, c.Now)
 	if err != nil {
 		return err
 	}
@@ -59,7 +62,49 @@ func (c *ViewCommand) Execute() error {
 	return nil
 }
 
-func readWhisperFile(filename string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {
+func readWhisperFile(baseDirOrURL, fileRelPath string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {
+	if isBaseURL(baseDirOrURL) {
+		return readWhisperFileRemote(baseDirOrURL, fileRelPath, retID, from, until, now)
+	}
+
+	fileFullPath := filepath.Join(baseDirOrURL, fileRelPath)
+	return readWhisperFileLocal(fileFullPath, retID, from, until, now)
+}
+
+func readWhisperFileRemote(srcURL, fileRelPath string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {
+	reqURL := fmt.Sprintf("%s/view?now=%s&file=%s",
+		srcURL, url.QueryEscape(now.String()), url.QueryEscape(fileRelPath))
+	db, err := getFileDataFromRemote(reqURL)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	pointsList, err := fetchPointsList(db, retID, from, until, now)
+	if err != nil {
+		return nil, nil, err
+	}
+	return db, pointsList, nil
+}
+
+func getFileDataFromRemote(reqURL string) (*whispertool.Whisper, error) {
+	resp, err := http.Get(reqURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	db, err := whispertool.Create("", nil, 0, 0, whispertool.WithInMemory(), whispertool.WithRawData(data))
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+func readWhisperFileLocal(filename string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {
 	db, err := whispertool.Open(filename)
 	if err != nil {
 		return nil, nil, err
