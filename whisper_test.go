@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"os"
 	"reflect"
@@ -161,10 +162,11 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 			r := &db.Retentions()[retID]
 			tsFrom := tsNow.Truncate(Minute).Add(-5 * Minute)
 			tsUntil = tsFrom.Add(Minute)
-			gotPoints, err := db.FetchFromArchive(retID, tsFrom, tsUntil, tsNow)
+			ts, err := db.FetchFromArchive(retID, tsFrom, tsUntil, tsNow)
 			if err != nil {
 				t.Fatal(err)
 			}
+			gotPoints := ts.Points()
 			wantPoints := filterPointsByTimeRange(r, pointsList[retID], tsFrom, tsUntil)
 			sort.Stable(wantPoints)
 			wantPtsDif, gotPtsDif := wantPoints.Diff(gotPoints)
@@ -178,10 +180,11 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 
 			tsFrom = tsNow.Add(-5 * Minute)
 			tsUntil = tsFrom.Add(Minute)
-			gotPoints, err = db.FetchFromArchive(retID, tsFrom, tsUntil, tsNow)
+			ts, err = db.FetchFromArchive(retID, tsFrom, tsUntil, tsNow)
 			if err != nil {
 				t.Fatal(err)
 			}
+			gotPoints = ts.Points()
 			wantPoints = filterPointsByTimeRange(r, pointsList[retID], tsFrom, tsUntil)
 			sort.Stable(wantPoints)
 			wantPtsDif, gotPtsDif = wantPoints.Diff(gotPoints)
@@ -441,60 +444,188 @@ func TestCreateFileInvalidRetentionDefs(t *testing.T) {
 	}
 }
 
-// func TestOpenFile(t *testing.T) {
-// 	path, retentions := setUpCreate(t)
-// 	whisper1, err := Create(path, retentions, Average, 0.5)
-// 	if err != nil {
-// 		t.Errorf("Failed to create: %v", err)
-// 	}
+func TestOpenFile(t *testing.T) {
+	path, retentions := setUpCreate(t)
+	os.Remove(path)
+	whisper1, err := Create(path, retentions, Average, 0.5)
+	if err != nil {
+		t.Errorf("Failed to create: %v", err)
+	}
 
-// 	// write some points
-// 	now := int(time.Now().Unix())
-// 	for i := 0; i < 2; i++ {
-// 		whisper1.Update(100, now-(i*1))
-// 	}
+	// write some points
+	now := TimestampFromStdTime(time.Now())
+	for i := 0; i < 2; i++ {
+		if err := whisper1.Update(now.Add(-Duration(i)*Second), 100); err != nil {
+			t.Fatalf("failed to update a point in database: %v", err)
+		}
+	}
+	if err := whisper1.Sync(); err != nil {
+		t.Fatalf("failed to sync whisper1: %v", err)
+	}
 
-// 	whisper2, err := Open(path)
-// 	if err != nil {
-// 		t.Fatalf("Failed to open whisper file: %v", err)
-// 	}
-// 	if whisper1.aggregationMethod != whisper2.aggregationMethod {
-// 		t.Fatalf("aggregationMethod did not match, expected %v, received %v", whisper1.aggregationMethod, whisper2.aggregationMethod)
-// 	}
-// 	if whisper1.maxRetention != whisper2.maxRetention {
-// 		t.Fatalf("maxRetention did not match, expected %v, received %v", whisper1.maxRetention, whisper2.maxRetention)
-// 	}
-// 	if whisper1.xFilesFactor != whisper2.xFilesFactor {
-// 		t.Fatalf("xFilesFactor did not match, expected %v, received %v", whisper1.xFilesFactor, whisper2.xFilesFactor)
-// 	}
-// 	if len(whisper1.archives) != len(whisper2.archives) {
-// 		t.Fatalf("archive count does not match, expected %v, received %v", len(whisper1.archives), len(whisper2.archives))
-// 	}
-// 	for i := range whisper1.archives {
-// 		if whisper1.archives[i].offset != whisper2.archives[i].offset {
-// 			t.Fatalf("archive mismatch offset at %v [%v, %v]", i, whisper1.archives[i].offset, whisper2.archives[i].offset)
-// 		}
-// 		if whisper1.archives[i].Retention.secondsPerPoint != whisper2.archives[i].Retention.secondsPerPoint {
-// 			t.Fatalf("Retention.secondsPerPoint mismatch offset at %v [%v, %v]", i, whisper1.archives[i].Retention.secondsPerPoint, whisper2.archives[i].Retention.secondsPerPoint)
-// 		}
-// 		if whisper1.archives[i].Retention.numberOfPoints != whisper2.archives[i].Retention.numberOfPoints {
-// 			t.Fatalf("Retention.numberOfPoints mismatch offset at %v [%v, %v]", i, whisper1.archives[i].Retention.numberOfPoints, whisper2.archives[i].Retention.numberOfPoints)
-// 		}
+	whisper2, err := Open(path)
+	if err != nil {
+		t.Fatalf("Failed to open whisper file: %v", err)
+	}
+	if whisper1.AggregationMethod() != whisper2.AggregationMethod() {
+		t.Errorf("AggregationMethod() did not match, expected %v, received %v", whisper1.AggregationMethod(), whisper2.AggregationMethod())
+	}
+	if whisper1.MaxRetention() != whisper2.MaxRetention() {
+		t.Errorf("MaxRetention() did not match, expected %v, received %v", whisper1.MaxRetention(), whisper2.MaxRetention())
+	}
+	if whisper1.XFilesFactor() != whisper2.XFilesFactor() {
+		t.Errorf("XFilesFactor() did not match, expected %v, received %v", whisper1.XFilesFactor(), whisper2.XFilesFactor())
+	}
+	if len(whisper1.Retentions()) != len(whisper2.Retentions()) {
+		t.Errorf("archive count does not match, expected %v, received %v", len(whisper1.Retentions()), len(whisper2.Retentions()))
+	}
+	for i := range whisper1.Retentions() {
+		if whisper1.Retentions()[i].offset != whisper2.Retentions()[i].offset {
+			t.Errorf("archive mismatch offset at %v [%v, %v]", i, whisper1.Retentions()[i].offset, whisper2.Retentions()[i].offset)
+		}
+		if whisper1.Retentions()[i].secondsPerPoint != whisper2.Retentions()[i].secondsPerPoint {
+			t.Errorf("secondsPerPoint mismatch offset at %v [%v, %v]", i, whisper1.Retentions()[i].secondsPerPoint, whisper2.Retentions()[i].secondsPerPoint)
+		}
+		if whisper1.Retentions()[i].numberOfPoints != whisper2.Retentions()[i].numberOfPoints {
+			t.Errorf("numberOfPoints mismatch offset at %v [%v, %v]", i, whisper1.Retentions()[i].numberOfPoints, whisper2.Retentions()[i].numberOfPoints)
+		}
 
-// 	}
+	}
 
-// 	result1, err := whisper1.Fetch(now-3, now)
-// 	if err != nil {
-// 		t.Fatalf("Error retrieving result from created whisper")
-// 	}
-// 	result2, err := whisper2.Fetch(now-3, now)
-// 	if err != nil {
-// 		t.Fatalf("Error retrieving result from opened whisper")
-// 	}
+	result1, err := whisper1.Fetch(now-3, now)
+	if err != nil {
+		t.Fatalf("Error retrieving result from created whisper: %v", err)
+	}
+	result2, err := whisper2.Fetch(now-3, now)
+	if err != nil {
+		t.Fatalf("Error retrieving result from opened whisper: %v", err)
+	}
 
-// 	if result1.String() != result2.String() {
-// 		t.Fatalf("Results do not match")
-// 	}
+	pts1 := result1.Points()
+	pts2 := result2.Points()
+	if !pts1.Equal(pts2) {
+		ptsDiff1, ptsDiff2 := pts1.Diff(pts2)
+		t.Errorf("Results do not match")
+		for i, pt1 := range ptsDiff1 {
+			pt2 := ptsDiff2[i]
+			t.Logf("t1:%s\tt2:%s\tv1:%s\tv2:%s\n", pt1.Time, pt2.Time, pt1.Value, pt2.Value)
+		}
+	}
+}
 
-// 	tearDown()
-// }
+func TestCreateUpdateFetch(t *testing.T) {
+	var pts Points
+	pts = testCreateUpdateFetch(t, Average, 0.5, 3500, 3500, 1000, 300, 0.5, 0.2)
+	assertFloatAlmostEqual(t, float64(pts[1].Value), 150.1, 58.0)
+	assertFloatAlmostEqual(t, float64(pts[2].Value), 210.75, 28.95)
+
+	pts = testCreateUpdateFetch(t, Sum, 0.5, 600, 600, 500, 60, 0.5, 0.2)
+	assertFloatAlmostEqual(t, float64(pts[0].Value), 18.35, 5.95)
+	assertFloatAlmostEqual(t, float64(pts[1].Value), 30.35, 5.95)
+	// 4 is a crazy one because it fluctuates between 60 and ~4k
+	assertFloatAlmostEqual(t, float64(pts[5].Value), 4356.05, 500.0)
+
+	pts = testCreateUpdateFetch(t, Last, 0.5, 300, 300, 200, 1, 0.5, 0.2)
+	assertFloatAlmostEqual(t, float64(pts[0].Value), 0.7, 0.001)
+	assertFloatAlmostEqual(t, float64(pts[10].Value), 2.7, 0.001)
+	assertFloatAlmostEqual(t, float64(pts[20].Value), 4.7, 0.001)
+
+}
+
+/*
+  Test the full cycle of creating a whisper file, adding some
+  data points to it and then fetching a time series.
+*/
+func testCreateUpdateFetch(t *testing.T, aggregationMethod AggregationMethod, xFilesFactor float32, secondsAgo, fromAgo, fetchLength, step Duration, currentValue, increment Value) Points {
+	var whisper *Whisper
+	var err error
+	path, archiveList := setUpCreate(t)
+	os.Remove(path)
+	whisper, err = Create(path, archiveList, aggregationMethod, xFilesFactor)
+	if err != nil {
+		t.Fatalf("Failed create: %v", err)
+	}
+	defer whisper.Close()
+
+	now := TimestampFromStdTime(time.Now())
+
+	for i := Duration(0); i < secondsAgo; i++ {
+		err = whisper.Update(now.Add(-secondsAgo+i), currentValue)
+		if err != nil {
+			t.Fatalf("Unexpected error for %v: %v", i, err)
+		}
+		currentValue += increment
+	}
+	if err := whisper.Sync(); err != nil {
+		t.Fatalf("failed to sync whisper: %v", err)
+	}
+
+	fromTime := now.Add(-fromAgo)
+	untilTime := fromTime.Add(fetchLength)
+
+	ts, err := whisper.Fetch(fromTime, untilTime)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if !validTimestamp(ts.FromTime(), fromTime, step) {
+		t.Fatalf("Invalid fromTime [%v/%v], expected %v, received %v", secondsAgo, fromAgo, fromTime, ts.FromTime())
+	}
+	if !validTimestamp(ts.UntilTime(), untilTime, step) {
+		t.Fatalf("Invalid untilTime [%v/%v], expected %v, received %v", secondsAgo, fromAgo, untilTime, ts.UntilTime())
+	}
+	if ts.Step() != step {
+		t.Fatalf("Invalid step [%v/%v], expected %v, received %v", secondsAgo, fromAgo, step, ts.Step())
+	}
+
+	return ts.Points()
+}
+
+func validTimestamp(value, stamp Timestamp, step Duration) bool {
+	return value == nearestStep(stamp, step) || value == nearestStep(stamp, step).Add(step)
+}
+func nearestStep(stamp Timestamp, step Duration) Timestamp {
+	return stamp.Add(-(Duration(stamp) % step) + step)
+}
+
+func assertFloatAlmostEqual(t *testing.T, received, expected, slop float64) {
+	if math.Abs(expected-received) > slop {
+		t.Fatalf("Expected %v to be within %v of %v", expected, slop, received)
+	}
+}
+
+func assertFloatEqual(t *testing.T, received, expected float64) {
+	if math.Abs(expected-received) > 0.00001 {
+		t.Fatalf("Expected %v, received %v", expected, received)
+	}
+}
+
+func test_aggregate(t *testing.T, method AggregationMethod, expected Value) {
+	received := aggregate(method, []Value{1.0, 2.0, 3.0, 5.0, 4.0})
+	if expected != received {
+		t.Fatalf("Expected %v, received %v", expected, received)
+	}
+}
+func Test_aggregateAverage(t *testing.T) {
+	test_aggregate(t, Average, 3.0)
+}
+
+func Test_aggregateSum(t *testing.T) {
+	test_aggregate(t, Sum, 15.0)
+}
+
+func Test_aggregateFirst(t *testing.T) {
+	test_aggregate(t, First, 1.0)
+}
+
+func Test_aggregateLast(t *testing.T) {
+	test_aggregate(t, Last, 4.0)
+}
+
+func Test_aggregateMax(t *testing.T) {
+	test_aggregate(t, Max, 5.0)
+}
+
+func Test_aggregateMin(t *testing.T) {
+	test_aggregate(t, Min, 1.0)
+}

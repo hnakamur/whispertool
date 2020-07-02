@@ -127,18 +127,18 @@ func fetchPointsList(db *whispertool.Whisper, retID int, from, until, now whispe
 	pointsList := make([]whispertool.Points, len(db.Retentions()))
 	if retID == RetIDAll {
 		for i := range db.Retentions() {
-			points, err := db.FetchFromArchive(i, from, until, now)
+			ts, err := db.FetchFromArchive(i, from, until, now)
 			if err != nil {
 				return nil, err
 			}
-			pointsList[i] = points
+			pointsList[i] = ts.Points()
 		}
 	} else if retID >= 0 && retID < len(db.Retentions()) {
-		points, err := db.FetchFromArchive(retID, from, until, now)
+		ts, err := db.FetchFromArchive(retID, from, until, now)
 		if err != nil {
 			return nil, err
 		}
-		pointsList[retID] = points
+		pointsList[retID] = ts.Points()
 	} else {
 		return nil, whispertool.ErrRetentionIDOutOfRange
 	}

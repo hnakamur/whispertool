@@ -5,8 +5,16 @@ import (
 	"strconv"
 )
 
-// Value represents a value of Point.
-type Value float64
+// TimeSeries is a result from Fetch.
+type TimeSeries struct {
+	fromTime  Timestamp
+	untilTime Timestamp
+	step      Duration
+	points    Points
+}
+
+// Points represents a slice of Point.
+type Points []Point
 
 // Point represent a data point in whisper databases.
 type Point struct {
@@ -14,8 +22,72 @@ type Point struct {
 	Value Value
 }
 
-// Points represents a slice of Point.
-type Points []Point
+// Value represents a value of Point.
+type Value float64
+
+// FromTime returns the start time of ts.
+func (ts *TimeSeries) FromTime() Timestamp { return ts.fromTime }
+
+// UntilTime returns the end time of ts.
+func (ts *TimeSeries) UntilTime() Timestamp { return ts.untilTime }
+
+// Step returns the duration between points in ts.
+func (ts *TimeSeries) Step() Duration { return ts.step }
+
+// Points returns the points in ts.
+func (ts *TimeSeries) Points() Points { return ts.points }
+
+// Len is the number of elements in the collection.
+// Implements sort.Interface.
+func (pp Points) Len() int { return len(pp) }
+
+// Less reports whether the element with
+// index i should sort before the element with index j.
+// Implements sort.Interface.
+func (pp Points) Less(i, j int) bool { return pp[i].Time < pp[j].Time }
+
+// Swap swaps the elements with indexes i and j.
+// Implements sort.Interface.
+func (pp Points) Swap(i, j int) { pp[i], pp[j] = pp[j], pp[i] }
+
+// Equals returns whether or not pp equals to qq.
+func (pp Points) Equal(qq Points) bool {
+	if len(pp) != len(qq) {
+		return false
+	}
+
+	for i, p := range pp {
+		q := qq[i]
+		if !p.Equal(q) {
+			return false
+		}
+	}
+	return true
+}
+
+// Diff returns the different points in comparison of pp and qq.
+func (pp Points) Diff(qq Points) (Points, Points) {
+	if len(pp) != len(qq) {
+		return pp, qq
+	}
+
+	var pp2, qq2 []Point
+	for i, p := range pp {
+		q := qq[i]
+		if !p.Equal(q) {
+			pp2 = append(pp2, p)
+			qq2 = append(qq2, q)
+		}
+	}
+	return pp2, qq2
+}
+
+// Equals returns whether or not p equals to q.
+// It returns true if time and value of p equals to q.
+// For comparison of value, Value's Equals method is used.
+func (p Point) Equal(q Point) bool {
+	return p.Time == q.Time && p.Value.Equal(q.Value)
+}
 
 // SetNaN sets the value to NaN.
 func (v *Value) SetNaN() {
@@ -60,41 +132,4 @@ func (v Value) Equal(u Value) bool {
 	pIsNaN := v.IsNaN()
 	qIsNaN := u.IsNaN()
 	return (pIsNaN && qIsNaN) || (!pIsNaN && !qIsNaN && v == u)
-}
-
-// Equals returns whether or not p equals to q.
-// It returns true if time and value of p equals to q.
-// For comparison of value, Value's Equals method is used.
-func (p Point) Equal(q Point) bool {
-	return p.Time == q.Time && p.Value.Equal(q.Value)
-}
-
-// Len is the number of elements in the collection.
-// Implements sort.Interface.
-func (pp Points) Len() int { return len(pp) }
-
-// Less reports whether the element with
-// index i should sort before the element with index j.
-// Implements sort.Interface.
-func (pp Points) Less(i, j int) bool { return pp[i].Time < pp[j].Time }
-
-// Swap swaps the elements with indexes i and j.
-// Implements sort.Interface.
-func (pp Points) Swap(i, j int) { pp[i], pp[j] = pp[j], pp[i] }
-
-// Diff returns the different points in comparison of pp and qq.
-func (pp Points) Diff(qq Points) (Points, Points) {
-	if len(pp) != len(qq) {
-		return pp, qq
-	}
-
-	var pp2, qq2 []Point
-	for i, p := range pp {
-		q := qq[i]
-		if !p.Equal(q) {
-			pp2 = append(pp2, p)
-			qq2 = append(qq2, q)
-		}
-	}
-	return pp2, qq2
 }
