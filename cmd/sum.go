@@ -196,10 +196,11 @@ func sumWhisperFileLocal(baseDir, item, srcPattern string, retID int, from, unti
 }
 
 func sumWhisperFileRemote(srcURL, item, srcPattern string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {
-	reqURL := fmt.Sprintf("%s/sum?item=%s&pattern=%s&from=%s&until=%s&now=%s",
+	reqURL := fmt.Sprintf("%s/sum?item=%s&pattern=%s&retention=%d&from=%s&until=%s&now=%s",
 		srcURL,
 		url.QueryEscape(item),
 		url.QueryEscape(srcPattern),
+		retID,
 		url.QueryEscape(from.String()),
 		url.QueryEscape(until.String()),
 		url.QueryEscape(now.String()))
