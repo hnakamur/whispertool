@@ -78,7 +78,7 @@ func (c *SumCommand) Execute() error {
 }
 
 func isBaseURL(baseDirOrURL string) bool {
-	return strings.HasPrefix(baseDirOrURL, "https://")
+	return strings.HasPrefix(baseDirOrURL, "http://") || strings.HasPrefix(baseDirOrURL, "https://")
 }
 
 func globItems(baseDirOrURL, itemDirPattern string) ([]string, error) {
