@@ -180,7 +180,7 @@ func printPointsListAppend(textOut string, itemName string, db *whispertool.Whis
 		return printPointsListAppendTo(os.Stdout, itemName, db, ptsList)
 	}
 
-	file, err := os.OpenFile(textOut, os.O_CREATE|os.O_APPEND, 0644)
+	file, err := os.OpenFile(textOut, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		return err
 	}
