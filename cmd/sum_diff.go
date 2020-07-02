@@ -41,7 +41,7 @@ func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory or URL of \"whispertool server\"")
 	fs.StringVar(&c.DestRelPath, "dest", "", "dest whisper filename relative to item directory (ex. sum.wsp).")
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
-	fs.StringVar(&c.TextOut, "text-out", "", "text output of diff. empty means no output, - means stdout, other means output file.")
+	fs.StringVar(&c.TextOut, "text-out", "-", "text output of diff. empty means no output, - means stdout, other means output file.")
 	fs.StringVar(&c.SumTextOut, "sum-text-out", "", "text output of sum. empty means no output, - means stdout, other means output file.")
 	fs.StringVar(&c.DestTextOut, "dest-text-out", "", "text output of destination. empty means no output, - means stdout, other means output file.")
 

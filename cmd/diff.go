@@ -33,7 +33,7 @@ func (c *DiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory or URL of \"whispertool server\"")
 	fs.StringVar(&c.DestRelPath, "dest", "", "whisper file relative path to dest base")
 	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
-	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
+	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
 
 	c.Now = whispertool.TimestampFromStdTime(time.Now())
 	c.Until = c.Now
@@ -83,8 +83,8 @@ func (c *DiffCommand) Execute() error {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 
-	srcPlDif, destPlDif := PointsList(srcPtsList).Diff(destPtsList)
-	if PointsList(srcPlDif).AllEmpty() && PointsList(destPlDif).AllEmpty() {
+	srcPlDif, destPlDif := srcPtsList.Diff(destPtsList)
+	if srcPlDif.AllEmpty() && destPlDif.AllEmpty() {
 		return nil
 	}
 
