@@ -169,6 +169,7 @@ func Open(filename string, opts ...Option) (*Whisper, error) {
 	if _, err := io.ReadFull(w.file, buf); err != nil {
 		return nil, err
 	}
+	w.buf = buf
 
 	if err := w.readMetaAndRetentions(); err != nil {
 		return nil, err
