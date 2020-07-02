@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"io"
 	"io/ioutil"
-	"log"
 	"math"
 	"math/rand"
 	"os"
@@ -777,7 +776,7 @@ func Test_aggregateMin(t *testing.T) {
 func TestUpdateManyWithManyRetentions(t *testing.T) {
 	path, archiveList := setUpCreate(t)
 	lastArchive := archiveList[len(archiveList)-1]
-	log.Printf("lastArchive=%s, archiveList=%s", lastArchive, archiveList)
+	// log.Printf("lastArchive=%s, archiveList=%s", lastArchive, archiveList)
 
 	valueMin := 41
 	valueMax := 43
@@ -814,16 +813,16 @@ func TestUpdateManyWithManyRetentions(t *testing.T) {
 	}
 	defer whisper.Close()
 
-	log.Printf("before Fetch, from=%s, until=%s", now.Add(-lastArchive.MaxRetention()), now)
+	// log.Printf("before Fetch, from=%s, until=%s", now.Add(-lastArchive.MaxRetention()), now)
 	result, err := whisper.Fetch(now.Add(-lastArchive.MaxRetention()), now)
 	if err != nil {
 		t.Fatalf("Failed fetch: %v", err)
 	}
 
 	foundValues := 0
-	log.Printf("len(result.Points())=%d", len(result.Points()))
+	// log.Printf("len(result.Points())=%d", len(result.Points()))
 	for i := 0; i < len(result.Points()); i++ {
-		log.Printf("i=%d, time=%s, value=%s", i, result.Points()[i].Time, result.Points()[i].Value)
+		// log.Printf("i=%d, time=%s, value=%s", i, result.Points()[i].Time, result.Points()[i].Value)
 		if !result.Points()[i].Value.IsNaN() {
 			if result.Points()[i].Value >= Value(valueMin) &&
 				result.Points()[i].Value <= Value(valueMax) {

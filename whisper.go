@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"os"
 	"sort"
@@ -253,7 +252,7 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 	if now == 0 {
 		now = TimestampFromStdTime(time.Now())
 	}
-	log.Printf("FetchFromArchive start, from=%s, until=%s, now=%s", from, until, now)
+	// log.Printf("FetchFromArchive start, from=%s, until=%s, now=%s", from, until, now)
 	if from > until {
 		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
 	}
@@ -262,7 +261,7 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 	}
 	if retentionID == RetentionIDBest {
 		retentionID = w.findBestRetention(from, now)
-		log.Printf("found best retentionID=%d", retentionID)
+		// log.Printf("found best retentionID=%d", retentionID)
 	}
 	r := &w.retentions[retentionID]
 
@@ -281,11 +280,11 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 	if until > now {
 		until = now
 	}
-	log.Printf("FetchFromArchive adjusted, from=%s, until=%s, now=%s", from, until, now)
+	// log.Printf("FetchFromArchive adjusted, from=%s, until=%s, now=%s", from, until, now)
 
 	baseInterval := w.baseInterval(r)
-	log.Printf("FetchFromArchive retentionID=%d, retention=%s, baseInterval=%s", retentionID, r, baseInterval)
-	log.Printf("FetchFromArchive retentions=%s", w.Retentions())
+	// log.Printf("FetchFromArchive retentionID=%d, retention=%s, baseInterval=%s", retentionID, r, baseInterval)
+	// log.Printf("FetchFromArchive retentions=%s", w.Retentions())
 
 	fromInterval := r.interval(from)
 	untilInterval := r.interval(until)
@@ -388,7 +387,7 @@ func (w *Whisper) UpdatePointsForArchive(points []Point, retentionID int, now Ti
 		now = TimestampFromStdTime(time.Now())
 	}
 
-	log.Printf("UpdatePointsForArchive start, points=%s, retentionID=%d, now=%s", points, retentionID, now)
+	// log.Printf("UpdatePointsForArchive start, points=%s, retentionID=%d, now=%s", points, retentionID, now)
 	sort.Stable(Points(points))
 	for retID, r := range w.Retentions() {
 		// log.Printf("start retentionID=%d", retentionID)
@@ -416,21 +415,21 @@ func (w *Whisper) archiveUpdateMany(points []Point, retentionID int, now Timesta
 	r := &w.retentions[retentionID]
 	alignedPoints := r.alignPoints(points)
 
-	log.Printf("archiveUpdateMany retentionID=%d, offset=%d, offsetEnd=%d", retentionID, r.offset, r.offset+r.numberOfPoints*pointSize)
+	// log.Printf("archiveUpdateMany retentionID=%d, offset=%d, offsetEnd=%d", retentionID, r.offset, r.offset+r.numberOfPoints*pointSize)
 	baseInterval := w.baseInterval(r)
 	if baseInterval == 0 {
 		baseInterval = r.intervalForWrite(now)
-		log.Printf("archiveUpdateMany baseInterval was 0 now %s", baseInterval)
+		// log.Printf("archiveUpdateMany baseInterval was 0 now %s", baseInterval)
 	} else {
-		log.Printf("archiveUpdateMany baseInterval is %s", baseInterval)
+		// 	log.Printf("archiveUpdateMany baseInterval is %s", baseInterval)
 	}
 
 	for _, p := range alignedPoints {
 		offset := r.pointOffsetAt(r.pointIndex(baseInterval, p.Time))
-		log.Printf("archiveUpdateMany putPoint retentionID=%d, time=%s, value=%s, offset=%d", retentionID, p.Time, p.Value, offset)
-		if offset >= r.offset+r.numberOfPoints*pointSize {
-			log.Printf("archiveUpdateMany point offset is after offsetEnd, offset=%d, offsetEnd=%d", offset, r.offset+r.numberOfPoints*pointSize)
-		}
+		// log.Printf("archiveUpdateMany putPoint retentionID=%d, time=%s, value=%s, offset=%d", retentionID, p.Time, p.Value, offset)
+		// if offset >= r.offset+r.numberOfPoints*pointSize {
+		// 	log.Printf("archiveUpdateMany point offset is after offsetEnd, offset=%d, offsetEnd=%d", offset, r.offset+r.numberOfPoints*pointSize)
+		// }
 		w.putPointAt(p, offset)
 	}
 
@@ -460,16 +459,16 @@ func extractPoints(points []Point, now Timestamp, maxRetention Duration) (curren
 }
 
 func (w *Whisper) propagateChain(retentionID int, alignedPoints []Point, now Timestamp) error {
-	log.Printf("propagateChain start, retentionID=%d, alignedPoints=%s, now=%s", retentionID, alignedPoints, now)
+	// log.Printf("propagateChain start, retentionID=%d, alignedPoints=%s, now=%s", retentionID, alignedPoints, now)
 	lowRetID := retentionID + 1
 	if lowRetID < len(w.retentions) {
 		rLow := &w.retentions[lowRetID]
 		ts := rLow.timesToPropagate(alignedPoints)
-		log.Printf("propagateChain timesToPropagate result=%s", ts)
+		// log.Printf("propagateChain timesToPropagate result=%s", ts)
 		for ; lowRetID < len(w.retentions) && len(ts) > 0; lowRetID++ {
 			var err error
 			ts, err = w.propagate(lowRetID, ts, now)
-			log.Printf("propagateChain after propagate ts=%s, err=%v", ts, err)
+			// log.Printf("propagateChain after propagate ts=%s, err=%v", ts, err)
 			if err != nil {
 				return err
 			}
@@ -709,12 +708,12 @@ func (w *Whisper) fetchRawPoints(retentionID int, fromInterval, untilInterval Ti
 
 	step := r.secondsPerPoint
 	points := make([]Point, untilInterval.Sub(fromInterval)/step)
-	log.Printf("fetchRawPoints, retentionID=%d, fromInterval=%s, untilInterval=%s, step=%s, len(points)=%d", retentionID, fromInterval, untilInterval, step, len(points))
+	// log.Printf("fetchRawPoints, retentionID=%d, fromInterval=%s, untilInterval=%s, step=%s, len(points)=%d", retentionID, fromInterval, untilInterval, step, len(points))
 
 	fromOffset := r.pointOffsetAt(r.pointIndex(baseInterval, fromInterval))
 	untilOffset := r.pointOffsetAt(r.pointIndex(baseInterval, untilInterval))
 	if fromOffset < untilOffset {
-		log.Printf("fetchRawPoints case fromOffset < untilOffset, fromOffset=%d, untilOffset=%d", fromOffset, untilOffset)
+		// log.Printf("fetchRawPoints case fromOffset < untilOffset, fromOffset=%d, untilOffset=%d", fromOffset, untilOffset)
 		i := 0
 		for off := fromOffset; off < untilOffset; off += pointSize {
 			points[i] = w.pointAt(off)
@@ -726,7 +725,7 @@ func (w *Whisper) fetchRawPoints(retentionID int, fromInterval, untilInterval Ti
 
 	arcStartOffset := r.offset
 	arcEndOffset := arcStartOffset + r.numberOfPoints*pointSize
-	log.Printf("fetchRawPoints case fromOffset >= untilOffset, fromOffset=%d, untilOffset=%d, start=%d, end=%d", fromOffset, untilOffset, arcStartOffset, arcEndOffset)
+	// log.Printf("fetchRawPoints case fromOffset >= untilOffset, fromOffset=%d, untilOffset=%d, start=%d, end=%d", fromOffset, untilOffset, arcStartOffset, arcEndOffset)
 
 	i := 0
 	for off := fromOffset; off < arcEndOffset; off += pointSize {
@@ -856,7 +855,7 @@ func (w *Whisper) putRetentions() {
 }
 
 func (w *Whisper) propagate(retentionID int, ts []Timestamp, now Timestamp) (propagatedTs []Timestamp, err error) {
-	log.Printf("propagate start, retentionID=%d, ts=%s, now=%s", retentionID, ts, now)
+	// log.Printf("propagate start, retentionID=%d, ts=%s, now=%s", retentionID, ts, now)
 	if len(ts) == 0 {
 		return nil, nil
 	}
@@ -878,22 +877,22 @@ func (w *Whisper) propagate(retentionID int, ts []Timestamp, now Timestamp) (pro
 		fromInterval := t
 		untilInterval := t.Add(step)
 		points := w.fetchRawPoints(highRetID, fromInterval, untilInterval)
-		log.Printf("fetchRawPoints result points=%s, highRetID=%d, highRet=%s, retID=%d, ret=%s, fromInterval=%s, untilInterval=%s", points, highRetID, w.Retentions()[highRetID], retentionID, r, fromInterval, untilInterval)
+		// log.Printf("fetchRawPoints result points=%s, highRetID=%d, highRet=%s, retID=%d, ret=%s, fromInterval=%s, untilInterval=%s", points, highRetID, w.Retentions()[highRetID], retentionID, r, fromInterval, untilInterval)
 		values := filterValidValues(points, fromInterval, &w.Retentions()[highRetID])
 		knownFactor := float32(len(values)) / float32(len(points))
-		log.Printf("propagate values=%s, knownFactor=%s (=%d/%d), w.meta.xFilesFactor=%s",
-			values,
-			strconv.FormatFloat(float64(knownFactor), 'f', -1, 32),
-			len(values),
-			len(points),
-			strconv.FormatFloat(float64(w.meta.xFilesFactor), 'f', -1, 32))
+		// log.Printf("propagate values=%s, knownFactor=%s (=%d/%d), w.meta.xFilesFactor=%s",
+		// 	values,
+		// 	strconv.FormatFloat(float64(knownFactor), 'f', -1, 32),
+		// 	len(values),
+		// 	len(points),
+		// 	strconv.FormatFloat(float64(w.meta.xFilesFactor), 'f', -1, 32))
 		if knownFactor < w.meta.xFilesFactor {
 			continue
 		}
 
 		v := aggregate(w.meta.aggregationMethod, values)
 		offset := w.getPointOffset(t, r)
-		log.Printf("propagate v=%s, t=%s, offset=%d, retentionID=%d, retOffStart=%d, retOffEnd=%d", v, t, offset, retentionID, r.offset, r.offset+r.numberOfPoints*pointSize)
+		// log.Printf("propagate v=%s, t=%s, offset=%d, retentionID=%d, retOffStart=%d, retOffEnd=%d", v, t, offset, retentionID, r.offset, r.offset+r.numberOfPoints*pointSize)
 		w.putTimestampAt(t, offset)
 		w.putValueAt(v, offset+uint32Size)
 
