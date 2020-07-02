@@ -17,6 +17,9 @@ type Retention struct {
 // Retentions is a slice of Retention.
 type Retentions []Retention
 
+// retentionIDBest is used to find the best archive for time range in FetchFromArchive.
+const RetentionIDBest = -1
+
 // NewRetention creats a retention.
 func NewRetention(secondsPerPoint Duration, numberOfPoints uint32) Retention {
 	return Retention{
@@ -143,6 +146,20 @@ func (rr Retentions) validate() error {
 		}
 	}
 	return nil
+}
+
+type retentionsByPrecision Retentions
+
+func (r retentionsByPrecision) Len() int {
+	return len(r)
+}
+
+func (r retentionsByPrecision) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+
+func (r retentionsByPrecision) Less(i, j int) bool {
+	return r[i].secondsPerPoint < r[j].secondsPerPoint
 }
 
 // SecondsPerPoint returns the duration of the step of r.

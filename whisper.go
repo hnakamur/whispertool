@@ -233,6 +233,138 @@ func (w *Whisper) RawData() []byte {
 	return w.buf
 }
 
+// Fetch fetches points from the best archive for the specified time range.
+//
+// It fetches points in range between `from` (exclusive) and `until` (inclusive).
+// If `now` is zero, the current time is used.
+func (w *Whisper) Fetch(from, until, now Timestamp) ([]Point, error) {
+	return w.FetchFromArchive(RetentionIDBest, from, until, now)
+}
+
+// FetchFromArchive fetches points in the specified archive and the time range.
+//
+// FetchFromArchive fetches points from archive specified with `retentionID`.
+// It fetches points in range between `from` (exclusive) and `until` (inclusive).
+// If `now` is zero, the current time is used.
+func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) ([]Point, error) {
+	if now == 0 {
+		now = TimestampFromStdTime(time.Now())
+	}
+	//log.Printf("FetchFromArchive start, from=%s, until=%s, now=%s", from, until, now)
+	if from > until {
+		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
+	}
+	if (retentionID != RetentionIDBest && retentionID < 0) || len(w.retentions)-1 < retentionID {
+		return nil, ErrRetentionIDOutOfRange
+	}
+	r := &w.retentions[retentionID]
+
+	oldest := now.Add(-r.MaxRetention())
+	// range is in the future
+	if from > now {
+		return nil, nil
+	}
+	// range is beyond retention
+	if until < oldest {
+		return nil, nil
+	}
+	if from < oldest {
+		from = oldest
+	}
+	if until > now {
+		until = now
+	}
+	//log.Printf("FetchFromArchive adjusted, from=%s, until=%s, now=%s", from, until, now)
+
+	diff := now.Sub(from)
+	for i, retention := range w.Retentions() {
+		if retention.MaxRetention() >= diff {
+			break
+		}
+		retentionID = i
+	}
+
+	baseInterval := w.baseInterval(r)
+	//log.Printf("FetchFromArchive retentionID=%d, baseInterval=%s", retentionID, baseInterval)
+
+	fromInterval := r.interval(from)
+	untilInterval := r.interval(until)
+	step := r.secondsPerPoint
+
+	if baseInterval == 0 {
+		points := make([]Point, (untilInterval-fromInterval)/Timestamp(step))
+		t := fromInterval
+		for i := range points {
+			points[i].Time = t
+			points[i].Value.SetNaN()
+			t = t.Add(step)
+		}
+		return points, nil
+	}
+
+	// Zero-length time range: always include the next point
+	if fromInterval == untilInterval {
+		untilInterval = untilInterval.Add(step)
+	}
+
+	points := w.fetchRawPoints(retentionID, fromInterval, untilInterval)
+	//log.Printf("FetchFromArchive after fetchRawPoints, retentionID=%d, len(points)=%d", retentionID, len(points))
+	//for i, pt := range points {
+	//	log.Printf("rawPoint i=%d, time=%s, value=%s", i, pt.Time, pt.Value)
+	//}
+	clearOldPoints(points, fromInterval, step)
+	//log.Printf("FetchFromArchive after clearOldPoints, retentionID=%d, len(points)=%d", retentionID, len(points))
+
+	return points, nil
+}
+
+// UpdatePointForArchive updates one point in the specified archive.
+func (w *Whisper) UpdatePointForArchive(retentionID int, t Timestamp, v Value, now Timestamp) error {
+	points := []Point{{Time: t, Value: v}}
+	return w.UpdatePointsForArchive(retentionID, points, now)
+}
+
+// UpdatePointForArchive updates points in the specified archive.
+func (w *Whisper) UpdatePointsForArchive(retentionID int, points []Point, now Timestamp) error {
+	if now == 0 {
+		now = TimestampFromStdTime(time.Now())
+	}
+
+	r := &w.retentions[retentionID]
+	points = r.filterPoints(points, now)
+	if len(points) == 0 {
+		return nil
+	}
+
+	sort.Stable(Points(points))
+	alignedPoints := r.alignPoints(points)
+
+	baseInterval := w.baseInterval(r)
+	if baseInterval == 0 {
+		baseInterval = r.intervalForWrite(now)
+	}
+
+	for _, p := range alignedPoints {
+		offset := r.pointOffsetAt(r.pointIndex(baseInterval, p.Time))
+		w.putPointAt(p, offset)
+	}
+
+	lowRetID := retentionID + 1
+	if lowRetID < len(w.retentions) {
+		rLow := &w.retentions[lowRetID]
+		ts := rLow.timesToPropagate(alignedPoints)
+		for ; lowRetID < len(w.retentions) && len(ts) > 0; lowRetID++ {
+			var err error
+			ts, err = w.propagate(lowRetID, ts, now)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func (w *Whisper) initNewBuf(retentions []Retention, aggregationMethod AggregationMethod, xFilesFactor float32) error {
 	m := meta{
 		aggregationMethod: aggregationMethod,
@@ -254,6 +386,7 @@ func (w *Whisper) initNewBuf(retentions []Retention, aggregationMethod Aggregati
 func (w *Whisper) readMetaAndRetentions() error {
 	expectedSize := metaSize
 	if len(w.buf) < expectedSize {
+		//log.Printf("buf size is smaller than metaSize, bufSize=%d, metaSize=%d", len(w.buf), metaSize)
 		return io.ErrUnexpectedEOF
 	}
 
@@ -268,6 +401,7 @@ func (w *Whisper) readMetaAndRetentions() error {
 
 	expectedSize += int(w.meta.retentionCount) * retentionSize
 	if len(w.buf) < expectedSize {
+		//log.Printf("buf size is smaller than retentionEnd, bufSize=%d, expectedSize=%d", len(w.buf), expectedSize)
 		return io.ErrUnexpectedEOF
 	}
 
@@ -287,6 +421,7 @@ func (w *Whisper) readMetaAndRetentions() error {
 	}
 
 	if len(w.buf) < expectedSize {
+		//log.Printf("buf size is smaller than expected EOF, bufSize=%d, expectedSize=%d", len(w.buf), expectedSize)
 		return io.ErrUnexpectedEOF
 	} else if len(w.buf) > expectedSize {
 		w.buf = w.buf[:expectedSize]
@@ -488,76 +623,6 @@ func (w *Whisper) fetchRawPoints(retentionID int, fromInterval, untilInterval Ti
 	return points
 }
 
-// FetchFromArchive fetches point in the specified archive and the time range.
-// If now is zero, the current time is used.
-//
-// FetchFromArchive fetches points from archive specified with `retentionID`.
-// It fetches points in range between `from` (exclusive) and `until` (inclusive).
-// If `now` is zero, the current time is used.
-func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) ([]Point, error) {
-	if now == 0 {
-		now = TimestampFromStdTime(time.Now())
-	}
-	//log.Printf("FetchFromArchive start, from=%s, until=%s, now=%s", from, until, now)
-	if from > until {
-		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
-	}
-	if retentionID < 0 || len(w.retentions)-1 < retentionID {
-		return nil, ErrRetentionIDOutOfRange
-	}
-	r := &w.retentions[retentionID]
-
-	oldest := now.Add(-r.MaxRetention())
-	// range is in the future
-	if from > now {
-		return nil, nil
-	}
-	// range is beyond retention
-	if until < oldest {
-		return nil, nil
-	}
-	if from < oldest {
-		from = oldest
-	}
-	if until > now {
-		until = now
-	}
-	//log.Printf("FetchFromArchive adjusted, from=%s, until=%s, now=%s", from, until, now)
-
-	baseInterval := w.baseInterval(r)
-	//log.Printf("FetchFromArchive retentionID=%d, baseInterval=%s", retentionID, baseInterval)
-
-	fromInterval := r.interval(from)
-	untilInterval := r.interval(until)
-	step := r.secondsPerPoint
-
-	if baseInterval == 0 {
-		points := make([]Point, (untilInterval-fromInterval)/Timestamp(step))
-		t := fromInterval
-		for i := range points {
-			points[i].Time = t
-			points[i].Value.SetNaN()
-			t = t.Add(step)
-		}
-		return points, nil
-	}
-
-	// Zero-length time range: always include the next point
-	if fromInterval == untilInterval {
-		untilInterval = untilInterval.Add(step)
-	}
-
-	points := w.fetchRawPoints(retentionID, fromInterval, untilInterval)
-	//log.Printf("FetchFromArchive after fetchRawPoints, retentionID=%d, len(points)=%d", retentionID, len(points))
-	//for i, pt := range points {
-	//	log.Printf("rawPoint i=%d, time=%s, value=%s", i, pt.Time, pt.Value)
-	//}
-	clearOldPoints(points, fromInterval, step)
-	//log.Printf("FetchFromArchive after clearOldPoints, retentionID=%d, len(points)=%d", retentionID, len(points))
-
-	return points, nil
-}
-
 func clearOldPoints(points []Point, fromInterval Timestamp, step Duration) {
 	currentInterval := fromInterval
 	for i := range points {
@@ -669,53 +734,6 @@ func (w *Whisper) putRetentions() {
 		w.putUint32At(r.numberOfPoints, off+2*uint32Size)
 		off += retentionSize
 	}
-}
-
-// UpdatePointForArchive updates one point in the specified archive.
-func (w *Whisper) UpdatePointForArchive(retentionID int, t Timestamp, v Value, now Timestamp) error {
-	points := []Point{{Time: t, Value: v}}
-	return w.UpdatePointsForArchive(retentionID, points, now)
-}
-
-// UpdatePointForArchive updates points in the specified archive.
-func (w *Whisper) UpdatePointsForArchive(retentionID int, points []Point, now Timestamp) error {
-	if now == 0 {
-		now = TimestampFromStdTime(time.Now())
-	}
-
-	r := &w.retentions[retentionID]
-	points = r.filterPoints(points, now)
-	if len(points) == 0 {
-		return nil
-	}
-
-	sort.Stable(Points(points))
-	alignedPoints := r.alignPoints(points)
-
-	baseInterval := w.baseInterval(r)
-	if baseInterval == 0 {
-		baseInterval = r.intervalForWrite(now)
-	}
-
-	for _, p := range alignedPoints {
-		offset := r.pointOffsetAt(r.pointIndex(baseInterval, p.Time))
-		w.putPointAt(p, offset)
-	}
-
-	lowRetID := retentionID + 1
-	if lowRetID < len(w.retentions) {
-		rLow := &w.retentions[lowRetID]
-		ts := rLow.timesToPropagate(alignedPoints)
-		for ; lowRetID < len(w.retentions) && len(ts) > 0; lowRetID++ {
-			var err error
-			ts, err = w.propagate(lowRetID, ts, now)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
 
 func (w *Whisper) propagate(retentionID int, ts []Timestamp, now Timestamp) (propagatedTs []Timestamp, err error) {
