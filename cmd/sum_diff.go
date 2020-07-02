@@ -94,7 +94,6 @@ func (c *SumDiffCommand) Execute() error {
 			return err
 		}
 	}
-	return nil
 }
 
 func (c *SumDiffCommand) sumDiffOneTime() error {
@@ -110,29 +109,8 @@ func (c *SumDiffCommand) sumDiffOneTime() error {
 	if err != nil {
 		return err
 	}
+	totalItemCount = len(items)
 	for _, item := range items {
-		err = c.sumDiffItem(item)
-		if err != nil {
-			return err
-		}
-	}
-
-	itemDirnames, err := filepath.Glob(filepath.Join(c.DestBase, c.ItemPattern))
-	if err != nil {
-		return err
-	}
-	if len(itemDirnames) == 0 {
-		return fmt.Errorf("itemPattern match no directries, itemPattern=%s", c.ItemPattern)
-	}
-	totalItemCount = len(itemDirnames)
-
-	for _, itemDirname := range itemDirnames {
-		itemRelDir, err := filepath.Rel(c.DestBase, itemDirname)
-		if err != nil {
-			return err
-		}
-		item := relDirToItem(itemRelDir)
-		fmt.Printf("item:%s\n", item)
 		err = c.sumDiffItem(item)
 		if err != nil {
 			return err
