@@ -31,14 +31,6 @@ type Whisper struct {
 	inMemory     bool
 }
 
-type fileData struct {
-	meta       meta
-	retentions []Retention
-
-	buf             []byte
-	dirtyPageBitSet *bitset.BitSet
-}
-
 type meta struct {
 	aggregationMethod AggregationMethod
 	maxRetention      Duration
