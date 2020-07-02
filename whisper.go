@@ -250,7 +250,7 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 	if now == 0 {
 		now = TimestampFromStdTime(time.Now())
 	}
-	//log.Printf("FetchFromArchive start, from=%s, until=%s, now=%s", from, until, now)
+	// log.Printf("FetchFromArchive start, from=%s, until=%s, now=%s", from, until, now)
 	if from > until {
 		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
 	}
@@ -274,18 +274,20 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 	if until > now {
 		until = now
 	}
-	//log.Printf("FetchFromArchive adjusted, from=%s, until=%s, now=%s", from, until, now)
+	// log.Printf("FetchFromArchive adjusted, from=%s, until=%s, now=%s", from, until, now)
 
-	diff := now.Sub(from)
-	for i, retention := range w.Retentions() {
-		if retention.MaxRetention() >= diff {
-			break
+	if retentionID == RetentionIDBest {
+		diff := now.Sub(from)
+		for i, retention := range w.Retentions() {
+			if retention.MaxRetention() >= diff {
+				break
+			}
+			retentionID = i
 		}
-		retentionID = i
 	}
 
 	baseInterval := w.baseInterval(r)
-	//log.Printf("FetchFromArchive retentionID=%d, baseInterval=%s", retentionID, baseInterval)
+	// log.Printf("FetchFromArchive retentionID=%d, baseInterval=%s", retentionID, baseInterval)
 
 	fromInterval := r.interval(from)
 	untilInterval := r.interval(until)
@@ -308,12 +310,12 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 	}
 
 	points := w.fetchRawPoints(retentionID, fromInterval, untilInterval)
-	//log.Printf("FetchFromArchive after fetchRawPoints, retentionID=%d, len(points)=%d", retentionID, len(points))
-	//for i, pt := range points {
-	//	log.Printf("rawPoint i=%d, time=%s, value=%s", i, pt.Time, pt.Value)
-	//}
+	// log.Printf("FetchFromArchive after fetchRawPoints, retentionID=%d, len(points)=%d", retentionID, len(points))
+	// for i, pt := range points {
+	// 	log.Printf("rawPoint i=%d, time=%s, value=%s", i, pt.Time, pt.Value)
+	// }
 	clearOldPoints(points, fromInterval, step)
-	//log.Printf("FetchFromArchive after clearOldPoints, retentionID=%d, len(points)=%d", retentionID, len(points))
+	// log.Printf("FetchFromArchive after clearOldPoints, retentionID=%d, len(points)=%d", retentionID, len(points))
 
 	return points, nil
 }
@@ -596,6 +598,7 @@ func (w *Whisper) fetchRawPoints(retentionID int, fromInterval, untilInterval Ti
 
 	step := r.secondsPerPoint
 	points := make([]Point, untilInterval.Sub(fromInterval)/step)
+	// log.Printf("fetchRawPoints, retentionID=%d, fromInterval=%s, untilInterval=%s, step=%s, len(points)=%d", retentionID, fromInterval, untilInterval, step, len(points))
 
 	fromOffset := r.pointOffsetAt(r.pointIndex(baseInterval, fromInterval))
 	untilOffset := r.pointOffsetAt(r.pointIndex(baseInterval, untilInterval))
