@@ -834,3 +834,119 @@ func TestUpdateManyWithManyRetentions(t *testing.T) {
 		t.Fatalf("Not found values in archive %#v", lastArchive)
 	}
 }
+
+func TestUpdateManyWithEqualTimestamp(t *testing.T) {
+	now := TimestampFromStdTime(time.Now())
+	points := Points{}
+
+	// add points
+	// now timestamp: 0,99,2,97,...,3,99,1
+	// now-1 timestamp: 100,1,98,...,97,2,99
+
+	for i := 0; i < 100; i++ {
+		if i%2 == 0 {
+			points = append(points, Point{Time: now, Value: Value(i)})
+			points = append(points, Point{Time: now.Add(-Second), Value: Value(100 - i)})
+		} else {
+			points = append(points, Point{Time: now, Value: Value(100 - i)})
+			points = append(points, Point{Time: now.Add(-Second), Value: Value(i)})
+		}
+	}
+
+	result := testCreateUpdateManyFetch(t, Average, 0.5, points, 2, 10)
+
+	if result.Points()[0].Value != 99.0 {
+		t.Errorf("Incorrect saved value. Expected %v, received %v", 99.0, result.Points()[0].Value)
+	}
+	if result.Points()[1].Value != 1.0 {
+		t.Errorf("Incorrect saved value. Expected %v, received %v", 1.0, result.Points()[1].Value)
+	}
+}
+
+func TestOpenValidatation(t *testing.T) {
+
+	testOpen := func(data []byte) {
+		path, _ := setUpCreate(t)
+		defer func() {
+			os.Remove(path)
+		}()
+
+		err := ioutil.WriteFile(path, data, 0777)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		wsp, err := Open(path)
+		if wsp != nil {
+			t.Fatal("Opened bad file")
+		}
+		if err == nil {
+			t.Fatal("No error with file")
+		}
+	}
+
+	// testWrite := func(data []byte) {
+	// 	path, _ := setUpCreate(t)
+	// 	defer func() {
+	// 		os.Remove(path)
+	// 	}()
+
+	// 	err := ioutil.WriteFile(path, data, 0777)
+	// 	if err != nil {
+	// 		t.Fatal(err)
+	// 	}
+
+	// 	wsp, err := Open(path)
+	// 	if wsp == nil || err != nil {
+	// 		t.Fatalf("Open error: wsp=%v, err=%v", wsp, err)
+	// 	}
+
+	// 	err = wsp.Update(TimestampFromStdTime(time.Now()), 42)
+	// 	if err == nil {
+	// 		t.Fatal("Update broken wsp without error")
+	// 	}
+
+	// 	points := makeGoodPoints(1000, 2, func(i int) float64 { return float64(i) })
+	// 	err = wsp.UpdateMany(points)
+	// 	if err == nil {
+	// 		t.Fatal("Update broken wsp without error")
+	// 	}
+	// }
+
+	// Bad file with archiveCount = 1296223489
+	testOpen([]byte{
+		0xb8, 0x81, 0xd1, 0x1,
+		0xc, 0x0, 0x1, 0x2,
+		0x2e, 0x0, 0x0, 0x0,
+		0x4d, 0x42, 0xcd, 0x1, // archiveCount
+		0xc, 0x0, 0x2, 0x2,
+	})
+
+	fullHeader := []byte{
+		// Metadata
+		0x00, 0x00, 0x00, 0x01, // Aggregation type
+		0x00, 0x00, 0x0e, 0x10, // Max retention
+		0x3f, 0x00, 0x00, 0x00, // xFilesFactor
+		0x00, 0x00, 0x00, 0x03, // Retention count
+		// Archive Info
+		// Retention 1 (1, 300)
+		0x00, 0x00, 0x00, 0x34, // offset
+		0x00, 0x00, 0x00, 0x01, // secondsPerPoint
+		0x00, 0x00, 0x01, 0x2c, // numberOfPoints
+		// Retention 2 (60, 30)
+		0x00, 0x00, 0x0e, 0x44, // offset
+		0x00, 0x00, 0x00, 0x3c, // secondsPerPoint
+		0x00, 0x00, 0x00, 0x1e, // numberOfPoints
+		// Retention 3 (300, 12)
+		0x00, 0x00, 0x0f, 0xac, // offset
+		0x00, 0x00, 0x01, 0x2c, // secondsPerPoint
+		0x00, 0x00, 0x00, 0x0c, // numberOfPoints
+	}
+
+	for i := 0; i < len(fullHeader); i++ {
+		testOpen(fullHeader[:i])
+	}
+
+	// NOTE: We cannot use testWrite since our Open needs data with full body.
+	// testWrite(fullHeader)
+}

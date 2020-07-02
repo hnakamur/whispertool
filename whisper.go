@@ -533,7 +533,7 @@ func (w *Whisper) readMetaAndRetentions() error {
 	}
 
 	if len(w.buf) < expectedSize {
-		//log.Printf("buf size is smaller than expected EOF, bufSize=%d, expectedSize=%d", len(w.buf), expectedSize)
+		// log.Printf("buf size is smaller than expected EOF, bufSize=%d, expectedSize=%d", len(w.buf), expectedSize)
 		return io.ErrUnexpectedEOF
 	} else if len(w.buf) > expectedSize {
 		w.buf = w.buf[:expectedSize]
