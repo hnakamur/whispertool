@@ -128,7 +128,7 @@ func (c *SumDiffCommand) sumDiffItem(item string) error {
 	}
 
 	var sumDB, destDB *whispertool.Whisper
-	var sumPtsList, destPtsList []whispertool.Points
+	var sumPtsList, destPtsList PointsList
 	var g errgroup.Group
 	g.Go(func() error {
 		var err error
@@ -149,8 +149,8 @@ func (c *SumDiffCommand) sumDiffItem(item string) error {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 
-	sumPlDif, destPlDif := PointsList(sumPtsList).Diff(destPtsList)
-	if PointsList(sumPtsList).AllEmpty() && PointsList(destPlDif).AllEmpty() {
+	sumPlDif, destPlDif := sumPtsList.Diff(destPtsList)
+	if sumPtsList.AllEmpty() && destPlDif.AllEmpty() {
 		return nil
 	}
 

@@ -38,7 +38,7 @@ func (pl PointsList) Counts() []int {
 	return counts
 }
 
-func (pl PointsList) Diff(ql []whispertool.Points) ([]whispertool.Points, []whispertool.Points) {
+func (pl PointsList) Diff(ql PointsList) (PointsList, PointsList) {
 	if len(pl) != len(ql) {
 		return pl, ql
 	}
