@@ -135,9 +135,9 @@ func globItemsRemote(srcURL, itemRelDirPattern string) ([]string, error) {
 
 func sumWhisperFile(baseDirOrURL, item, srcPattern string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {
 	if isBaseURL(baseDirOrURL) {
-		return sumWhisperFileLocal(baseDirOrURL, item, srcPattern, retID, from, until, now)
+		return sumWhisperFileRemote(baseDirOrURL, item, srcPattern, retID, from, until, now)
 	}
-	return sumWhisperFileRemote(baseDirOrURL, item, srcPattern, retID, from, until, now)
+	return sumWhisperFileLocal(baseDirOrURL, item, srcPattern, retID, from, until, now)
 }
 
 func sumWhisperFileLocal(baseDir, item, srcPattern string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {

@@ -188,7 +188,7 @@ func (a *app) handleItems(w http.ResponseWriter, r *http.Request) error {
 		return newHTTPError(http.StatusBadRequest, errors.New("\"pattern\" parameter must not be empty"))
 	}
 
-	items, err := globItems(a.baseDir, pattern)
+	items, err := globItemsLocal(a.baseDir, pattern)
 	if err != nil {
 		return newHTTPError(http.StatusBadRequest, err)
 	}
