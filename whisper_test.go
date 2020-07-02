@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"io/ioutil"
+	"log"
 	"math"
 	"math/rand"
 	"os"
@@ -285,7 +286,7 @@ func randomValWithHighSum(t Timestamp, rnd *rand.Rand, highRndMax int, r, highRe
 
 func updateFileDataWithPointsList(db *Whisper, pointsList []Points, now Timestamp) error {
 	for retID := range db.Retentions() {
-		if err := db.UpdatePointsForArchive(retID, pointsList[retID], now); err != nil {
+		if err := db.UpdatePointsForArchive(pointsList[retID], retID, now); err != nil {
 			return err
 		}
 	}
@@ -514,21 +515,19 @@ func TestOpenFile(t *testing.T) {
 }
 
 func TestCreateUpdateFetch(t *testing.T) {
-	var pts Points
-	pts = testCreateUpdateFetch(t, Average, 0.5, 3500, 3500, 1000, 300, 0.5, 0.2)
-	assertFloatAlmostEqual(t, float64(pts[1].Value), 150.1, 58.0)
-	assertFloatAlmostEqual(t, float64(pts[2].Value), 210.75, 28.95)
-
-	pts = testCreateUpdateFetch(t, Sum, 0.5, 600, 600, 500, 60, 0.5, 0.2)
-	assertFloatAlmostEqual(t, float64(pts[0].Value), 18.35, 5.95)
-	assertFloatAlmostEqual(t, float64(pts[1].Value), 30.35, 5.95)
+	var ts *TimeSeries
+	ts = testCreateUpdateFetch(t, Average, 0.5, 3500, 3500, 1000, 300, 0.5, 0.2)
+	assertFloatAlmostEqual(t, float64(ts.Points()[1].Value), 150.1, 58.0)
+	assertFloatAlmostEqual(t, float64(ts.Points()[2].Value), 210.75, 28.95)
+	ts = testCreateUpdateFetch(t, Sum, 0.5, 600, 600, 500, 60, 0.5, 0.2)
+	assertFloatAlmostEqual(t, float64(ts.Points()[0].Value), 18.35, 5.95)
+	assertFloatAlmostEqual(t, float64(ts.Points()[1].Value), 30.35, 5.95)
 	// 4 is a crazy one because it fluctuates between 60 and ~4k
-	assertFloatAlmostEqual(t, float64(pts[5].Value), 4356.05, 500.0)
-
-	pts = testCreateUpdateFetch(t, Last, 0.5, 300, 300, 200, 1, 0.5, 0.2)
-	assertFloatAlmostEqual(t, float64(pts[0].Value), 0.7, 0.001)
-	assertFloatAlmostEqual(t, float64(pts[10].Value), 2.7, 0.001)
-	assertFloatAlmostEqual(t, float64(pts[20].Value), 4.7, 0.001)
+	assertFloatAlmostEqual(t, float64(ts.Points()[5].Value), 4356.05, 500.0)
+	ts = testCreateUpdateFetch(t, Last, 0.5, 300, 300, 200, 1, 0.5, 0.2)
+	assertFloatAlmostEqual(t, float64(ts.Points()[0].Value), 0.7, 0.001)
+	assertFloatAlmostEqual(t, float64(ts.Points()[10].Value), 2.7, 0.001)
+	assertFloatAlmostEqual(t, float64(ts.Points()[20].Value), 4.7, 0.001)
 
 }
 
@@ -536,7 +535,7 @@ func TestCreateUpdateFetch(t *testing.T) {
   Test the full cycle of creating a whisper file, adding some
   data points to it and then fetching a time series.
 */
-func testCreateUpdateFetch(t *testing.T, aggregationMethod AggregationMethod, xFilesFactor float32, secondsAgo, fromAgo, fetchLength, step Duration, currentValue, increment Value) Points {
+func testCreateUpdateFetch(t *testing.T, aggregationMethod AggregationMethod, xFilesFactor float32, secondsAgo, fromAgo, fetchLength, step Duration, currentValue, increment Value) *TimeSeries {
 	var whisper *Whisper
 	var err error
 	path, archiveList := setUpCreate(t)
@@ -578,7 +577,7 @@ func testCreateUpdateFetch(t *testing.T, aggregationMethod AggregationMethod, xF
 		t.Fatalf("Invalid step [%v/%v], expected %v, received %v", secondsAgo, fromAgo, step, ts.Step())
 	}
 
-	return ts.Points()
+	return ts
 }
 
 func validTimestamp(value, stamp Timestamp, step Duration) bool {
@@ -606,6 +605,151 @@ func test_aggregate(t *testing.T, method AggregationMethod, expected Value) {
 		t.Fatalf("Expected %v, received %v", expected, received)
 	}
 }
+
+func TestFetchEmptyTimeseries(t *testing.T) {
+	path, archiveList := setUpCreate(t)
+	os.Remove(path)
+	whisper, err := Create(path, archiveList, Sum, 0.5)
+	if err != nil {
+		t.Fatalf("Failed create: %v", err)
+	}
+	defer whisper.Close()
+
+	if err := whisper.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	now := TimestampFromStdTime(time.Now())
+	result, err := whisper.Fetch(now.Add(-3*Second), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, point := range result.Points() {
+		if !point.Value.IsNaN() {
+			t.Fatalf("Expecting NaN values got '%v'", point.Value)
+		}
+	}
+}
+
+// Test for a bug in python whisper library: https://github.com/graphite-project/whisper/pull/136
+func TestCreateUpdateFetchOneValue(t *testing.T) {
+	var timeSeries *TimeSeries
+	timeSeries = testCreateUpdateFetch(t, Average, 0.5, 3500, 3500, 1, 300, 0.5, 0.2)
+	if len(timeSeries.Points()) > 1 {
+		t.Fatalf("More then one point fetched\n")
+	}
+}
+
+func TestCreateUpdateManyFetch(t *testing.T) {
+	var timeSeries *TimeSeries
+
+	points := makeGoodPoints(1000, 2, func(i int) float64 { return float64(i) })
+	points = append(points, points[len(points)-1])
+	timeSeries = testCreateUpdateManyFetch(t, Sum, 0.5, points, 1000, 800)
+
+	// fmt.Println(timeSeries)
+
+	assertFloatAlmostEqual(t, float64(timeSeries.Points()[0].Value), 455, 15)
+
+	// all the ones
+	points = makeGoodPoints(10000, 1, func(_ int) float64 { return 1 })
+	timeSeries = testCreateUpdateManyFetch(t, Sum, 0.5, points, 10000, 10000)
+	for i := 0; i < 6; i++ {
+		assertFloatEqual(t, float64(timeSeries.Points()[i].Value), 1)
+	}
+	for i := 6; i < 10; i++ {
+		assertFloatEqual(t, float64(timeSeries.Points()[i].Value), 5)
+	}
+}
+
+func testCreateUpdateManyFetch(t *testing.T, aggregationMethod AggregationMethod, xFilesFactor float32, points Points, fromAgo, fetchLength Duration) *TimeSeries {
+	var whisper *Whisper
+	var err error
+	path, archiveList := setUpCreate(t)
+	os.Remove(path)
+	whisper, err = Create(path, archiveList, aggregationMethod, xFilesFactor)
+	if err != nil {
+		t.Fatalf("Failed create: %v", err)
+	}
+	defer whisper.Close()
+
+	now := TimestampFromStdTime(time.Now())
+
+	if err := whisper.UpdateMany(points); err != nil {
+		t.Fatal(err)
+	}
+
+	fromTime := now.Add(-fromAgo)
+	untilTime := fromTime.Add(fetchLength)
+
+	timeSeries, err := whisper.Fetch(fromTime, untilTime)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	return timeSeries
+}
+
+func makeGoodPoints(count int, step Duration, value func(int) float64) Points {
+	points := make([]Point, count)
+	now := TimestampFromStdTime(time.Now())
+	for i := 0; i < count; i++ {
+		points[i] = Point{Time: now.Add(-Duration(i) * step), Value: Value(value(i))}
+	}
+	return points
+}
+
+func makeBadPoints(count int, minAge Duration) Points {
+	points := make([]Point, count)
+	now := TimestampFromStdTime(time.Now())
+	for i := 0; i < count; i++ {
+		points[i] = Point{Time: now.Add(-(minAge + Duration(i))), Value: 123.456}
+	}
+	return points
+}
+
+func TestCreateUpdateManyOnly_old_points(t *testing.T) {
+	points := makeBadPoints(1, 10000)
+
+	path, archiveList := setUpCreate(t)
+	os.Remove(path)
+	whisper, err := Create(path, archiveList, Sum, 0.5)
+	if err != nil {
+		t.Fatalf("Failed create: %v", err)
+	}
+	defer whisper.Close()
+
+	if err := whisper.UpdateMany(points); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func Test_extractPoints(t *testing.T) {
+	points := makeGoodPoints(100, 1, func(i int) float64 { return float64(i) })
+	sort.Stable(points)
+	now := TimestampFromStdTime(time.Now())
+	currentPoints, remainingPoints := extractPoints(points, now, 50)
+	if length := len(currentPoints); length != 50 {
+		t.Fatalf("First: %v", length)
+	}
+	if length := len(remainingPoints); length != 50 {
+		t.Fatalf("Second: %v", length)
+	}
+}
+
+func Test_extractPoints_only_old_points(t *testing.T) {
+	now := TimestampFromStdTime(time.Now())
+	points := makeBadPoints(1, 100)
+	sort.Stable(points)
+
+	currentPoints, remainingPoints := extractPoints(points, now, 50)
+	if length := len(currentPoints); length != 0 {
+		t.Fatalf("First: %v", length)
+	}
+	if length := len(remainingPoints); length != 1 {
+		t.Fatalf("Second2: %v", length)
+	}
+}
+
 func Test_aggregateAverage(t *testing.T) {
 	test_aggregate(t, Average, 3.0)
 }
@@ -628,4 +772,66 @@ func Test_aggregateMax(t *testing.T) {
 
 func Test_aggregateMin(t *testing.T) {
 	test_aggregate(t, Min, 1.0)
+}
+
+func TestUpdateManyWithManyRetentions(t *testing.T) {
+	path, archiveList := setUpCreate(t)
+	lastArchive := archiveList[len(archiveList)-1]
+	log.Printf("lastArchive=%s, archiveList=%s", lastArchive, archiveList)
+
+	valueMin := 41
+	valueMax := 43
+
+	os.Remove(path)
+	whisper, err := Create(path, archiveList, Average, 0.5)
+	if err != nil {
+		t.Fatalf("Failed create: %v", err)
+	}
+
+	points := make([]Point, 1)
+	now := TimestampFromStdTime(time.Now())
+	for i := 0; i < int(lastArchive.secondsPerPoint*2); i++ {
+		points[0] = Point{
+			Time:  now.Add(-Duration(i) * Second),
+			Value: Value(valueMin*(i%2) + valueMax*((i+1)%2)), // valueMin, valueMax, valueMin...
+		}
+		if err := whisper.UpdateMany(points); err != nil {
+			t.Fatal(err)
+		}
+		// log.Printf("updated points=%v", points)
+	}
+	if err := whisper.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if err := whisper.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// check data in last archive
+	whisper, err = Open(path)
+	if err != nil {
+		t.Fatalf("Failed open: %v", err)
+	}
+	defer whisper.Close()
+
+	log.Printf("before Fetch, from=%s, until=%s", now.Add(-lastArchive.MaxRetention()), now)
+	result, err := whisper.Fetch(now.Add(-lastArchive.MaxRetention()), now)
+	if err != nil {
+		t.Fatalf("Failed fetch: %v", err)
+	}
+
+	foundValues := 0
+	log.Printf("len(result.Points())=%d", len(result.Points()))
+	for i := 0; i < len(result.Points()); i++ {
+		log.Printf("i=%d, time=%s, value=%s", i, result.Points()[i].Time, result.Points()[i].Value)
+		if !result.Points()[i].Value.IsNaN() {
+			if result.Points()[i].Value >= Value(valueMin) &&
+				result.Points()[i].Value <= Value(valueMax) {
+				foundValues++
+			}
+		}
+	}
+	if foundValues < 2 {
+		t.Fatalf("Not found values in archive %#v", lastArchive)
+	}
 }
