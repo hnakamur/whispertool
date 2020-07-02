@@ -128,6 +128,7 @@ func Create(filename string, retentions []Retention, aggregationMethod Aggregati
 		}
 		w.setPagesDirtyByOffsetRange(0, uint32(len(w.buf)))
 	} else {
+		sort.Sort(retentionsByPrecision(retentions))
 		if err := w.initNewBuf(retentions, aggregationMethod, xFilesFactor); err != nil {
 			return nil, err
 		}
