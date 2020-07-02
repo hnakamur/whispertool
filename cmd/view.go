@@ -72,7 +72,7 @@ func readWhisperFile(baseDirOrURL, fileRelPath string, retID int, from, until, n
 }
 
 func readWhisperFileRemote(srcURL, fileRelPath string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {
-	reqURL := fmt.Sprintf("%s/view?file=%s&retentions=%d&from=%s&until=%s&now=%s",
+	reqURL := fmt.Sprintf("%s/view?file=%s&retention=%d&from=%s&until=%s&now=%s",
 		srcURL,
 		url.QueryEscape(fileRelPath),
 		retID,
