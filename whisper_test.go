@@ -3,6 +3,7 @@ package whispertool
 import (
 	crand "crypto/rand"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -949,4 +951,152 @@ func TestOpenValidatation(t *testing.T) {
 
 	// NOTE: We cannot use testWrite since our Open needs data with full body.
 	// testWrite(fullHeader)
+}
+
+func TestUpdatePointForArchive(t *testing.T) {
+	now := testParseTimestamp(t, "2020-07-03T06:00:38Z")
+	wants := []string{
+		`now:2020-07-03T06:00:38Z
+retID:0	from:2020-07-03T06:00:31Z	until:2020-07-03T06:00:39Z	step:1s	values:NaN NaN NaN NaN NaN NaN NaN 1
+retID:1	from:2020-07-03T06:00:08Z	until:2020-07-03T06:00:40Z	step:4s	values:NaN NaN NaN NaN NaN NaN NaN 1
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 1`,
+		`now:2020-07-03T06:00:39Z
+retID:0	from:2020-07-03T06:00:32Z	until:2020-07-03T06:00:40Z	step:1s	values:NaN NaN NaN NaN NaN NaN 1 2
+retID:1	from:2020-07-03T06:00:08Z	until:2020-07-03T06:00:40Z	step:4s	values:NaN NaN NaN NaN NaN NaN NaN 3
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 3`,
+		`now:2020-07-03T06:00:40Z
+retID:0	from:2020-07-03T06:00:33Z	until:2020-07-03T06:00:41Z	step:1s	values:NaN NaN NaN NaN NaN 1 2 4
+retID:1	from:2020-07-03T06:00:12Z	until:2020-07-03T06:00:44Z	step:4s	values:NaN NaN NaN NaN NaN NaN 3 4
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 7`,
+		`now:2020-07-03T06:00:41Z
+retID:0	from:2020-07-03T06:00:34Z	until:2020-07-03T06:00:42Z	step:1s	values:NaN NaN NaN NaN 1 2 4 8
+retID:1	from:2020-07-03T06:00:12Z	until:2020-07-03T06:00:44Z	step:4s	values:NaN NaN NaN NaN NaN NaN 3 12
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 15`,
+		`now:2020-07-03T06:00:42Z
+retID:0	from:2020-07-03T06:00:35Z	until:2020-07-03T06:00:43Z	step:1s	values:NaN NaN NaN 1 2 4 8 16
+retID:1	from:2020-07-03T06:00:12Z	until:2020-07-03T06:00:44Z	step:4s	values:NaN NaN NaN NaN NaN NaN 3 28
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 31`,
+		`now:2020-07-03T06:00:43Z
+retID:0	from:2020-07-03T06:00:36Z	until:2020-07-03T06:00:44Z	step:1s	values:NaN NaN 1 2 4 8 16 32
+retID:1	from:2020-07-03T06:00:12Z	until:2020-07-03T06:00:44Z	step:4s	values:NaN NaN NaN NaN NaN NaN 3 60
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 63`,
+		`now:2020-07-03T06:00:44Z
+retID:0	from:2020-07-03T06:00:37Z	until:2020-07-03T06:00:45Z	step:1s	values:NaN 1 2 4 8 16 32 64
+retID:1	from:2020-07-03T06:00:16Z	until:2020-07-03T06:00:48Z	step:4s	values:NaN NaN NaN NaN NaN 3 60 64
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 127`,
+		`now:2020-07-03T06:00:45Z
+retID:0	from:2020-07-03T06:00:38Z	until:2020-07-03T06:00:46Z	step:1s	values:1 2 4 8 16 32 64 128
+retID:1	from:2020-07-03T06:00:16Z	until:2020-07-03T06:00:48Z	step:4s	values:NaN NaN NaN NaN NaN 3 60 192
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 255`,
+		`now:2020-07-03T06:00:46Z
+retID:0	from:2020-07-03T06:00:39Z	until:2020-07-03T06:00:47Z	step:1s	values:2 4 8 16 32 64 128 256
+retID:1	from:2020-07-03T06:00:16Z	until:2020-07-03T06:00:48Z	step:4s	values:NaN NaN NaN NaN NaN 3 60 448
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 511`,
+		`now:2020-07-03T06:00:47Z
+retID:0	from:2020-07-03T06:00:40Z	until:2020-07-03T06:00:48Z	step:1s	values:4 8 16 32 64 128 256 512
+retID:1	from:2020-07-03T06:00:16Z	until:2020-07-03T06:00:48Z	step:4s	values:NaN NaN NaN NaN NaN 3 60 960
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 1023`,
+		`now:2020-07-03T06:00:48Z
+retID:0	from:2020-07-03T06:00:41Z	until:2020-07-03T06:00:49Z	step:1s	values:8 16 32 64 128 256 512 1024
+retID:1	from:2020-07-03T06:00:20Z	until:2020-07-03T06:00:52Z	step:4s	values:NaN NaN NaN NaN 3 60 960 1024
+retID:2	from:2020-07-03T06:00:00Z	until:2020-07-03T06:01:04Z	step:16s	values:NaN NaN 1023 1024`,
+		`now:2020-07-03T06:00:49Z
+retID:0	from:2020-07-03T06:00:42Z	until:2020-07-03T06:00:50Z	step:1s	values:16 32 64 128 256 512 1024 2048
+retID:1	from:2020-07-03T06:00:20Z	until:2020-07-03T06:00:52Z	step:4s	values:NaN NaN NaN NaN 3 60 960 3072
+retID:2	from:2020-07-03T06:00:00Z	until:2020-07-03T06:01:04Z	step:16s	values:NaN NaN 1023 3072`,
+		`now:2020-07-03T06:00:50Z
+retID:0	from:2020-07-03T06:00:43Z	until:2020-07-03T06:00:51Z	step:1s	values:32 64 128 256 512 1024 2048 4096
+retID:1	from:2020-07-03T06:00:20Z	until:2020-07-03T06:00:52Z	step:4s	values:NaN NaN NaN NaN 3 60 960 7168
+retID:2	from:2020-07-03T06:00:00Z	until:2020-07-03T06:01:04Z	step:16s	values:NaN NaN 1023 7168`,
+	}
+	db := testCreateInMemoryDB(t, "1s:8s,4s:32s,16s:64s", Sum, 0)
+	updateRetID := 0
+	v := Value(1)
+	for i, want := range wants {
+		if err := db.UpdatePointForArchive(updateRetID, now, v, now); err != nil {
+			t.Fatal(err)
+		}
+
+		tsList := testFetchAllPoints(t, db, now)
+		got := fmt.Sprintf("now:%s\n%s", now, timeSeriesListString(tsList))
+		if got != want {
+			t.Errorf("time series unmatch, i=%d, got=\n%q, want=\n%q", i, got, want)
+		}
+
+		now = now.Add(Second)
+		v *= 2
+	}
+}
+
+func testParseTimestamp(t *testing.T, s string) Timestamp {
+	t.Helper()
+	ts, err := ParseTimestamp(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ts
+}
+
+func timeSeriesListString(tsList []*TimeSeries) string {
+	var b strings.Builder
+	for retID, ts := range tsList {
+		if retID > 0 {
+			b.WriteRune('\n')
+		}
+		fmt.Fprintf(&b, "retID:%d\tfrom:%s\tuntil:%s\tstep:%s\tvalues:",
+			retID, ts.FromTime(), ts.UntilTime(), ts.Step())
+		for i, pt := range ts.Points() {
+			if i > 0 {
+				b.WriteRune(' ')
+			}
+			fmt.Fprintf(&b, "%v", pt.Value)
+		}
+	}
+	return b.String()
+}
+
+func testCreateInMemoryDB(t *testing.T, retentionDefs string, aggMethod AggregationMethod, xFilesFactor float32) *Whisper {
+	t.Helper()
+
+	retentions, err := ParseRetentions(retentionDefs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := Create("", retentions, aggMethod, xFilesFactor, WithInMemory())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return db
+}
+
+func testFetchAllPoints(t *testing.T, db *Whisper, now Timestamp) []*TimeSeries {
+	tsList := make([]*TimeSeries, len(db.Retentions()))
+	for retID, r := range db.Retentions() {
+		from := now.Add(-r.MaxRetention())
+		until := now
+		ts, err := db.FetchFromArchive(retID, from, until, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tsList[retID] = ts
+	}
+
+	for retID, r := range db.Retentions() {
+		ts := tsList[retID]
+		if got, want := len(ts.Points()), int(r.NumberOfPoints()); got != want {
+			t.Errorf("points length unmatched, now=%s, retID=%d, got=%d, want=%d", now, retID, got, want)
+		}
+		if got, want := ts.FromTime(), r.interval(now.Add(-r.MaxRetention())); got != want {
+			t.Errorf("fromTime unmatched, now=%s, retID=%d, got=%s, want=%s", now, retID, got, want)
+		}
+		if got, want := ts.UntilTime(), r.interval(now); got != want {
+			t.Errorf("until unmatched, now=%s, retID=%d, got=%s, want=%s", now, retID, got, want)
+		}
+		if got, want := ts.Step(), r.SecondsPerPoint(); got != want {
+			t.Errorf("step unmatched, now=%s, retID=%d, got=%s, want=%s", now, retID, got, want)
+		}
+	}
+	return tsList
 }

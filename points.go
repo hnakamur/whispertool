@@ -37,6 +37,15 @@ func (ts *TimeSeries) Step() Duration { return ts.step }
 // Points returns the points in ts.
 func (ts *TimeSeries) Points() Points { return ts.points }
 
+// Values returns the values in ts.
+func (ts *TimeSeries) Values() []Value {
+	values := make([]Value, len(ts.Points()))
+	for i, p := range ts.Points() {
+		values[i] = p.Value
+	}
+	return values
+}
+
 // Len is the number of elements in the collection.
 // Implements sort.Interface.
 func (pp Points) Len() int { return len(pp) }
