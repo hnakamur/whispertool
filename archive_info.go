@@ -287,8 +287,8 @@ func (a *ArchiveInfo) AppendTo(dst []byte) []byte {
 // TakeFrom method implements the TakerFrom interface.
 // If there is an error, it may be of type *WantLargerBufferError.
 func (a *ArchiveInfo) TakeFrom(src []byte) ([]byte, error) {
-	if len(src) < retentionSize {
-		return nil, &WantLargerBufferError{WantedByteLen: retentionSize - len(src)}
+	if len(src) < archiveInfoListSize {
+		return nil, &WantLargerBufferError{WantedByteLen: archiveInfoListSize - len(src)}
 	}
 
 	a.offset = binary.BigEndian.Uint32(src)

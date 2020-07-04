@@ -46,13 +46,13 @@ type pageRange struct {
 }
 
 const (
-	uint32Size    = 4
-	uint64Size    = 8
-	float32Size   = 4
-	float64Size   = 8
-	metaSize      = 3*uint32Size + float32Size
-	retentionSize = 3 * uint32Size
-	pointSize     = uint32Size + float64Size
+	uint32Size          = 4
+	uint64Size          = 8
+	float32Size         = uint32Size
+	float64Size         = uint64Size
+	metaSize            = 3*uint32Size + float32Size
+	archiveInfoListSize = 3 * uint32Size
+	pointSize           = uint32Size + float64Size
 )
 
 var pageSize = os.Getpagesize()
@@ -510,7 +510,7 @@ func (w *Whisper) readMetaAndRetentions() error {
 		return errors.New("retention count must not be zero")
 	}
 
-	expectedSize += int(w.meta.retentionCount) * retentionSize
+	expectedSize += int(w.meta.retentionCount) * archiveInfoListSize
 	if len(w.buf) < expectedSize {
 		//log.Printf("buf size is smaller than retentionEnd, bufSize=%d, expectedSize=%d", len(w.buf), expectedSize)
 		return io.ErrUnexpectedEOF
@@ -527,7 +527,7 @@ func (w *Whisper) readMetaAndRetentions() error {
 		r.secondsPerPoint = Duration(w.uint32At(off + uint32Size))
 		r.numberOfPoints = w.uint32At(off + 2*uint32Size)
 
-		off += retentionSize
+		off += archiveInfoListSize
 		expectedSize += int(r.numberOfPoints) * pointSize
 	}
 
@@ -782,7 +782,7 @@ func (w *Whisper) PrintHeader(wr io.Writer) error {
 func (w *Whisper) fillDerivedValuesInHeader() {
 	w.meta.maxRetention = w.retentions[len(w.retentions)-1].MaxRetention()
 	w.meta.retentionCount = uint32(len(w.retentions))
-	off := metaSize + len(w.retentions)*retentionSize
+	off := metaSize + len(w.retentions)*archiveInfoListSize
 	for i := range w.retentions {
 		r := &w.retentions[i]
 		r.offset = uint32(off)
@@ -794,7 +794,7 @@ func (w *Whisper) fileSizeFromHeader() int64 {
 	sz := int64(metaSize)
 	for i := range w.retentions {
 		r := &w.retentions[i]
-		sz += retentionSize + int64(r.numberOfPoints)*pointSize
+		sz += archiveInfoListSize + int64(r.numberOfPoints)*pointSize
 	}
 	return sz
 }
@@ -849,7 +849,7 @@ func (w *Whisper) putRetentions() {
 		w.putUint32At(r.offset, off)
 		w.putUint32At(uint32(r.secondsPerPoint), off+uint32Size)
 		w.putUint32At(r.numberOfPoints, off+2*uint32Size)
-		off += retentionSize
+		off += archiveInfoListSize
 	}
 }
 
