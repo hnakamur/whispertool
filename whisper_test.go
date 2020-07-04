@@ -33,7 +33,7 @@ func TestDirtyPageRanges(t *testing.T) {
 }
 
 func TestRetention_pointIndex(t *testing.T) {
-	r := &Retention{
+	r := &ArchiveInfo{
 		secondsPerPoint: Second,
 		numberOfPoints:  5,
 	}
@@ -123,7 +123,7 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 		tc := tc
 		t.Run("now_"+tc.now.String(), func(t *testing.T) {
 			t.Parallel()
-			retentions, err := ParseRetentions(retentionDefs)
+			retentions, err := ParseArchiveInfoList(retentionDefs)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -209,9 +209,9 @@ func newRandSeed() int64 {
 	return int64(binary.BigEndian.Uint64(b[:]))
 }
 
-func randomPointsList(retentions []Retention, rnd *rand.Rand, rndMaxForHightestArchive int, until, now Timestamp) []Points {
+func randomPointsList(retentions []ArchiveInfo, rnd *rand.Rand, rndMaxForHightestArchive int, until, now Timestamp) []Points {
 	pointsList := make([]Points, len(retentions))
-	var highRet *Retention
+	var highRet *ArchiveInfo
 	var highRndMax int
 	var highPts []Point
 	for i := range retentions {
@@ -226,7 +226,7 @@ func randomPointsList(retentions []Retention, rnd *rand.Rand, rndMaxForHightestA
 	return pointsList
 }
 
-func randomPoints(r, highRet *Retention, highPts []Point, rnd *rand.Rand, rndMax, highRndMax int, until, now Timestamp) []Point {
+func randomPoints(r, highRet *ArchiveInfo, highPts []Point, rnd *rand.Rand, rndMax, highRndMax int, until, now Timestamp) []Point {
 	// adjust now and until for this archive
 	step := r.SecondsPerPoint()
 	thisNow := now.Truncate(step)
@@ -258,7 +258,7 @@ func randomPoints(r, highRet *Retention, highPts []Point, rnd *rand.Rand, rndMax
 	return points
 }
 
-func randomValWithHighSum(t Timestamp, rnd *rand.Rand, highRndMax int, r, highRet *Retention, highPts []Point) Value {
+func randomValWithHighSum(t Timestamp, rnd *rand.Rand, highRndMax int, r, highRet *ArchiveInfo, highPts []Point) Value {
 	step := r.SecondsPerPoint()
 
 	v := Value(0)
@@ -300,7 +300,7 @@ func sortPointsListByTime(pointsList []Points) {
 	}
 }
 
-func filterPointsByTimeRange(r *Retention, points []Point, from, until Timestamp) Points {
+func filterPointsByTimeRange(r *ArchiveInfo, points []Point, from, until Timestamp) Points {
 	if until == from {
 		until = until.Add(r.SecondsPerPoint())
 	}
@@ -332,7 +332,7 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-func setUpCreate(t *testing.T) (path string, archiveList Retentions) {
+func setUpCreate(t *testing.T) (path string, archiveList ArchiveInfoList) {
 	file, err := ioutil.TempFile("", "whisper-testing-*.wsp")
 	if err != nil {
 		t.Fatal(err)
@@ -341,7 +341,7 @@ func setUpCreate(t *testing.T) (path string, archiveList Retentions) {
 	t.Cleanup(func() {
 		os.Remove(file.Name())
 	})
-	archiveList = Retentions{
+	archiveList = ArchiveInfoList{
 		{secondsPerPoint: 1, numberOfPoints: 300},
 		{secondsPerPoint: 60, numberOfPoints: 30},
 		{secondsPerPoint: 300, numberOfPoints: 12},
@@ -439,7 +439,7 @@ func TestCreateFileAlreadyExists(t *testing.T) {
 func TestCreateFileInvalidRetentionDefs(t *testing.T) {
 	path, retentions := setUpCreate(t)
 	// Add a small retention def on the end
-	retentions = append(retentions, Retention{secondsPerPoint: 1, numberOfPoints: 200})
+	retentions = append(retentions, ArchiveInfo{secondsPerPoint: 1, numberOfPoints: 200})
 	_, err := Create(path, retentions, Average, 0.5)
 	if err == nil {
 		t.Fatalf("Invalid retention definitions should cause create to fail.")
@@ -1058,7 +1058,7 @@ func timeSeriesListString(tsList []*TimeSeries) string {
 func testCreateInMemoryDB(t *testing.T, retentionDefs string, aggMethod AggregationMethod, xFilesFactor float32) *Whisper {
 	t.Helper()
 
-	retentions, err := ParseRetentions(retentionDefs)
+	retentions, err := ParseArchiveInfoList(retentionDefs)
 	if err != nil {
 		t.Fatal(err)
 	}

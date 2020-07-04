@@ -7,32 +7,32 @@ import (
 	"strings"
 )
 
-// Retention is a retention level.
-// Retention levels describe a given archive in the database. How detailed it is and how far back it records.
-type Retention struct {
+// ArchiveInfo is a retention level.
+// ArchiveInfo levels describe a given archive in the database. How detailed it is and how far back it records.
+type ArchiveInfo struct {
 	offset          uint32
 	secondsPerPoint Duration
 	numberOfPoints  uint32
 }
 
-// Retentions is a slice of Retention.
-type Retentions []Retention
+// ArchiveInfoList is a slice of Retention.
+type ArchiveInfoList []ArchiveInfo
 
-// retentionIDBest is used to find the best archive for time range in FetchFromArchive.
-const RetentionIDBest = -1
+// ArchiveIDBest is used to find the best archive for time range in FetchFromArchive.
+const ArchiveIDBest = -1
 
-// NewRetention creats a retention.
-func NewRetention(secondsPerPoint Duration, numberOfPoints uint32) Retention {
-	return Retention{
+// NewArchiveInfo creats a retention.
+func NewArchiveInfo(secondsPerPoint Duration, numberOfPoints uint32) ArchiveInfo {
+	return ArchiveInfo{
 		secondsPerPoint: secondsPerPoint,
 		numberOfPoints:  numberOfPoints,
 	}
 }
 
-func (r *Retention) timesToPropagate(points []Point) []Timestamp {
+func (a *ArchiveInfo) timesToPropagate(points []Point) []Timestamp {
 	var ts []Timestamp
 	for _, p := range points {
-		t := r.intervalForWrite(p.Time)
+		t := a.intervalForWrite(p.Time)
 		if len(ts) > 0 && t == ts[len(ts)-1] {
 			continue
 		}
@@ -41,16 +41,16 @@ func (r *Retention) timesToPropagate(points []Point) []Timestamp {
 	return ts
 }
 
-// ParseRetentions parses multiple retention definitions as you would find in the storage-schemas.conf
+// ParseArchiveInfoList parses multiple retention definitions as you would find in the storage-schemas.conf
 // of a Carbon install. Note that this parses multiple retention definitions.
 // An example input is "10s:2h,1m:1d".
 //
 // See: http://graphite.readthedocs.org/en/1.0/config-carbon.html#storage-schemas-conf
-func ParseRetentions(s string) (Retentions, error) {
+func ParseArchiveInfoList(s string) (ArchiveInfoList, error) {
 	if len(s) == 0 {
-		return nil, fmt.Errorf("invalid retentions: %q", s)
+		return nil, fmt.Errorf("invalid ArchiveInfoList: %q", s)
 	}
-	var rr []Retention
+	var rr []ArchiveInfo
 	for {
 		var rStr string
 		i := strings.IndexRune(s, ',')
@@ -59,9 +59,9 @@ func ParseRetentions(s string) (Retentions, error) {
 		} else {
 			rStr = s[:i]
 		}
-		r, err := ParseRetention(rStr)
+		r, err := ParseArchiveInfo(rStr)
 		if err != nil {
-			return nil, fmt.Errorf("invalid retentions: %q", s)
+			return nil, fmt.Errorf("invalid ArchiveInfoList: %q", s)
 		}
 		rr = append(rr, r)
 
@@ -69,45 +69,45 @@ func ParseRetentions(s string) (Retentions, error) {
 			break
 		}
 		if i+1 >= len(s) {
-			return nil, fmt.Errorf("invalid retentions: %q", s)
+			return nil, fmt.Errorf("invalid ArchiveInfoList: %q", s)
 		}
 		s = s[i+1:]
 	}
 	return rr, nil
 }
 
-// ParseRetention parses a single retention definition as you would find in the storage-schemas.conf
+// ParseArchiveInfo parses a single retention definition as you would find in the storage-schemas.conf
 // of a Carbon install. Note that this only parses a single retention definition.
 // An example input is "10s:2h".
 // If you would like to parse multiple retention definitions like "10s:2h,1m:1d", use
 // ParseRetentions instead.
-func ParseRetention(s string) (Retention, error) {
+func ParseArchiveInfo(s string) (ArchiveInfo, error) {
 	i := strings.IndexRune(s, ':')
 	if i == -1 || i+1 >= len(s) {
-		return Retention{}, fmt.Errorf("invalid retention: %q", s)
+		return ArchiveInfo{}, fmt.Errorf("invalid ArchiveInfo: %q", s)
 	}
 
 	step, err := ParseDuration(s[:i])
 	if err != nil {
-		return Retention{}, fmt.Errorf("invalid retention: %q", s)
+		return ArchiveInfo{}, fmt.Errorf("invalid ArchiveInfo: %q", s)
 	}
 	d, err := ParseDuration(s[i+1:])
 	if err != nil {
-		return Retention{}, fmt.Errorf("invalid retention: %q", s)
+		return ArchiveInfo{}, fmt.Errorf("invalid ArchiveInfo: %q", s)
 	}
 	if step <= 0 || d <= 0 || d%step != 0 {
-		return Retention{}, fmt.Errorf("invalid retention: %q", s)
+		return ArchiveInfo{}, fmt.Errorf("invalid ArchiveInfo: %q", s)
 	}
-	return Retention{
+	return ArchiveInfo{
 		secondsPerPoint: step,
 		numberOfPoints:  uint32(d / step),
 	}, nil
 }
 
 // String returns the spring representation of rr.
-func (rr Retentions) String() string {
+func (aa ArchiveInfoList) String() string {
 	var b strings.Builder
-	for i, r := range rr {
+	for i, r := range aa {
 		if i > 0 {
 			b.WriteString(",")
 		}
@@ -116,20 +116,33 @@ func (rr Retentions) String() string {
 	return b.String()
 }
 
-func (rr Retentions) validate() error {
-	if len(rr) == 0 {
+// Equal returns whether or not aa equals to bb.
+func (aa ArchiveInfoList) Equal(bb ArchiveInfoList) bool {
+	if len(aa) != len(bb) {
+		return false
+	}
+	for i, r := range aa {
+		if !r.Equal(bb[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func (aa ArchiveInfoList) validate() error {
+	if len(aa) == 0 {
 		return fmt.Errorf("no retentions")
 	}
-	for i, r := range rr {
+	for i, r := range aa {
 		if err := r.validate(); err != nil {
 			return fmt.Errorf("invalid archive%v: %v", i, err)
 		}
 
-		if i == len(rr)-1 {
+		if i == len(aa)-1 {
 			break
 		}
 
-		rNext := rr[i+1]
+		rNext := aa[i+1]
 		if !(r.secondsPerPoint < rNext.secondsPerPoint) {
 			return fmt.Errorf("a Whisper database may not be configured having two archives with the same precision (archive%v: %v, archive%v: %v)", i, r, i+1, rNext)
 		}
@@ -149,92 +162,79 @@ func (rr Retentions) validate() error {
 	return nil
 }
 
-type retentionsByPrecision Retentions
+type archiveInfoListByPrecision ArchiveInfoList
 
-func (r retentionsByPrecision) Len() int {
-	return len(r)
+func (a archiveInfoListByPrecision) Len() int {
+	return len(a)
 }
 
-func (r retentionsByPrecision) Swap(i, j int) {
-	r[i], r[j] = r[j], r[i]
+func (a archiveInfoListByPrecision) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
 }
 
-func (r retentionsByPrecision) Less(i, j int) bool {
-	return r[i].secondsPerPoint < r[j].secondsPerPoint
+func (a archiveInfoListByPrecision) Less(i, j int) bool {
+	return a[i].secondsPerPoint < a[j].secondsPerPoint
 }
 
-// SecondsPerPoint returns the duration of the step of r.
-func (r *Retention) SecondsPerPoint() Duration { return r.secondsPerPoint }
+// SecondsPerPoint returns the duration of the step of a.
+func (a *ArchiveInfo) SecondsPerPoint() Duration { return a.secondsPerPoint }
 
-// NumberOfPoints returns the number of points in r.
-func (r *Retention) NumberOfPoints() uint32 { return r.numberOfPoints }
+// NumberOfPoints returns the number of points in a.
+func (a *ArchiveInfo) NumberOfPoints() uint32 { return a.numberOfPoints }
 
-func (r Retention) validate() error {
-	if r.secondsPerPoint <= 0 {
+func (a ArchiveInfo) validate() error {
+	if a.secondsPerPoint <= 0 {
 		return errors.New("seconds per point must be positive")
 	}
-	if r.numberOfPoints <= 0 {
+	if a.numberOfPoints <= 0 {
 		return errors.New("number of points must be positive")
 	}
 	return nil
 }
 
-// Equal returns whether or not rr equals to ss.
-func (rr Retentions) Equal(ss Retentions) bool {
-	if len(rr) != len(ss) {
-		return false
-	}
-	for i, r := range rr {
-		if !r.Equal(ss[i]) {
-			return false
-		}
-	}
-	return true
+// Equal returns whether or not a equals to b.
+func (a ArchiveInfo) Equal(b ArchiveInfo) bool {
+	return a.secondsPerPoint == b.secondsPerPoint &&
+		a.numberOfPoints == b.numberOfPoints
 }
 
-// Equal returns whether or not r equals to s.
-func (r Retention) Equal(s Retention) bool {
-	return r.secondsPerPoint == s.secondsPerPoint &&
-		r.numberOfPoints == s.numberOfPoints
+// String returns the spring representation of a.
+func (a ArchiveInfo) String() string {
+	return a.secondsPerPoint.String() + ":" +
+		(a.secondsPerPoint * Duration(a.numberOfPoints)).String()
 }
 
-// String returns the spring representation of r.
-func (r Retention) String() string {
-	return r.secondsPerPoint.String() + ":" +
-		(r.secondsPerPoint * Duration(r.numberOfPoints)).String()
-}
-
-func (r *Retention) pointIndex(baseInterval, interval Timestamp) int {
+func (a *ArchiveInfo) pointIndex(baseInterval, interval Timestamp) int {
 	// NOTE: We use interval.Sub(baseInterval) here instead of
 	// interval - baseInterval since the latter produces
 	// wrong values because of underflow when interval < baseInterval.
 	// Another solution would be (int64(interval) - int64(baseInterval))
-	pointDistance := int64(interval.Sub(baseInterval)) / int64(r.secondsPerPoint)
-	return int(floorMod(pointDistance, int64(r.numberOfPoints)))
+	pointDistance := int64(interval.Sub(baseInterval)) / int64(a.secondsPerPoint)
+	return int(floorMod(pointDistance, int64(a.numberOfPoints)))
 }
 
-// MaxRetention returns the whole duration of r.
-func (r *Retention) MaxRetention() Duration {
-	return r.secondsPerPoint * Duration(r.numberOfPoints)
+// MaxRetention returns the whole duration of a.
+func (a *ArchiveInfo) MaxRetention() Duration {
+	return a.secondsPerPoint * Duration(a.numberOfPoints)
 }
 
-func (r *Retention) pointOffsetAt(index int) uint32 {
-	return r.offset + uint32(index)*pointSize
+func (a *ArchiveInfo) pointOffsetAt(index int) uint32 {
+	return a.offset + uint32(index)*pointSize
 }
 
-// interval returns the aligned interval of t to r for fetching data points.
-func (r *Retention) interval(t Timestamp) Timestamp {
-	step := int64(r.secondsPerPoint)
+// interval returns the aligned interval of t to a for fetching data points.
+func (a *ArchiveInfo) interval(t Timestamp) Timestamp {
+	step := int64(a.secondsPerPoint)
 	return Timestamp(int64(t) - floorMod(int64(t), step) + step)
 }
 
-func (r *Retention) intervalForWrite(t Timestamp) Timestamp {
-	step := int64(r.secondsPerPoint)
+func (a *ArchiveInfo) intervalForWrite(t Timestamp) Timestamp {
+	step := int64(a.secondsPerPoint)
 	return Timestamp(int64(t) - floorMod(int64(t), step))
 }
 
-func (r *Retention) filterPoints(points []Point, now Timestamp) []Point {
-	oldest := r.intervalForWrite(now.Add(-r.MaxRetention()))
+func (a *ArchiveInfo) filterPoints(points []Point, now Timestamp) []Point {
+	oldest := a.intervalForWrite(now.Add(-a.MaxRetention()))
 	filteredPoints := make([]Point, 0, len(points))
 	for _, p := range points {
 		if p.Time >= oldest && p.Time <= now {
@@ -247,12 +247,12 @@ func (r *Retention) filterPoints(points []Point, now Timestamp) []Point {
 // alignPoints returns a new slice of Point whose time is aligned
 // with calling intervalForWrite method.
 // Note that the input points must be sorted by Time in advance.
-func (r *Retention) alignPoints(points []Point) []Point {
+func (a *ArchiveInfo) alignPoints(points []Point) []Point {
 	alignedPoints := make([]Point, 0, len(points))
 	var prevTime Timestamp
 	for i, point := range points {
 		dPoint := Point{
-			Time:  r.intervalForWrite(point.Time),
+			Time:  a.intervalForWrite(point.Time),
 			Value: point.Value,
 		}
 		if i > 0 && point.Time == prevTime {
@@ -265,39 +265,39 @@ func (r *Retention) alignPoints(points []Point) []Point {
 	return alignedPoints
 }
 
-// AppendTo appends encoded bytes of r to dst
+// AppendTo appends encoded bytes of a to dst
 // and returns the extended buffer.
 //
 // AppendTo method implements the AppenderTo interface.
-func (r *Retention) AppendTo(dst []byte) []byte {
+func (a *ArchiveInfo) AppendTo(dst []byte) []byte {
 	var b [uint32Size]byte
 
-	binary.BigEndian.PutUint32(b[:], uint32(r.offset))
+	binary.BigEndian.PutUint32(b[:], uint32(a.offset))
 	dst = append(dst, b[:]...)
 
-	dst = r.secondsPerPoint.AppendTo(dst)
+	dst = a.secondsPerPoint.AppendTo(dst)
 
-	binary.BigEndian.PutUint32(b[:], uint32(r.numberOfPoints))
+	binary.BigEndian.PutUint32(b[:], uint32(a.numberOfPoints))
 	return append(dst, b[:]...)
 }
 
-// TakeFrom updates r from encoded bytes in src
+// TakeFrom updates a from encoded bytes in src
 // and returns the rest of src.
 //
 // TakeFrom method implements the TakerFrom interface.
 // If there is an error, it may be of type *WantLargerBufferError.
-func (r *Retention) TakeFrom(src []byte) ([]byte, error) {
+func (a *ArchiveInfo) TakeFrom(src []byte) ([]byte, error) {
 	if len(src) < retentionSize {
 		return nil, &WantLargerBufferError{WantedByteLen: retentionSize - len(src)}
 	}
 
-	r.offset = binary.BigEndian.Uint32(src)
+	a.offset = binary.BigEndian.Uint32(src)
 
-	src, err := r.secondsPerPoint.TakeFrom(src[uint32Size:])
+	src, err := a.secondsPerPoint.TakeFrom(src[uint32Size:])
 	if err != nil {
 		return nil, err
 	}
 
-	r.offset = binary.BigEndian.Uint32(src)
+	a.offset = binary.BigEndian.Uint32(src)
 	return src[uint32Size:], nil
 }

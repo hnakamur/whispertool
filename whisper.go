@@ -18,7 +18,7 @@ import (
 // Whisper represents a Whisper database file.
 type Whisper struct {
 	meta       Meta
-	retentions []Retention
+	retentions []ArchiveInfo
 
 	buf             []byte
 	dirtyPageBitSet *bitset.BitSet
@@ -108,7 +108,7 @@ func WithPerm(perm os.FileMode) Option {
 }
 
 // Create creates a whisper database file.
-func Create(filename string, retentions []Retention, aggregationMethod AggregationMethod, xFilesFactor float32, opts ...Option) (*Whisper, error) {
+func Create(filename string, retentions []ArchiveInfo, aggregationMethod AggregationMethod, xFilesFactor float32, opts ...Option) (*Whisper, error) {
 	w := &Whisper{
 		openFileFlag: os.O_RDWR | os.O_CREATE | os.O_EXCL,
 		perm:         0644,
@@ -130,7 +130,7 @@ func Create(filename string, retentions []Retention, aggregationMethod Aggregati
 		}
 		w.setPagesDirtyByOffsetRange(0, uint32(len(w.buf)))
 	} else {
-		sort.Sort(retentionsByPrecision(retentions))
+		sort.Sort(archiveInfoListByPrecision(retentions))
 		if err := w.initNewBuf(retentions, aggregationMethod, xFilesFactor); err != nil {
 			return nil, err
 		}
@@ -228,7 +228,7 @@ func (w *Whisper) XFilesFactor() float32 { return w.meta.xFilesFactor }
 func (w *Whisper) MaxRetention() Duration { return w.meta.maxRetention }
 
 // Retentions returns the retentions of the whisper file.
-func (w *Whisper) Retentions() Retentions { return w.retentions }
+func (w *Whisper) Retentions() ArchiveInfoList { return w.retentions }
 
 // RawData returns data for whole file.
 // Note the byte slice returned is the internal work buffer,
@@ -242,7 +242,7 @@ func (w *Whisper) RawData() []byte {
 //
 // It fetches points in range between `from` (exclusive) and `until` (inclusive).
 func (w *Whisper) Fetch(from, until Timestamp) (*TimeSeries, error) {
-	return w.FetchFromArchive(RetentionIDBest, from, until, 0)
+	return w.FetchFromArchive(ArchiveIDBest, from, until, 0)
 }
 
 // FetchFromArchive fetches points in the specified archive and the time range.
@@ -258,10 +258,10 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 	if from > until {
 		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
 	}
-	if (retentionID != RetentionIDBest && retentionID < 0) || len(w.retentions)-1 < retentionID {
+	if (retentionID != ArchiveIDBest && retentionID < 0) || len(w.retentions)-1 < retentionID {
 		return nil, ErrRetentionIDOutOfRange
 	}
-	if retentionID == RetentionIDBest {
+	if retentionID == ArchiveIDBest {
 		retentionID = w.findBestRetention(from, now)
 		// log.Printf("found best retentionID=%d", retentionID)
 	}
@@ -343,7 +343,7 @@ func (w *Whisper) findBestRetention(t, now Timestamp) int {
 // If the timestamp is in the future or outside of the maximum retention it will
 // fail immediately.
 func (w *Whisper) Update(t Timestamp, v Value) error {
-	return w.UpdatePointForArchive(RetentionIDBest, t, v, 0)
+	return w.UpdatePointForArchive(ArchiveIDBest, t, v, 0)
 }
 
 // UpdatePointForArchive updates one point in the specified archive.
@@ -356,7 +356,7 @@ func (w *Whisper) UpdatePointForArchive(retentionID int, t Timestamp, v Value, n
 		return fmt.Errorf("Timestamp not covered by any archives in this database")
 	}
 
-	if retentionID == RetentionIDBest {
+	if retentionID == ArchiveIDBest {
 		retentionID = w.findBestRetention(t, now)
 	}
 
@@ -375,7 +375,7 @@ func (w *Whisper) UpdatePointForArchive(retentionID int, t Timestamp, v Value, n
 
 // UpdateMany updates points in the best matching archives.
 func (w *Whisper) UpdateMany(points []Point) (err error) {
-	return w.UpdatePointsForArchive(points, RetentionIDBest, 0)
+	return w.UpdatePointsForArchive(points, ArchiveIDBest, 0)
 }
 
 // UpdatePointsForArchive updates points in the specified archive.
@@ -390,7 +390,7 @@ func (w *Whisper) UpdatePointsForArchive(points []Point, retentionID int, now Ti
 	sort.Stable(Points(points))
 	for retID, r := range w.Retentions() {
 		// log.Printf("start retentionID=%d", retentionID)
-		if retentionID != RetentionIDBest && retentionID != retID {
+		if retentionID != ArchiveIDBest && retentionID != retID {
 			// log.Printf("skip retentionID=%d", retentionID)
 			continue
 		}
@@ -476,7 +476,7 @@ func (w *Whisper) propagateChain(retentionID int, alignedPoints []Point, now Tim
 	return nil
 }
 
-func (w *Whisper) initNewBuf(retentions []Retention, aggregationMethod AggregationMethod, xFilesFactor float32) error {
+func (w *Whisper) initNewBuf(retentions []ArchiveInfo, aggregationMethod AggregationMethod, xFilesFactor float32) error {
 	m := Meta{
 		aggregationMethod: aggregationMethod,
 		xFilesFactor:      xFilesFactor,
@@ -516,7 +516,7 @@ func (w *Whisper) readMetaAndRetentions() error {
 		return io.ErrUnexpectedEOF
 	}
 
-	w.retentions = make([]Retention, w.meta.retentionCount)
+	w.retentions = make([]ArchiveInfo, w.meta.retentionCount)
 	off := uint32(metaSize)
 	for i := 0; i < int(w.meta.retentionCount); i++ {
 		r := &w.retentions[i]
@@ -549,7 +549,7 @@ func (w *Whisper) readMetaAndRetentions() error {
 	return nil
 }
 
-func (w *Whisper) baseInterval(r *Retention) Timestamp {
+func (w *Whisper) baseInterval(r *ArchiveInfo) Timestamp {
 	return w.timestampAt(r.offset)
 }
 
@@ -799,11 +799,11 @@ func (w *Whisper) fileSizeFromHeader() int64 {
 	return sz
 }
 
-func validateMetaAndRetentions(m Meta, retentions []Retention) error {
+func validateMetaAndRetentions(m Meta, retentions []ArchiveInfo) error {
 	if err := m.validate(); err != nil {
 		return err
 	}
-	if err := Retentions(retentions).validate(); err != nil {
+	if err := ArchiveInfoList(retentions).validate(); err != nil {
 		return err
 	}
 	return nil
@@ -867,7 +867,7 @@ func (w *Whisper) propagate(retentionID int, ts []Timestamp, now Timestamp) (pro
 
 	step := r.secondsPerPoint
 	highRetID := retentionID - 1
-	var rLow *Retention
+	var rLow *ArchiveInfo
 	if retentionID+1 < len(w.retentions) {
 		rLow = &w.retentions[retentionID+1]
 	}
@@ -906,7 +906,7 @@ func (w *Whisper) propagate(retentionID int, ts []Timestamp, now Timestamp) (pro
 	return propagatedTs, nil
 }
 
-func (whisper *Whisper) getPointOffset(start Timestamp, r *Retention) uint32 {
+func (whisper *Whisper) getPointOffset(start Timestamp, r *ArchiveInfo) uint32 {
 	baseInterval := whisper.baseInterval(r)
 	if baseInterval == 0 {
 		return r.offset
@@ -914,7 +914,7 @@ func (whisper *Whisper) getPointOffset(start Timestamp, r *Retention) uint32 {
 	return r.pointOffsetAt(r.pointIndex(baseInterval, start))
 }
 
-func filterValidValues(points []Point, fromInterval Timestamp, rLow *Retention) []Value {
+func filterValidValues(points []Point, fromInterval Timestamp, rLow *ArchiveInfo) []Value {
 	values := make([]Value, 0, len(points))
 	currentInterval := rLow.intervalForWrite(fromInterval)
 	for _, p := range points {

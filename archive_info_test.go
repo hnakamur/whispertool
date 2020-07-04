@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestParseRetention(t *testing.T) {
+func TestParseArchiveInfo(t *testing.T) {
 	testCases := []struct {
 		input         string
 		wantPrecision Duration
@@ -20,7 +20,7 @@ func TestParseRetention(t *testing.T) {
 		{input: "1m:30f", wantPrecision: 0, wantNrPts: 0, wantErr: true},
 	}
 	for _, tc := range testCases {
-		r, err := ParseRetention(tc.input)
+		r, err := ParseArchiveInfo(tc.input)
 		if gotErr := err != nil; gotErr != tc.wantErr {
 			t.Errorf("unexpected err for input %q, gotErr=%v, wantErr=%v",
 				tc.input, gotErr, tc.wantErr)
@@ -38,33 +38,33 @@ func TestParseRetention(t *testing.T) {
 	}
 }
 
-func TestParseRetentions(t *testing.T) {
+func TestParseArchiveInfoList(t *testing.T) {
 	testCases := []struct {
 		input   string
-		want    Retentions
+		want    ArchiveInfoList
 		wantErr bool
 	}{
 		{
 			input: "1s:5m",
-			want: []Retention{
-				NewRetention(Second, 300),
+			want: []ArchiveInfo{
+				NewArchiveInfo(Second, 300),
 			},
 			wantErr: false,
 		},
 		{
 			input: "1m:2h,1h:2d",
-			want: []Retention{
-				NewRetention(Minute, 120),
-				NewRetention(Hour, 48),
+			want: []ArchiveInfo{
+				NewArchiveInfo(Minute, 120),
+				NewArchiveInfo(Hour, 48),
 			},
 			wantErr: false,
 		},
 		{
 			input: "1m:2h,1h:2d,1d:32d",
-			want: []Retention{
-				NewRetention(Minute, 120),
-				NewRetention(Hour, 48),
-				NewRetention(Day, 32),
+			want: []ArchiveInfo{
+				NewArchiveInfo(Minute, 120),
+				NewArchiveInfo(Hour, 48),
+				NewArchiveInfo(Day, 32),
 			},
 			wantErr: false,
 		},
@@ -74,7 +74,7 @@ func TestParseRetentions(t *testing.T) {
 		{input: "", want: nil, wantErr: true},
 	}
 	for _, tc := range testCases {
-		rr, err := ParseRetentions(tc.input)
+		rr, err := ParseArchiveInfoList(tc.input)
 		if gotErr := err != nil; gotErr != tc.wantErr {
 			t.Errorf("unexpected err for input %q, gotErr=%v, wantErr=%v",
 				tc.input, gotErr, tc.wantErr)
@@ -89,13 +89,13 @@ func TestParseRetentions(t *testing.T) {
 	}
 }
 
-func TestSortRetentions(t *testing.T) {
-	retentions := Retentions{
+func TestSortArchiveInfoList(t *testing.T) {
+	retentions := ArchiveInfoList{
 		{secondsPerPoint: 300, numberOfPoints: 12},
 		{secondsPerPoint: 60, numberOfPoints: 30},
 		{secondsPerPoint: 1, numberOfPoints: 300},
 	}
-	sort.Sort(retentionsByPrecision(retentions))
+	sort.Sort(archiveInfoListByPrecision(retentions))
 	if retentions[0].secondsPerPoint != 1 {
 		t.Fatalf("Retentions array is not sorted")
 	}

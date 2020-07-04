@@ -117,7 +117,7 @@ func filterPointsListByTimeRange(d *whispertool.Whisper, pointsList PointsList, 
 	return pointsList2
 }
 
-func filterPointsByTimeRange(r *whispertool.Retention, points []whispertool.Point, from, until whispertool.Timestamp) []whispertool.Point {
+func filterPointsByTimeRange(r *whispertool.ArchiveInfo, points []whispertool.Point, from, until whispertool.Timestamp) []whispertool.Point {
 	if until == from {
 		until = until.Add(r.SecondsPerPoint())
 	}

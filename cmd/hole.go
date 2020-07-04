@@ -100,7 +100,7 @@ func (c *HoleCommand) Execute() error {
 	return nil
 }
 
-func emptyRandomPointsList(ptsList PointsList, rnd *rand.Rand, emptyRate float64, from, until whispertool.Timestamp, retentions []whispertool.Retention) PointsList {
+func emptyRandomPointsList(ptsList PointsList, rnd *rand.Rand, emptyRate float64, from, until whispertool.Timestamp, retentions []whispertool.ArchiveInfo) PointsList {
 	ptsList2 := make([]whispertool.Points, len(ptsList))
 	for i, pts := range ptsList {
 		r := &retentions[i]
@@ -109,7 +109,7 @@ func emptyRandomPointsList(ptsList PointsList, rnd *rand.Rand, emptyRate float64
 	return ptsList2
 }
 
-func emptyRandomPoints(pts []whispertool.Point, rnd *rand.Rand, empyRate float64, from, until whispertool.Timestamp, r *whispertool.Retention) []whispertool.Point {
+func emptyRandomPoints(pts []whispertool.Point, rnd *rand.Rand, empyRate float64, from, until whispertool.Timestamp, r *whispertool.ArchiveInfo) []whispertool.Point {
 	var pts2 []whispertool.Point
 	for _, p := range pts {
 		if from < p.Time && p.Time <= until && rnd.Float64() < empyRate {

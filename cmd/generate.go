@@ -48,7 +48,7 @@ func (c *GenerateCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *GenerateCommand) Execute() error {
-	retentions, err := whispertool.ParseRetentions(c.RetentionDefs)
+	retentions, err := whispertool.ParseArchiveInfoList(c.RetentionDefs)
 	if err != nil {
 		return err
 	}
@@ -87,9 +87,9 @@ func newRandSeed() int64 {
 	return int64(binary.BigEndian.Uint64(b[:]))
 }
 
-func randomPointsList(retentions []whispertool.Retention, rnd *rand.Rand, rndMaxForHightestArchive int, until, now whispertool.Timestamp) PointsList {
+func randomPointsList(retentions []whispertool.ArchiveInfo, rnd *rand.Rand, rndMaxForHightestArchive int, until, now whispertool.Timestamp) PointsList {
 	pointsList := make([]whispertool.Points, len(retentions))
-	var highRet *whispertool.Retention
+	var highRet *whispertool.ArchiveInfo
 	var highRndMax int
 	var highPts []whispertool.Point
 	for i := range retentions {
@@ -104,7 +104,7 @@ func randomPointsList(retentions []whispertool.Retention, rnd *rand.Rand, rndMax
 	return pointsList
 }
 
-func randomPoints(r, highRet *whispertool.Retention, highPts []whispertool.Point, rnd *rand.Rand, rndMax, highRndMax int, until, now whispertool.Timestamp) []whispertool.Point {
+func randomPoints(r, highRet *whispertool.ArchiveInfo, highPts []whispertool.Point, rnd *rand.Rand, rndMax, highRndMax int, until, now whispertool.Timestamp) []whispertool.Point {
 	// adjust now and until for this archive
 	step := r.SecondsPerPoint()
 	thisNow := now.Truncate(step)
@@ -136,7 +136,7 @@ func randomPoints(r, highRet *whispertool.Retention, highPts []whispertool.Point
 	return points
 }
 
-func randomValWithHighSum(t whispertool.Timestamp, rnd *rand.Rand, highRndMax int, r, highRet *whispertool.Retention, highPts []whispertool.Point) whispertool.Value {
+func randomValWithHighSum(t whispertool.Timestamp, rnd *rand.Rand, highRndMax int, r, highRet *whispertool.ArchiveInfo, highPts []whispertool.Point) whispertool.Value {
 	step := r.SecondsPerPoint()
 
 	v := whispertool.Value(0)
