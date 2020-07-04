@@ -1,6 +1,7 @@
 package whispertool
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
@@ -79,6 +80,29 @@ func (t Timestamp) Truncate(d Duration) Timestamp {
 		return t
 	}
 	return t.Add(-Duration(int64(t) % int64(d)))
+}
+
+// AppendTo appends encoded bytes of t to dst
+// and returns the extended buffer.
+//
+// AppendTo method implements the AppenderTo interface.
+func (t *Timestamp) AppendTo(dst []byte) []byte {
+	var b [uint32Size]byte
+	binary.BigEndian.PutUint32(b[:], uint32(*t))
+	return append(dst, b[:]...)
+}
+
+// TakeFrom updates t from encoded bytes in src
+// and returns the rest of src.
+//
+// TakeFrom method implements the TakerFrom interface.
+// If there is an error, it may be of type *WantLargerBufferError.
+func (t *Timestamp) TakeFrom(src []byte) ([]byte, error) {
+	if len(src) < uint32Size {
+		return nil, &WantLargerBufferError{WantedByteLen: uint32Size - len(src)}
+	}
+	*t = Timestamp(binary.BigEndian.Uint32(src[:uint32Size]))
+	return src[uint32Size:], nil
 }
 
 // ParseDuration parses a Duration string.
@@ -171,4 +195,25 @@ func (d Duration) String() string {
 	default:
 		return fmt.Sprintf("%ds", d)
 	}
+}
+
+// AppendTo appends encoded bytes of d to dst
+// and returns the extended buffer.
+func (d *Duration) AppendTo(dst []byte) []byte {
+	var b [uint32Size]byte
+	binary.BigEndian.PutUint32(b[:], uint32(*d))
+	return append(dst, b[:]...)
+}
+
+// TakeFrom updates d from encoded bytes in src
+// and returns the rest of src.
+//
+// TakeFrom method implements the TakerFrom interface.
+// If there is an error, it may be of type *WantLargerBufferError.
+func (d *Duration) TakeFrom(src []byte) ([]byte, error) {
+	if len(src) < uint32Size {
+		return nil, &WantLargerBufferError{WantedByteLen: uint32Size - len(src)}
+	}
+	*d = Duration(binary.BigEndian.Uint32(src[:uint32Size]))
+	return src[uint32Size:], nil
 }

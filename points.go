@@ -1,6 +1,8 @@
 package whispertool
 
 import (
+	"encoding/binary"
+	"errors"
 	"math"
 	"strconv"
 )
@@ -10,7 +12,7 @@ type TimeSeries struct {
 	fromTime  Timestamp
 	untilTime Timestamp
 	step      Duration
-	points    Points
+	values    []Value
 }
 
 // Points represents a slice of Point.
@@ -34,16 +36,79 @@ func (ts *TimeSeries) UntilTime() Timestamp { return ts.untilTime }
 // Step returns the duration between points in ts.
 func (ts *TimeSeries) Step() Duration { return ts.step }
 
-// Points returns the points in ts.
-func (ts *TimeSeries) Points() Points { return ts.points }
+// Points converts ts to points.
+func (ts *TimeSeries) Points() Points {
+	pts := make([]Point, len(ts.values))
+	for i, v := range ts.values {
+		pts[i] = Point{
+			Time:  ts.fromTime.Add(Duration(i) * ts.step),
+			Value: v,
+		}
+	}
+	return pts
+}
 
 // Values returns the values in ts.
-func (ts *TimeSeries) Values() []Value {
-	values := make([]Value, len(ts.Points()))
-	for i, p := range ts.Points() {
-		values[i] = p.Value
+func (ts *TimeSeries) Values() []Value { return ts.values }
+
+// AppendTo appends encoded bytes of ts to dst
+// and returns the extended buffer.
+//
+// AppendTo method implements the AppenderTo interface.
+func (ts *TimeSeries) AppendTo(dst []byte) []byte {
+	dst = ts.fromTime.AppendTo(dst)
+	dst = ts.untilTime.AppendTo(dst)
+	dst = ts.step.AppendTo(dst)
+	values := ts.Values()
+	for i := range values {
+		dst = values[i].AppendTo(dst)
 	}
-	return values
+	return dst
+}
+
+// TakeFrom updates ts from encoded bytes in src
+// and returns the rest of src.
+//
+// TakeFrom method implements the TakerFrom interface.
+// If there is an error, it may be of type *WantLargerBufferError.
+func (ts *TimeSeries) TakeFrom(src []byte) ([]byte, error) {
+	if len(src) < 3*uint32Size {
+		return nil, &WantLargerBufferError{WantedByteLen: 3*uint32Size - len(src)}
+	}
+
+	src, err := ts.fromTime.TakeFrom(src)
+	if err != nil {
+		return nil, err
+	}
+	src, err = ts.untilTime.TakeFrom(src)
+	if err != nil {
+		return nil, err
+	}
+	src, err = ts.step.TakeFrom(src)
+	if err != nil {
+		return nil, err
+	}
+
+	if ts.step == 0 {
+		return nil, errors.New("step must not be zero")
+	}
+	if ts.untilTime < ts.fromTime {
+		return nil, errors.New("untilTime is older than fromTime")
+	}
+
+	n := int(ts.untilTime.Sub(ts.fromTime) / ts.step)
+	if len(src) < n*float64Size {
+		return nil, &WantLargerBufferError{WantedByteLen: n*float64Size - len(src)}
+	}
+
+	ts.values = make([]Value, n)
+	for i := 0; i < n; i++ {
+		src, err = ts.values[i].TakeFrom(src)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return src, nil
 }
 
 // Len is the number of elements in the collection.
@@ -91,11 +156,50 @@ func (pp Points) Diff(qq Points) (Points, Points) {
 	return pp2, qq2
 }
 
+// Values returns values of pp.
+func (pp Points) Values() []Value {
+	values := make([]Value, len(pp))
+	for i, p := range pp {
+		values[i] = p.Value
+	}
+	return values
+}
+
 // Equals returns whether or not p equals to q.
 // It returns true if time and value of p equals to q.
 // For comparison of value, Value's Equals method is used.
 func (p Point) Equal(q Point) bool {
 	return p.Time == q.Time && p.Value.Equal(q.Value)
+}
+
+// AppendTo appends encoded bytes of p to dst
+// and returns the extended buffer.
+//
+// AppendTo method implements the AppenderTo interface.
+func (p *Point) AppendTo(dst []byte) []byte {
+	dst = p.Time.AppendTo(dst)
+	return p.Value.AppendTo(dst)
+}
+
+// TakeFrom updates p from encoded bytes in src
+// and returns the rest of src.
+//
+// TakeFrom method implements the TakerFrom interface.
+// If there is an error, it may be of type *WantLargerBufferError.
+func (p *Point) TakeFrom(src []byte) ([]byte, error) {
+	if len(src) < pointSize {
+		return nil, &WantLargerBufferError{WantedByteLen: pointSize - len(src)}
+	}
+
+	src, err := p.Time.TakeFrom(src)
+	if err != nil {
+		return nil, err
+	}
+	src, err = p.Value.TakeFrom(src)
+	if err != nil {
+		return nil, err
+	}
+	return src, nil
 }
 
 // SetNaN sets the value to NaN.
@@ -141,4 +245,27 @@ func (v Value) Equal(u Value) bool {
 	pIsNaN := v.IsNaN()
 	qIsNaN := u.IsNaN()
 	return (pIsNaN && qIsNaN) || (!pIsNaN && !qIsNaN && v == u)
+}
+
+// AppendTo appends encoded bytes of v to dst
+// and returns the extended buffer.
+//
+// AppendTo method implements the AppenderTo interface.
+func (v *Value) AppendTo(dst []byte) []byte {
+	var b [uint64Size]byte
+	binary.BigEndian.PutUint64(b[:], math.Float64bits(float64(*v)))
+	return append(dst, b[:]...)
+}
+
+// TakeFrom updates v from encoded bytes in src
+// and returns the rest of src.
+//
+// TakeFrom method implements the TakerFrom interface.
+// If there is an error, it may be of type *WantLargerBufferError.
+func (v *Value) TakeFrom(src []byte) ([]byte, error) {
+	if len(src) < uint64Size {
+		return nil, &WantLargerBufferError{WantedByteLen: uint64Size - len(src)}
+	}
+	*v = Value(math.Float64frombits(binary.BigEndian.Uint64(src)))
+	return src[uint64Size:], nil
 }

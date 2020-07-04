@@ -17,7 +17,7 @@ import (
 
 // Whisper represents a Whisper database file.
 type Whisper struct {
-	meta       meta
+	meta       Meta
 	retentions []Retention
 
 	buf             []byte
@@ -31,7 +31,9 @@ type Whisper struct {
 	inMemory     bool
 }
 
-type meta struct {
+// Meta respresents a meta information placed at the
+// beginning of a whisper file.
+type Meta struct {
 	aggregationMethod AggregationMethod
 	maxRetention      Duration
 	xFilesFactor      float32
@@ -291,18 +293,15 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 	step := r.secondsPerPoint
 
 	if baseInterval == 0 {
-		points := make([]Point, (untilInterval-fromInterval)/Timestamp(step))
-		t := fromInterval
-		for i := range points {
-			points[i].Time = t
-			points[i].Value.SetNaN()
-			t = t.Add(step)
+		values := make([]Value, (untilInterval-fromInterval)/Timestamp(step))
+		for i := range values {
+			values[i].SetNaN()
 		}
 		return &TimeSeries{
 			fromTime:  fromInterval,
 			untilTime: untilInterval,
 			step:      step,
-			points:    points,
+			values:    values,
 		}, nil
 	}
 
@@ -323,7 +322,7 @@ func (w *Whisper) FetchFromArchive(retentionID int, from, until, now Timestamp) 
 		fromTime:  fromInterval,
 		untilTime: untilInterval,
 		step:      step,
-		points:    points,
+		values:    points.Values(),
 	}, nil
 }
 
@@ -478,7 +477,7 @@ func (w *Whisper) propagateChain(retentionID int, alignedPoints []Point, now Tim
 }
 
 func (w *Whisper) initNewBuf(retentions []Retention, aggregationMethod AggregationMethod, xFilesFactor float32) error {
-	m := meta{
+	m := Meta{
 		aggregationMethod: aggregationMethod,
 		xFilesFactor:      xFilesFactor,
 	}
@@ -702,7 +701,7 @@ func (w *Whisper) GetAllRawUnsortedPoints(retentionID int) []Point {
 	return points
 }
 
-func (w *Whisper) fetchRawPoints(retentionID int, fromInterval, untilInterval Timestamp) []Point {
+func (w *Whisper) fetchRawPoints(retentionID int, fromInterval, untilInterval Timestamp) Points {
 	r := &w.retentions[retentionID]
 	baseInterval := w.baseInterval(r)
 
@@ -800,7 +799,7 @@ func (w *Whisper) fileSizeFromHeader() int64 {
 	return sz
 }
 
-func validateMetaAndRetentions(m meta, retentions []Retention) error {
+func validateMetaAndRetentions(m Meta, retentions []Retention) error {
 	if err := m.validate(); err != nil {
 		return err
 	}
@@ -810,7 +809,7 @@ func validateMetaAndRetentions(m meta, retentions []Retention) error {
 	return nil
 }
 
-func (m meta) validate() error {
+func (m Meta) validate() error {
 	if err := validateXFilesFactor(m.xFilesFactor); err != nil {
 		return err
 	}
@@ -964,4 +963,46 @@ func aggregate(method AggregationMethod, knownValues []Value) Value {
 		return min
 	}
 	panic("Invalid aggregation method")
+}
+
+// AppendTo appends encoded bytes of m to dst
+// and returns the extended buffer.
+//
+// AppendTo method implements the AppenderTo interface.
+func (m *Meta) AppendTo(dst []byte) []byte {
+	var b [uint32Size]byte
+
+	binary.BigEndian.PutUint32(b[:], uint32(m.aggregationMethod))
+	dst = append(dst, b[:]...)
+
+	dst = m.maxRetention.AppendTo(dst)
+
+	binary.BigEndian.PutUint32(b[:], math.Float32bits(m.xFilesFactor))
+	dst = append(dst, b[:]...)
+
+	binary.BigEndian.PutUint32(b[:], m.retentionCount)
+	return append(dst, b[:]...)
+}
+
+// TakeFrom updates m from encoded bytes in src
+// and returns the rest of src.
+//
+// TakeFrom method implements the TakerFrom interface.
+// If there is an error, it may be of type *WantLargerBufferError.
+func (m *Meta) TakeFrom(src []byte) ([]byte, error) {
+	if len(src) < metaSize {
+		return nil, &WantLargerBufferError{WantedByteLen: metaSize - len(src)}
+	}
+
+	m.aggregationMethod = AggregationMethod(binary.BigEndian.Uint32(src))
+
+	src, err := m.maxRetention.TakeFrom(src[uint32Size:])
+	if err != nil {
+		return nil, err
+	}
+
+	m.xFilesFactor = math.Float32frombits(binary.BigEndian.Uint32(src))
+
+	m.retentionCount = binary.BigEndian.Uint32(src[uint32Size:])
+	return src[2*uint32Size:], nil
 }

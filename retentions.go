@@ -1,6 +1,7 @@
 package whispertool
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"strings"
@@ -262,4 +263,41 @@ func (r *Retention) alignPoints(points []Point) []Point {
 		}
 	}
 	return alignedPoints
+}
+
+// AppendTo appends encoded bytes of r to dst
+// and returns the extended buffer.
+//
+// AppendTo method implements the AppenderTo interface.
+func (r *Retention) AppendTo(dst []byte) []byte {
+	var b [uint32Size]byte
+
+	binary.BigEndian.PutUint32(b[:], uint32(r.offset))
+	dst = append(dst, b[:]...)
+
+	dst = r.secondsPerPoint.AppendTo(dst)
+
+	binary.BigEndian.PutUint32(b[:], uint32(r.numberOfPoints))
+	return append(dst, b[:]...)
+}
+
+// TakeFrom updates r from encoded bytes in src
+// and returns the rest of src.
+//
+// TakeFrom method implements the TakerFrom interface.
+// If there is an error, it may be of type *WantLargerBufferError.
+func (r *Retention) TakeFrom(src []byte) ([]byte, error) {
+	if len(src) < retentionSize {
+		return nil, &WantLargerBufferError{WantedByteLen: retentionSize - len(src)}
+	}
+
+	r.offset = binary.BigEndian.Uint32(src)
+
+	src, err := r.secondsPerPoint.TakeFrom(src[uint32Size:])
+	if err != nil {
+		return nil, err
+	}
+
+	r.offset = binary.BigEndian.Uint32(src)
+	return src[uint32Size:], nil
 }
