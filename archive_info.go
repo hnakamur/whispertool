@@ -298,16 +298,17 @@ func (a *ArchiveInfo) AppendTo(dst []byte) []byte {
 // If there is an error, it may be of type *WantLargerBufferError.
 func (a *ArchiveInfo) TakeFrom(src []byte) ([]byte, error) {
 	if len(src) < archiveInfoListSize {
-		return nil, &WantLargerBufferError{WantedByteLen: archiveInfoListSize - len(src)}
+		return nil, &WantLargerBufferError{WantedBufSize: archiveInfoListSize}
 	}
 
 	a.offset = binary.BigEndian.Uint32(src)
+	src = src[uint32Size:]
 
-	src, err := a.secondsPerPoint.TakeFrom(src[uint32Size:])
+	src, err := a.secondsPerPoint.TakeFrom(src)
 	if err != nil {
 		return nil, err
 	}
 
-	a.offset = binary.BigEndian.Uint32(src)
+	a.numberOfPoints = binary.BigEndian.Uint32(src)
 	return src[uint32Size:], nil
 }

@@ -111,7 +111,7 @@ func (ts *TimeSeries) AppendTo(dst []byte) []byte {
 // If there is an error, it may be of type *WantLargerBufferError.
 func (ts *TimeSeries) TakeFrom(src []byte) ([]byte, error) {
 	if len(src) < 3*uint32Size {
-		return nil, &WantLargerBufferError{WantedByteLen: 3*uint32Size - len(src)}
+		return nil, &WantLargerBufferError{WantedBufSize: 3 * uint32Size}
 	}
 
 	src, err := ts.fromTime.TakeFrom(src)
@@ -135,8 +135,9 @@ func (ts *TimeSeries) TakeFrom(src []byte) ([]byte, error) {
 	}
 
 	n := int(ts.untilTime.Sub(ts.fromTime) / ts.step)
-	if len(src) < n*float64Size {
-		return nil, &WantLargerBufferError{WantedByteLen: n*float64Size - len(src)}
+	wantedSize := 3*uint32Size + n*float64Size
+	if len(src) < wantedSize {
+		return nil, &WantLargerBufferError{WantedBufSize: wantedSize}
 	}
 
 	ts.values = make([]Value, n)
@@ -224,19 +225,19 @@ func (pp *Points) AppendTo(dst []byte) []byte {
 // If there is an error, it may be of type *WantLargerBufferError.
 func (pp *Points) TakeFrom(src []byte) ([]byte, error) {
 	if len(src) < uint64Size {
-		return nil, &WantLargerBufferError{WantedByteLen: uint64Size - len(src)}
+		return nil, &WantLargerBufferError{WantedBufSize: uint64Size}
 	}
 
-	count := binary.BigEndian.Uint64(src)
+	count := int(binary.BigEndian.Uint64(src))
 	src = src[uint64Size:]
 
-	wantSize := count * pointSize
-	if uint64(len(src)) < wantSize {
-		return nil, &WantLargerBufferError{WantedByteLen: int(wantSize - uint64(len(src)))}
+	wantedSize := count * pointSize
+	if len(src) < wantedSize {
+		return nil, &WantLargerBufferError{WantedBufSize: uint64Size + wantedSize}
 	}
 
 	*pp = make(Points, count)
-	for i := uint64(0); i < count; i++ {
+	for i := 0; i < count; i++ {
 		var err error
 		src, err = (*pp)[i].TakeFrom(src)
 		if err != nil {
@@ -269,7 +270,7 @@ func (p *Point) AppendTo(dst []byte) []byte {
 // If there is an error, it may be of type *WantLargerBufferError.
 func (p *Point) TakeFrom(src []byte) ([]byte, error) {
 	if len(src) < pointSize {
-		return nil, &WantLargerBufferError{WantedByteLen: pointSize - len(src)}
+		return nil, &WantLargerBufferError{WantedBufSize: pointSize}
 	}
 
 	src, err := p.Time.TakeFrom(src)
@@ -345,7 +346,7 @@ func (v *Value) AppendTo(dst []byte) []byte {
 // If there is an error, it may be of type *WantLargerBufferError.
 func (v *Value) TakeFrom(src []byte) ([]byte, error) {
 	if len(src) < uint64Size {
-		return nil, &WantLargerBufferError{WantedByteLen: uint64Size - len(src)}
+		return nil, &WantLargerBufferError{WantedBufSize: uint64Size}
 	}
 	*v = Value(math.Float64frombits(binary.BigEndian.Uint64(src)))
 	return src[uint64Size:], nil

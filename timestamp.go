@@ -99,7 +99,7 @@ func (t *Timestamp) AppendTo(dst []byte) []byte {
 // If there is an error, it may be of type *WantLargerBufferError.
 func (t *Timestamp) TakeFrom(src []byte) ([]byte, error) {
 	if len(src) < uint32Size {
-		return nil, &WantLargerBufferError{WantedByteLen: uint32Size - len(src)}
+		return nil, &WantLargerBufferError{WantedBufSize: uint32Size}
 	}
 	*t = Timestamp(binary.BigEndian.Uint32(src[:uint32Size]))
 	return src[uint32Size:], nil
@@ -212,7 +212,7 @@ func (d *Duration) AppendTo(dst []byte) []byte {
 // If there is an error, it may be of type *WantLargerBufferError.
 func (d *Duration) TakeFrom(src []byte) ([]byte, error) {
 	if len(src) < uint32Size {
-		return nil, &WantLargerBufferError{WantedByteLen: uint32Size - len(src)}
+		return nil, &WantLargerBufferError{WantedBufSize: uint32Size}
 	}
 	*d = Duration(binary.BigEndian.Uint32(src[:uint32Size]))
 	return src[uint32Size:], nil

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"math"
 	"math/rand"
 	"os"
@@ -425,7 +424,7 @@ func TestCreateCreatesFile(t *testing.T) {
 
 func TestCreateFileAlreadyExists(t *testing.T) {
 	path, retentions := setUpCreate(t)
-	_, err := Create(path, retentions, Average, 0.5, WithOpenFileFlag(os.O_RDWR))
+	_, err := Create(path, retentions, Average, 0.5)
 	if err == nil {
 		t.Fatalf("Existing file should cause create to fail.")
 	}
@@ -447,7 +446,6 @@ func TestOpenFile(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create: %v", err)
 	}
-	log.Print("TestOpenFile after create whisper1")
 
 	// write some points
 	now := TimestampFromStdTime(time.Now())
@@ -456,17 +454,14 @@ func TestOpenFile(t *testing.T) {
 			t.Fatalf("failed to update a point in database: %v", err)
 		}
 	}
-	log.Print("TestOpenFile before sync whisper1")
 	if err := whisper1.Sync(); err != nil {
 		t.Fatalf("failed to sync whisper1: %v", err)
 	}
-	log.Print("TestOpenFile after sync whisper1")
 
 	whisper2, err := Open(path, WithoutFlock())
 	if err != nil {
 		t.Fatalf("Failed to open whisper file: %v", err)
 	}
-	log.Print("TestOpenFile after open whisper2")
 	if whisper1.AggregationMethod() != whisper2.AggregationMethod() {
 		t.Errorf("AggregationMethod() did not match, expected %v, received %v", whisper1.AggregationMethod(), whisper2.AggregationMethod())
 	}
@@ -496,12 +491,10 @@ func TestOpenFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error retrieving result from created whisper: %v", err)
 	}
-	log.Print("TestOpenFile after fetch whisper1")
 	result2, err := whisper2.Fetch(now-3, now)
 	if err != nil {
 		t.Fatalf("Error retrieving result from opened whisper: %v", err)
 	}
-	log.Print("TestOpenFile after fetch whisper2")
 
 	pts1 := result1.Points()
 	pts2 := result2.Points()

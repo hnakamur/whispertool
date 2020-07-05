@@ -29,13 +29,13 @@ type TakerFrom interface {
 // If WantedByteLen is zero, it means the length
 // wanted is unkown.
 type WantLargerBufferError struct {
-	WantedByteLen int
+	WantedBufSize int
 }
 
 // Error returns the error message for e.
 func (e *WantLargerBufferError) Error() string {
-	if e.WantedByteLen == 0 {
+	if e.WantedBufSize == 0 {
 		return "want larger buffer but size is unknown"
 	}
-	return fmt.Sprintf("want %d bytes larger buffer", e.WantedByteLen)
+	return fmt.Sprintf("want %d bytes larger buffer", e.WantedBufSize)
 }

@@ -90,7 +90,7 @@ func (h *Header) ExpectedFileSize() int64 {
 // [1] Labeled Tab-separated Values http://ltsv.org/
 func (h *Header) String() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%s\tretentionCount:%d\n",
+	fmt.Fprintf(&b, "aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%s\trarchiveCount:%d\n",
 		h.aggregationMethod,
 		int(h.aggregationMethod),
 		h.maxRetention,
@@ -99,7 +99,7 @@ func (h *Header) String() string {
 
 	for i := range h.archiveInfoList {
 		r := &h.ArchiveInfoList()[i]
-		fmt.Fprintf(&b, "retentionDef:%d\tstep:%s\tnumberOfPoints:%d\toffset:%d\n",
+		fmt.Fprintf(&b, "archiveInfo:%d\tstep:%s\tnumberOfPoints:%d\toffset:%d\n",
 			i,
 			Duration(r.secondsPerPoint),
 			r.numberOfPoints,
@@ -139,7 +139,7 @@ func (h *Header) AppendTo(dst []byte) []byte {
 // If there is an error, it may be of type *WantLargerBufferError.
 func (h *Header) TakeFrom(src []byte) ([]byte, error) {
 	if len(src) < metaSize {
-		return nil, &WantLargerBufferError{WantedByteLen: metaSize - len(src)}
+		return nil, &WantLargerBufferError{WantedBufSize: metaSize}
 	}
 
 	h.aggregationMethod = AggregationMethod(binary.BigEndian.Uint32(src))
@@ -163,9 +163,9 @@ func (h *Header) TakeFrom(src []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	wantSize := int(h.archiveCount * archiveInfoListSize)
-	if len(src) < wantSize {
-		return nil, &WantLargerBufferError{WantedByteLen: wantSize - len(src)}
+	wantedSize := int(h.archiveCount * archiveInfoListSize)
+	if len(src) < wantedSize {
+		return nil, &WantLargerBufferError{WantedBufSize: metaSize + wantedSize}
 	}
 
 	h.archiveInfoList = make(ArchiveInfoList, h.archiveCount)

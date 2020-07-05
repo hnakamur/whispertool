@@ -446,13 +446,13 @@ func (w *Whisper) readHeader() error {
 	}
 
 	h := &Header{}
-	if _, err := h.TakeFrom(buf); err != nil {
+	if _, err := h.TakeFrom(buf[:metaSize]); err != nil {
 		var werr *WantLargerBufferError
 		if !errors.As(err, &werr) {
 			return err
 		}
 
-		wantSize := werr.WantedByteLen
+		wantSize := werr.WantedBufSize
 		if wantSize > len(buf) {
 			buf = make([]byte, wantSize)
 		}
