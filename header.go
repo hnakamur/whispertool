@@ -2,7 +2,21 @@ package whispertool
 
 import (
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"math"
+	"strconv"
+	"strings"
+)
+
+const (
+	uint32Size          = 4
+	uint64Size          = 8
+	float32Size         = uint32Size
+	float64Size         = uint64Size
+	metaSize            = 3*uint32Size + float32Size
+	archiveInfoListSize = 3 * uint32Size
+	pointSize           = uint32Size + float64Size
 )
 
 // Header respresents a whisper file header.
@@ -23,17 +37,26 @@ func NewHeader(aggregationMethod AggregationMethod, xFilesFactor float32, archiv
 	if err := validateXFilesFactor(xFilesFactor); err != nil {
 		return nil, err
 	}
+
+	off := metaSize + uint32(len(archiveInfoList))*archiveInfoListSize
+	for i := range archiveInfoList {
+		a := &archiveInfoList[i]
+		a.offset = off
+		off += uint32(a.numberOfPoints) * pointSize
+	}
 	if err := archiveInfoList.validate(); err != nil {
 		return nil, err
 	}
 
-	return &Header{
+	h := &Header{
 		aggregationMethod: aggregationMethod,
 		maxRetention:      archiveInfoList[len(archiveInfoList)-1].MaxRetention(),
 		xFilesFactor:      xFilesFactor,
 		archiveCount:      uint32(len(archiveInfoList)),
 		archiveInfoList:   archiveInfoList,
-	}, nil
+	}
+
+	return h, nil
 }
 
 // AggregationMethod returns the aggregation method of the whisper file.
@@ -48,6 +71,43 @@ func (h *Header) MaxRetention() Duration { return h.maxRetention }
 // ArchiveInfoList returns the archive info list of the whisper file.
 func (h *Header) ArchiveInfoList() ArchiveInfoList { return h.archiveInfoList }
 
+// ByteSize returns the size in bytes of h in the whisper file.
+func (h *Header) Size() int64 {
+	return metaSize + int64(h.archiveCount)*archiveInfoListSize
+}
+
+// ExpectedFileSize returns the expected file size from h.
+func (h *Header) ExpectedFileSize() int64 {
+	sz := h.Size()
+	for _, a := range h.archiveInfoList {
+		sz += int64(a.numberOfPoints) * pointSize
+	}
+	return sz
+}
+
+// String returns the string representation of h in LTSV format [1].
+//
+// [1] Labeled Tab-separated Values http://ltsv.org/
+func (h *Header) String() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%s\tretentionCount:%d\n",
+		h.aggregationMethod,
+		int(h.aggregationMethod),
+		h.maxRetention,
+		strconv.FormatFloat(float64(h.xFilesFactor), 'f', -1, 32),
+		h.archiveCount)
+
+	for i := range h.archiveInfoList {
+		r := &h.ArchiveInfoList()[i]
+		fmt.Fprintf(&b, "retentionDef:%d\tstep:%s\tnumberOfPoints:%d\toffset:%d\n",
+			i,
+			Duration(r.secondsPerPoint),
+			r.numberOfPoints,
+			r.offset)
+	}
+	return b.String()
+}
+
 // AppendTo appends encoded bytes of h to dst
 // and returns the extended buffer.
 //
@@ -58,10 +118,10 @@ func (h *Header) AppendTo(dst []byte) []byte {
 	binary.BigEndian.PutUint32(b[:], uint32(h.aggregationMethod))
 	dst = append(dst, b[:]...)
 
+	dst = h.maxRetention.AppendTo(dst)
+
 	binary.BigEndian.PutUint32(b[:], math.Float32bits(h.xFilesFactor))
 	dst = append(dst, b[:]...)
-
-	dst = h.maxRetention.AppendTo(dst)
 
 	binary.BigEndian.PutUint32(b[:], h.archiveCount)
 	dst = append(dst, b[:]...)
@@ -120,4 +180,20 @@ func (h *Header) TakeFrom(src []byte) ([]byte, error) {
 	}
 
 	return src, nil
+}
+
+func validateAggregationMethod(aggMethod AggregationMethod) error {
+	switch aggMethod {
+	case Average, Sum, Last, Max, Min, First:
+		return nil
+	default:
+		return errors.New("invalid aggregation method")
+	}
+}
+
+func validateXFilesFactor(xFilesFactor float32) error {
+	if xFilesFactor < 0 || 1 < xFilesFactor {
+		return errors.New("invalid XFilesFactor")
+	}
+	return nil
 }

@@ -40,7 +40,7 @@ func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.SrcPattern, "src", "", "whisper file glob pattern relative to item directory (ex. *.wsp).")
 	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory or URL of \"whispertool server\"")
 	fs.StringVar(&c.DestRelPath, "dest", "", "dest whisper filename relative to item directory (ex. sum.wsp).")
-	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
+	fs.IntVar(&c.RetID, "ret", ArchiveIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of diff. empty means no output, - means stdout, other means output file.")
 	fs.StringVar(&c.SumTextOut, "sum-text-out", "", "text output of sum. empty means no output, - means stdout, other means output file.")
 	fs.StringVar(&c.DestTextOut, "dest-text-out", "", "text output of destination. empty means no output, - means stdout, other means output file.")
@@ -127,41 +127,41 @@ func (c *SumDiffCommand) sumDiffItem(item string) error {
 		until = c.Now.Add(-whispertool.Duration(c.UntilOffset / time.Second))
 	}
 
-	var sumDB, destDB *whispertool.Whisper
-	var sumPtsList, destPtsList PointsList
+	var sumHeader, destHeader *whispertool.Header
+	var sumTsList, destTsList TimeSeriesList
 	var g errgroup.Group
 	g.Go(func() error {
 		var err error
-		sumDB, sumPtsList, err = sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.RetID, c.From, until, c.Now)
+		sumHeader, sumTsList, err = sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.RetID, c.From, until, c.Now)
 		return err
 	})
 	g.Go(func() error {
 		var err error
 		destRelPath := filepath.Join(itemToRelDir(item), c.DestRelPath)
-		destDB, destPtsList, err = readWhisperFile(c.DestBase, destRelPath, c.RetID, c.From, until, c.Now)
+		destHeader, destTsList, err = readWhisperFile(c.DestBase, destRelPath, c.RetID, c.From, until, c.Now)
 		return err
 	})
 	if err := g.Wait(); err != nil {
 		return err
 	}
 
-	if !sumDB.Retentions().Equal(destDB.Retentions()) {
+	if !sumHeader.ArchiveInfoList().Equal(destHeader.ArchiveInfoList()) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 
-	sumPlDif, destPlDif := sumPtsList.Diff(destPtsList)
-	if sumPtsList.AllEmpty() && destPlDif.AllEmpty() {
+	sumPlDif, destPlDif := sumTsList.Diff(destTsList)
+	if sumTsList.AllEmpty() && destPlDif.AllEmpty() {
 		return nil
 	}
 
-	err := printDiff(c.TextOut, sumDB, destDB, sumPtsList, destPtsList, sumPlDif, destPlDif)
+	err := printDiff(c.TextOut, sumHeader, destHeader, sumPlDif, destPlDif)
 	if err != nil {
 		return err
 	}
-	if err := printPointsListAppend(c.SumTextOut, item, sumDB, sumPtsList); err != nil {
+	if err := printPointsListAppend(c.SumTextOut, item, sumHeader, sumTsList.PointsList()); err != nil {
 		return err
 	}
-	if err := printPointsListAppend(c.DestTextOut, item, destDB, destPtsList); err != nil {
+	if err := printPointsListAppend(c.DestTextOut, item, destHeader, destTsList.PointsList()); err != nil {
 		return err
 	}
 	return nil
@@ -171,13 +171,13 @@ func formatTime(t time.Time) string {
 	return t.Format(whispertool.UTCTimeLayout)
 }
 
-func printPointsListAppend(textOut string, itemName string, db *whispertool.Whisper, ptsList PointsList) error {
+func printPointsListAppend(textOut string, itemName string, h *whispertool.Header, ptsList PointsList) error {
 	if textOut == "" {
 		return nil
 	}
 
 	if textOut == "-" {
-		return printPointsListAppendTo(os.Stdout, itemName, db, ptsList)
+		return printPointsListAppendTo(os.Stdout, itemName, h, ptsList)
 	}
 
 	file, err := os.OpenFile(textOut, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
@@ -187,7 +187,7 @@ func printPointsListAppend(textOut string, itemName string, db *whispertool.Whis
 	defer file.Close()
 
 	w := bufio.NewWriter(file)
-	err = printPointsListAppendTo(w, itemName, db, ptsList)
+	err = printPointsListAppendTo(w, itemName, h, ptsList)
 	if err != nil {
 		return err
 	}
@@ -200,11 +200,11 @@ func printPointsListAppend(textOut string, itemName string, db *whispertool.Whis
 	return nil
 }
 
-func printPointsListAppendTo(w io.Writer, itemName string, db *whispertool.Whisper, ptsList PointsList) error {
+func printPointsListAppendTo(w io.Writer, itemName string, h *whispertool.Header, ptsList PointsList) error {
 	if _, err := fmt.Fprintf(w, "item:%s\n", itemName); err != nil {
 		return err
 	}
-	for retID := range db.Retentions() {
+	for retID := range h.ArchiveInfoList() {
 		for _, pts := range ptsList {
 			for _, pt := range pts {
 				if _, err := fmt.Fprintf(w, "retID:%d\tt:%s\tvalue:%s\n", retID, pt.Time, pt.Value); err != nil {

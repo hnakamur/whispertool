@@ -31,7 +31,7 @@ func (c *HoleCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.SrcRelPath, "src", "", "whisper file relative path to src base")
 	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory or URL of \"whispertool server\"")
 	fs.StringVar(&c.DestRelPath, "dest", "", "whisper file relative path to dest base")
-	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
+	fs.IntVar(&c.RetID, "ret", ArchiveIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
 
 	c.Now = whispertool.TimestampFromStdTime(time.Now())
@@ -71,16 +71,16 @@ func (c *HoleCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *HoleCommand) Execute() error {
-	srcDB, srcPtsList, err := readWhisperFile(c.SrcBase, c.SrcRelPath, c.RetID, c.From, c.Until, c.Now)
+	srcHeader, srcTsList, err := readWhisperFile(c.SrcBase, c.SrcRelPath, c.RetID, c.From, c.Until, c.Now)
 	if err != nil {
 		return err
 	}
 
 	rnd := rand.New(rand.NewSource(newRandSeed()))
-	destPtsList := emptyRandomPointsList(srcPtsList, rnd, c.EmptyRate, c.From, c.Until, srcDB.Retentions())
+	destPtsList := emptyRandomPointsList(srcTsList.PointsList(), rnd, c.EmptyRate, c.From, c.Until, srcHeader.ArchiveInfoList())
 
 	destFullPath := filepath.Join(c.DestBase, c.DestRelPath)
-	destDB, err := openOrCreateCopyDestFile(destFullPath, srcDB)
+	destDB, err := openOrCreateCopyDestFile(destFullPath, srcHeader)
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func (c *HoleCommand) Execute() error {
 		return err
 	}
 
-	if err = printFileData(c.TextOut, destDB, destPtsList, true); err != nil {
+	if err = printFileData(c.TextOut, destDB.Header(), destPtsList, true); err != nil {
 		return err
 	}
 

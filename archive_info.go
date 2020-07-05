@@ -21,6 +21,9 @@ type ArchiveInfoList []ArchiveInfo
 // ArchiveIDBest is used to find the best archive for time range in FetchFromArchive.
 const ArchiveIDBest = -1
 
+// ErrArchiveIDOutOfRange is the error when an archive ID if out of range.
+var ErrArchiveIDOutOfRange = errors.New("archive ID out of range")
+
 // NewArchiveInfo creats a retention.
 func NewArchiveInfo(secondsPerPoint Duration, numberOfPoints uint32) ArchiveInfo {
 	return ArchiveInfo{
@@ -133,9 +136,14 @@ func (aa ArchiveInfoList) validate() error {
 	if len(aa) == 0 {
 		return fmt.Errorf("no retentions")
 	}
-	for i, r := range aa {
-		if err := r.validate(); err != nil {
+
+	off := metaSize + uint32(len(aa))*archiveInfoListSize
+	for i, a := range aa {
+		if err := a.validate(); err != nil {
 			return fmt.Errorf("invalid archive%v: %v", i, err)
+		}
+		if a.offset != off {
+			return fmt.Errorf("invalid archive%v: invalid offset got:%v, want:%v", i, a.offset, off)
 		}
 
 		if i == len(aa)-1 {
@@ -143,21 +151,23 @@ func (aa ArchiveInfoList) validate() error {
 		}
 
 		rNext := aa[i+1]
-		if !(r.secondsPerPoint < rNext.secondsPerPoint) {
-			return fmt.Errorf("a Whisper database may not be configured having two archives with the same precision (archive%v: %v, archive%v: %v)", i, r, i+1, rNext)
+		if !(a.secondsPerPoint < rNext.secondsPerPoint) {
+			return fmt.Errorf("a Whisper database may not be configured having two archives with the same precision (archive%v: %v, archive%v: %v)", i, a, i+1, rNext)
 		}
 
-		if rNext.secondsPerPoint%r.secondsPerPoint != 0 {
-			return fmt.Errorf("higher precision archives' precision must evenly divide all lower precision archives' precision (archive%v: %v, archive%v: %v)", i, r.secondsPerPoint, i+1, rNext.secondsPerPoint)
+		if rNext.secondsPerPoint%a.secondsPerPoint != 0 {
+			return fmt.Errorf("higher precision archives' precision must evenly divide all lower precision archives' precision (archive%v: %v, archive%v: %v)", i, a.secondsPerPoint, i+1, rNext.secondsPerPoint)
 		}
 
-		if r.MaxRetention() >= rNext.MaxRetention() {
-			return fmt.Errorf("lower precision archives must cover larger time intervals than higher precision archives (archive%v: %v seconds, archive%v: %v seconds)", i, r.MaxRetention(), i+1, rNext.MaxRetention())
+		if a.MaxRetention() >= rNext.MaxRetention() {
+			return fmt.Errorf("lower precision archives must cover larger time intervals than higher precision archives (archive%v: %v seconds, archive%v: %v seconds)", i, a.MaxRetention(), i+1, rNext.MaxRetention())
 		}
 
-		if r.numberOfPoints < uint32(rNext.secondsPerPoint/r.secondsPerPoint) {
-			return fmt.Errorf("each archive must have at least enough points to consolidate to the next archive (archive%v consolidates %v of archive%v's points but it has only %v total points)", i+1, rNext.secondsPerPoint/r.secondsPerPoint, i, r.numberOfPoints)
+		if a.numberOfPoints < uint32(rNext.secondsPerPoint/a.secondsPerPoint) {
+			return fmt.Errorf("each archive must have at least enough points to consolidate to the next archive (archive%v consolidates %v of archive%v's points but it has only %v total points)", i+1, rNext.secondsPerPoint/a.secondsPerPoint, i, a.numberOfPoints)
 		}
+
+		off += uint32(a.numberOfPoints) * pointSize
 	}
 	return nil
 }

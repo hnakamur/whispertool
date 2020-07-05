@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/hnakamur/whispertool"
-	"golang.org/x/sync/errgroup"
 )
 
 type SumCopyCommand struct {
@@ -30,7 +29,7 @@ func (c *SumCopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.SrcPattern, "src", "", "whisper file glob pattern relative to item directory (ex. *.wsp).")
 	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory")
 	fs.StringVar(&c.DestRelPath, "dest", "", "dest whisper relative filename to item directory (ex. dest.wsp).")
-	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
+	fs.IntVar(&c.RetID, "ret", ArchiveIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
 
 	c.Now = whispertool.TimestampFromStdTime(time.Now())
@@ -83,34 +82,29 @@ func (c *SumCopyCommand) Execute() error {
 func (c *SumCopyCommand) sumCopyItem(item string) error {
 	fmt.Printf("item:%s\n", item)
 
-	var sumDB, destDB *whispertool.Whisper
-	var sumPtsList PointsList
-	var g errgroup.Group
-	g.Go(func() error {
-		var err error
-		sumDB, sumPtsList, err = sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.RetID, c.From, c.Until, c.Now)
+	sumHeader, sumTsList, err := sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.RetID, c.From, c.Until, c.Now)
+	if err != nil {
 		return err
-	})
-	g.Go(func() error {
-		destFullPath := filepath.Join(c.DestBase, item, c.DestRelPath)
-		var err error
-		destDB, err = openOrCreateCopyDestFile(destFullPath, sumDB)
+
+	}
+	destFullPath := filepath.Join(c.DestBase, item, c.DestRelPath)
+	destDB, err := openOrCreateCopyDestFile(destFullPath, sumHeader)
+	if err != nil {
 		return err
-	})
-	if err := g.Wait(); err != nil {
-		return err
+
 	}
 	defer destDB.Close()
 
-	if !sumDB.Retentions().Equal(destDB.Retentions()) {
+	if !sumHeader.ArchiveInfoList().Equal(destDB.Header().ArchiveInfoList()) {
 		return errors.New("retentions unmatch between src and dest whisper files")
 	}
 
+	sumPtsList := sumTsList.PointsList()
 	if err := updateFileDataWithPointsList(destDB, sumPtsList, c.Now); err != nil {
 		return err
 	}
 
-	if err := printFileData(c.TextOut, sumDB, sumPtsList, true); err != nil {
+	if err := printFileData(c.TextOut, sumHeader, sumPtsList, true); err != nil {
 		return err
 	}
 

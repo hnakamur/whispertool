@@ -81,13 +81,19 @@ func (a *app) handleViewRaw(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	filename := filepath.Join(a.baseDir, fileParam)
-	d, _, err := readWhisperFileRawLocal(filename, retID)
+	h, ptsList, err := readWhisperFileRawLocal(filename, retID)
 	if err != nil {
 		return err
 	}
 
+	var buf []byte
+	buf = h.AppendTo(buf)
+	for i := range h.ArchiveInfoList() {
+		buf = ptsList[i].AppendTo(buf)
+	}
+
 	w.Header().Set("Content-Type", "application/octet-stream")
-	_, err = w.Write(d.RawData())
+	_, err = w.Write(buf)
 	if err != nil {
 		return err
 	}
@@ -120,13 +126,19 @@ func (a *app) handleView(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	filename := filepath.Join(a.baseDir, fileParam)
-	d, _, err := readWhisperFileLocal(filename, retID, from, until, now)
+	h, tsList, err := readWhisperFileLocal(filename, retID, from, until, now)
 	if err != nil {
 		return err
 	}
 
+	var buf []byte
+	buf = h.AppendTo(buf)
+	for i := range h.ArchiveInfoList() {
+		buf = tsList[i].AppendTo(buf)
+	}
+
 	w.Header().Set("Content-Type", "application/octet-stream")
-	_, err = w.Write(d.RawData())
+	_, err = w.Write(buf)
 	if err != nil {
 		return err
 	}
@@ -162,17 +174,19 @@ func (a *app) handleSum(w http.ResponseWriter, r *http.Request) error {
 		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse \"now\" parameter"))
 	}
 
-	sumDB, ptsList, err := sumWhisperFileLocal(a.baseDir, item, pattern, retID, from, until, now)
+	h, tsList, err := sumWhisperFileLocal(a.baseDir, item, pattern, retID, from, until, now)
 	if err != nil {
 		return err
 	}
 
-	if err := updateFileDataWithPointsList(sumDB, ptsList, now); err != nil {
-		return err
+	var buf []byte
+	buf = h.AppendTo(buf)
+	for i := range h.ArchiveInfoList() {
+		buf = tsList[i].AppendTo(buf)
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
-	_, err = w.Write(sumDB.RawData())
+	_, err = w.Write(buf)
 	if err != nil {
 		return err
 	}

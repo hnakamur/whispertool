@@ -3,6 +3,8 @@ package cmd
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"sort"
@@ -28,7 +30,7 @@ func (c *ViewRawCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.SrcRelPath, "src", "", "whisper file relative path to src base")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
-	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all)")
+	fs.IntVar(&c.RetID, "ret", ArchiveIDAll, "retention ID to diff (-1 is all)")
 	fs.BoolVar(&c.ShowHeader, "header", true, "whether or not to show header (metadata and reteions)")
 	fs.BoolVar(&c.SortsByTime, "sort", false, "whether or not to sorts points by time")
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
@@ -42,45 +44,66 @@ func (c *ViewRawCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *ViewRawCommand) Execute() error {
-	db, pointsList, err := readWhisperFileRaw(c.SrcBase, c.SrcRelPath, c.RetID)
+	h, ptsList, err := readWhisperFileRaw(c.SrcBase, c.SrcRelPath, c.RetID)
 	if err != nil {
 		return err
 	}
 
-	pointsList = filterPointsListByTimeRange(db, pointsList, c.From, c.Until)
+	ptsList = filterPointsListByTimeRange(h, ptsList, c.From, c.Until)
 	if c.SortsByTime {
-		sortPointsListByTime(pointsList)
+		sortPointsListByTime(ptsList)
 	}
 
-	if err := printFileData(c.TextOut, db, pointsList, c.ShowHeader); err != nil {
+	if err := printFileData(c.TextOut, h, ptsList, c.ShowHeader); err != nil {
 		return err
 	}
 	return nil
 }
 
-func readWhisperFileRaw(baseDirOrURL, srcRelPath string, retID int) (*whispertool.Whisper, PointsList, error) {
+func readWhisperFileRaw(baseDirOrURL, srcRelPath string, archiveID int) (*whispertool.Header, PointsList, error) {
 	if isBaseURL(baseDirOrURL) {
-		return readWhisperFileRawRemote(baseDirOrURL, srcRelPath, retID)
+		return readWhisperFileRawRemote(baseDirOrURL, srcRelPath, archiveID)
 	}
-	return readWhisperFileRawLocal(filepath.Join(baseDirOrURL, srcRelPath), retID)
+	return readWhisperFileRawLocal(filepath.Join(baseDirOrURL, srcRelPath), archiveID)
 }
 
-func readWhisperFileRawRemote(srcURL, srcRelPath string, retID int) (*whispertool.Whisper, PointsList, error) {
+func readWhisperFileRawRemote(srcURL, srcRelPath string, archiveID int) (*whispertool.Header, PointsList, error) {
 	reqURL := fmt.Sprintf("%s/view-raw?file=%s&retention=%d",
-		srcURL, url.QueryEscape(srcRelPath), retID)
-	db, err := getFileDataFromRemote(reqURL)
+		srcURL, url.QueryEscape(srcRelPath), archiveID)
+	h, ptsList, err := getRawFileDataFromRemote(reqURL)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	ptsList, err := fetchRawPointsLists(db, retID)
-	if err != nil {
-		return nil, nil, err
-	}
-	return db, ptsList, nil
+	return h, ptsList, nil
 }
 
-func readWhisperFileRawLocal(filename string, retID int) (*whispertool.Whisper, PointsList, error) {
+func getRawFileDataFromRemote(reqURL string) (*whispertool.Header, PointsList, error) {
+	resp, err := http.Get(reqURL)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	h := &whispertool.Header{}
+	if data, err = h.TakeFrom(data); err != nil {
+		return nil, nil, err
+	}
+
+	ptsList := make(PointsList, len(h.ArchiveInfoList()))
+	for i := range h.ArchiveInfoList() {
+		if data, err = ptsList[i].TakeFrom(data); err != nil {
+			return nil, nil, err
+		}
+	}
+	return h, ptsList, nil
+}
+
+func readWhisperFileRawLocal(filename string, retID int) (*whispertool.Header, PointsList, error) {
 	db, err := whispertool.Open(filename)
 	if err != nil {
 		return nil, nil, err
@@ -91,27 +114,34 @@ func readWhisperFileRawLocal(filename string, retID int) (*whispertool.Whisper, 
 	if err != nil {
 		return nil, nil, err
 	}
-	return db, ptsList, nil
+	return db.Header(), ptsList, nil
 }
 
-func fetchRawPointsLists(db *whispertool.Whisper, retID int) (PointsList, error) {
-	pointsList := make([]whispertool.Points, len(db.Retentions()))
-	if retID == RetIDAll {
-		for i := range db.Retentions() {
-			pointsList[i] = db.GetAllRawUnsortedPoints(i)
+func fetchRawPointsLists(db *whispertool.Whisper, archiveID int) (PointsList, error) {
+	ptsList := make(PointsList, len(db.ArchiveInfoList()))
+	var err error
+	if archiveID == ArchiveIDAll {
+		for i := range db.ArchiveInfoList() {
+			ptsList[i], err = db.GetAllRawUnsortedPoints(i)
+			if err != nil {
+				return nil, err
+			}
 		}
-	} else if retID >= 0 && retID < len(db.Retentions()) {
-		pointsList[retID] = db.GetAllRawUnsortedPoints(retID)
+	} else if archiveID >= 0 && archiveID < len(db.ArchiveInfoList()) {
+		ptsList[archiveID], err = db.GetAllRawUnsortedPoints(archiveID)
+		if err != nil {
+			return nil, err
+		}
 	} else {
-		return nil, whispertool.ErrRetentionIDOutOfRange
+		return nil, whispertool.ErrArchiveIDOutOfRange
 	}
-	return pointsList, nil
+	return ptsList, nil
 }
 
-func filterPointsListByTimeRange(d *whispertool.Whisper, pointsList PointsList, from, until whispertool.Timestamp) PointsList {
+func filterPointsListByTimeRange(h *whispertool.Header, pointsList PointsList, from, until whispertool.Timestamp) PointsList {
 	pointsList2 := make([]whispertool.Points, len(pointsList))
-	for i := range d.Retentions() {
-		r := &d.Retentions()[i]
+	for i := range h.ArchiveInfoList() {
+		r := &h.ArchiveInfoList()[i]
 		pointsList2[i] = filterPointsByTimeRange(r, pointsList[i], from, until)
 	}
 	return pointsList2

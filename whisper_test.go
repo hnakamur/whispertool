@@ -6,33 +6,17 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"math"
 	"math/rand"
 	"os"
-	"reflect"
 	"sort"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/willf/bitset"
 )
 
-func TestDirtyPageRanges(t *testing.T) {
-	b := bitset.New(9)
-	b.Set(0).Set(1).Set(3).Set(6).Set(7).Set(8)
-	got := dirtyPageRanges(b)
-	want := []pageRange{
-		{start: 0, end: 2},
-		{start: 3, end: 4},
-		{start: 6, end: 9},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("ranges unmatch, got=%+v, want=%+v", got, want)
-	}
-}
-
-func TestRetention_pointIndex(t *testing.T) {
+func TestArchiveInfo_pointIndex(t *testing.T) {
 	r := &ArchiveInfo{
 		secondsPerPoint: Second,
 		numberOfPoints:  5,
@@ -110,7 +94,7 @@ func TestRetention_pointIndex(t *testing.T) {
 	}
 }
 
-func TestFileDataWriteReadHigestRetention(t *testing.T) {
+func TestFileDataWriteReadHigestArchive(t *testing.T) {
 	retentionDefs := "1m:2h,1h:2d,1d:30d"
 
 	testCases := []struct {
@@ -123,12 +107,21 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 		tc := tc
 		t.Run("now_"+tc.now.String(), func(t *testing.T) {
 			t.Parallel()
-			retentions, err := ParseArchiveInfoList(retentionDefs)
+
+			file, err := ioutil.TempFile("", "whispertool-test-*.wsp")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				os.Remove(file.Name())
+			})
+
+			archiveInfoList, err := ParseArchiveInfoList(retentionDefs)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			db, err := Create("", retentions, Sum, 0, WithInMemory())
+			db, err := Create(file.Name(), archiveInfoList, Sum, 0, WithOpenFileFlag(os.O_RDWR))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -137,14 +130,17 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 			tsNow := tc.now
 			tsUntil := tsNow
 			const randMax = 100
-			pointsList := randomPointsList(retentions, rnd, randMax, tsUntil, tsNow)
+			pointsList := randomPointsList(archiveInfoList, rnd, randMax, tsUntil, tsNow)
 			if err := updateFileDataWithPointsList(db, pointsList, tsNow); err != nil {
 				t.Fatal(err)
 			}
 
-			gotPointsList := make([]Points, len(db.Retentions()))
-			for retID := range db.Retentions() {
-				gotPointsList[retID] = db.GetAllRawUnsortedPoints(retID)
+			gotPointsList := make([]Points, len(db.ArchiveInfoList()))
+			for retID := range db.ArchiveInfoList() {
+				gotPointsList[retID], err = db.GetAllRawUnsortedPoints(retID)
+				if err != nil {
+					t.Fatal(err)
+				}
 			}
 			sortPointsListByTime(gotPointsList)
 
@@ -161,7 +157,7 @@ func TestFileDataWriteReadHigestRetention(t *testing.T) {
 			}
 
 			retID := 0
-			r := &db.Retentions()[retID]
+			r := &db.ArchiveInfoList()[retID]
 			tsFrom := tsNow.Truncate(Minute).Add(-5 * Minute)
 			tsUntil = tsFrom.Add(Minute)
 			ts, err := db.FetchFromArchive(retID, tsFrom, tsUntil, tsNow)
@@ -286,7 +282,7 @@ func randomValWithHighSum(t Timestamp, rnd *rand.Rand, highRndMax int, r, highRe
 }
 
 func updateFileDataWithPointsList(db *Whisper, pointsList []Points, now Timestamp) error {
-	for retID := range db.Retentions() {
+	for retID := range db.ArchiveInfoList() {
 		if err := db.UpdatePointsForArchive(pointsList[retID], retID, now); err != nil {
 			return err
 		}
@@ -370,22 +366,21 @@ func TestCreateCreatesFile(t *testing.T) {
 		0x00, 0x00, 0x0f, 0xac, // offset
 		0x00, 0x00, 0x01, 0x2c, // secondsPerPoint
 		0x00, 0x00, 0x00, 0x0c} // numberOfPoints
-	os.Remove(path)
-	whisper, err := Create(path, retentions, Average, 0.5)
+	whisper, err := Create(path, retentions, Average, 0.5, WithOpenFileFlag(os.O_RDWR))
 	if err != nil {
 		t.Fatalf("failed to create whisper file: %v", err)
 	}
-	if whisper.meta.aggregationMethod != Average {
-		t.Errorf("Unexpected aggregationMethod %v, expected %v", whisper.meta.aggregationMethod, Average)
+	if whisper.AggregationMethod() != Average {
+		t.Errorf("Unexpected aggregationMethod %v, expected %v", whisper.AggregationMethod(), Average)
 	}
-	if whisper.meta.maxRetention != 3600 {
-		t.Errorf("Unexpected maxRetention %v, expected 3600", whisper.meta.maxRetention)
+	if whisper.MaxRetention() != 3600 {
+		t.Errorf("Unexpected maxRetention %v, expected 3600", whisper.MaxRetention())
 	}
-	if whisper.meta.xFilesFactor != 0.5 {
-		t.Errorf("Unexpected xFilesFactor %v, expected 0.5", whisper.meta.xFilesFactor)
+	if whisper.XFilesFactor() != 0.5 {
+		t.Errorf("Unexpected xFilesFactor %v, expected 0.5", whisper.XFilesFactor())
 	}
-	if len(whisper.retentions) != 3 {
-		t.Errorf("Unexpected archive count %v, expected 3", len(whisper.retentions))
+	if len(whisper.ArchiveInfoList()) != 3 {
+		t.Errorf("Unexpected archive count %v, expected 3", len(whisper.ArchiveInfoList()))
 	}
 	if err := whisper.Sync(); err != nil {
 		t.Fatalf("failed to sync whisper file: %v", err)
@@ -430,7 +425,7 @@ func TestCreateCreatesFile(t *testing.T) {
 
 func TestCreateFileAlreadyExists(t *testing.T) {
 	path, retentions := setUpCreate(t)
-	_, err := Create(path, retentions, Average, 0.5)
+	_, err := Create(path, retentions, Average, 0.5, WithOpenFileFlag(os.O_RDWR))
 	if err == nil {
 		t.Fatalf("Existing file should cause create to fail.")
 	}
@@ -440,7 +435,7 @@ func TestCreateFileInvalidRetentionDefs(t *testing.T) {
 	path, retentions := setUpCreate(t)
 	// Add a small retention def on the end
 	retentions = append(retentions, ArchiveInfo{secondsPerPoint: 1, numberOfPoints: 200})
-	_, err := Create(path, retentions, Average, 0.5)
+	_, err := Create(path, retentions, Average, 0.5, WithOpenFileFlag(os.O_RDWR))
 	if err == nil {
 		t.Fatalf("Invalid retention definitions should cause create to fail.")
 	}
@@ -448,11 +443,11 @@ func TestCreateFileInvalidRetentionDefs(t *testing.T) {
 
 func TestOpenFile(t *testing.T) {
 	path, retentions := setUpCreate(t)
-	os.Remove(path)
-	whisper1, err := Create(path, retentions, Average, 0.5)
+	whisper1, err := Create(path, retentions, Average, 0.5, WithOpenFileFlag(os.O_RDWR), WithoutFlock())
 	if err != nil {
 		t.Errorf("Failed to create: %v", err)
 	}
+	log.Print("TestOpenFile after create whisper1")
 
 	// write some points
 	now := TimestampFromStdTime(time.Now())
@@ -461,14 +456,17 @@ func TestOpenFile(t *testing.T) {
 			t.Fatalf("failed to update a point in database: %v", err)
 		}
 	}
+	log.Print("TestOpenFile before sync whisper1")
 	if err := whisper1.Sync(); err != nil {
 		t.Fatalf("failed to sync whisper1: %v", err)
 	}
+	log.Print("TestOpenFile after sync whisper1")
 
-	whisper2, err := Open(path)
+	whisper2, err := Open(path, WithoutFlock())
 	if err != nil {
 		t.Fatalf("Failed to open whisper file: %v", err)
 	}
+	log.Print("TestOpenFile after open whisper2")
 	if whisper1.AggregationMethod() != whisper2.AggregationMethod() {
 		t.Errorf("AggregationMethod() did not match, expected %v, received %v", whisper1.AggregationMethod(), whisper2.AggregationMethod())
 	}
@@ -478,18 +476,18 @@ func TestOpenFile(t *testing.T) {
 	if whisper1.XFilesFactor() != whisper2.XFilesFactor() {
 		t.Errorf("XFilesFactor() did not match, expected %v, received %v", whisper1.XFilesFactor(), whisper2.XFilesFactor())
 	}
-	if len(whisper1.Retentions()) != len(whisper2.Retentions()) {
-		t.Errorf("archive count does not match, expected %v, received %v", len(whisper1.Retentions()), len(whisper2.Retentions()))
+	if len(whisper1.ArchiveInfoList()) != len(whisper2.ArchiveInfoList()) {
+		t.Errorf("archive count does not match, expected %v, received %v", len(whisper1.ArchiveInfoList()), len(whisper2.ArchiveInfoList()))
 	}
-	for i := range whisper1.Retentions() {
-		if whisper1.Retentions()[i].offset != whisper2.Retentions()[i].offset {
-			t.Errorf("archive mismatch offset at %v [%v, %v]", i, whisper1.Retentions()[i].offset, whisper2.Retentions()[i].offset)
+	for i := range whisper1.ArchiveInfoList() {
+		if whisper1.ArchiveInfoList()[i].offset != whisper2.ArchiveInfoList()[i].offset {
+			t.Errorf("archive mismatch offset at %v [%v, %v]", i, whisper1.ArchiveInfoList()[i].offset, whisper2.ArchiveInfoList()[i].offset)
 		}
-		if whisper1.Retentions()[i].secondsPerPoint != whisper2.Retentions()[i].secondsPerPoint {
-			t.Errorf("secondsPerPoint mismatch offset at %v [%v, %v]", i, whisper1.Retentions()[i].secondsPerPoint, whisper2.Retentions()[i].secondsPerPoint)
+		if whisper1.ArchiveInfoList()[i].secondsPerPoint != whisper2.ArchiveInfoList()[i].secondsPerPoint {
+			t.Errorf("secondsPerPoint mismatch offset at %v [%v, %v]", i, whisper1.ArchiveInfoList()[i].secondsPerPoint, whisper2.ArchiveInfoList()[i].secondsPerPoint)
 		}
-		if whisper1.Retentions()[i].numberOfPoints != whisper2.Retentions()[i].numberOfPoints {
-			t.Errorf("numberOfPoints mismatch offset at %v [%v, %v]", i, whisper1.Retentions()[i].numberOfPoints, whisper2.Retentions()[i].numberOfPoints)
+		if whisper1.ArchiveInfoList()[i].numberOfPoints != whisper2.ArchiveInfoList()[i].numberOfPoints {
+			t.Errorf("numberOfPoints mismatch offset at %v [%v, %v]", i, whisper1.ArchiveInfoList()[i].numberOfPoints, whisper2.ArchiveInfoList()[i].numberOfPoints)
 		}
 
 	}
@@ -498,10 +496,12 @@ func TestOpenFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error retrieving result from created whisper: %v", err)
 	}
+	log.Print("TestOpenFile after fetch whisper1")
 	result2, err := whisper2.Fetch(now-3, now)
 	if err != nil {
 		t.Fatalf("Error retrieving result from opened whisper: %v", err)
 	}
+	log.Print("TestOpenFile after fetch whisper2")
 
 	pts1 := result1.Points()
 	pts2 := result2.Points()
@@ -540,8 +540,7 @@ func testCreateUpdateFetch(t *testing.T, aggregationMethod AggregationMethod, xF
 	var whisper *Whisper
 	var err error
 	path, archiveList := setUpCreate(t)
-	os.Remove(path)
-	whisper, err = Create(path, archiveList, aggregationMethod, xFilesFactor)
+	whisper, err = Create(path, archiveList, aggregationMethod, xFilesFactor, WithOpenFileFlag(os.O_RDWR))
 	if err != nil {
 		t.Fatalf("Failed create: %v", err)
 	}
@@ -609,8 +608,7 @@ func test_aggregate(t *testing.T, method AggregationMethod, expected Value) {
 
 func TestFetchEmptyTimeseries(t *testing.T) {
 	path, archiveList := setUpCreate(t)
-	os.Remove(path)
-	whisper, err := Create(path, archiveList, Sum, 0.5)
+	whisper, err := Create(path, archiveList, Sum, 0.5, WithOpenFileFlag(os.O_RDWR))
 	if err != nil {
 		t.Fatalf("Failed create: %v", err)
 	}
@@ -666,8 +664,7 @@ func testCreateUpdateManyFetch(t *testing.T, aggregationMethod AggregationMethod
 	var whisper *Whisper
 	var err error
 	path, archiveList := setUpCreate(t)
-	os.Remove(path)
-	whisper, err = Create(path, archiveList, aggregationMethod, xFilesFactor)
+	whisper, err = Create(path, archiveList, aggregationMethod, xFilesFactor, WithOpenFileFlag(os.O_RDWR))
 	if err != nil {
 		t.Fatalf("Failed create: %v", err)
 	}
@@ -712,8 +709,7 @@ func TestCreateUpdateManyOnly_old_points(t *testing.T) {
 	points := makeBadPoints(1, 10000)
 
 	path, archiveList := setUpCreate(t)
-	os.Remove(path)
-	whisper, err := Create(path, archiveList, Sum, 0.5)
+	whisper, err := Create(path, archiveList, Sum, 0.5, WithOpenFileFlag(os.O_RDWR))
 	if err != nil {
 		t.Fatalf("Failed create: %v", err)
 	}
@@ -783,8 +779,7 @@ func TestUpdateManyWithManyRetentions(t *testing.T) {
 	valueMin := 41
 	valueMax := 43
 
-	os.Remove(path)
-	whisper, err := Create(path, archiveList, Average, 0.5)
+	whisper, err := Create(path, archiveList, Average, 0.5, WithOpenFileFlag(os.O_RDWR))
 	if err != nil {
 		t.Fatalf("Failed create: %v", err)
 	}
@@ -1009,18 +1004,18 @@ retID:0	from:2020-07-03T06:00:43Z	until:2020-07-03T06:00:51Z	step:1s	values:32 6
 retID:1	from:2020-07-03T06:00:20Z	until:2020-07-03T06:00:52Z	step:4s	values:NaN NaN NaN NaN 3 60 960 7168
 retID:2	from:2020-07-03T06:00:00Z	until:2020-07-03T06:01:04Z	step:16s	values:NaN NaN 1023 7168`,
 	}
-	db := testCreateInMemoryDB(t, "1s:8s,4s:32s,16s:64s", Sum, 0)
-	updateRetID := 0
+	db := testCreateDB(t, "1s:8s,4s:32s,16s:64s", Sum, 0)
+	archiveID := 0
 	v := Value(1)
 	for i, want := range wants {
-		if err := db.UpdatePointForArchive(updateRetID, now, v, now); err != nil {
+		if err := db.UpdatePointForArchive(archiveID, now, v, now); err != nil {
 			t.Fatal(err)
 		}
 
 		tsList := testFetchAllPoints(t, db, now)
 		got := fmt.Sprintf("now:%s\n%s", now, timeSeriesListString(tsList))
 		if got != want {
-			t.Errorf("time series unmatch, i=%d, got=\n%q, want=\n%q", i, got, want)
+			t.Errorf("time series unmatch, i=%d,\n gotQuoted=%q,\nwantQuoted=%q,\n got=%s,\nwant=%s", i, got, want, got, want)
 		}
 
 		now = now.Add(Second)
@@ -1055,15 +1050,22 @@ func timeSeriesListString(tsList []*TimeSeries) string {
 	return b.String()
 }
 
-func testCreateInMemoryDB(t *testing.T, retentionDefs string, aggMethod AggregationMethod, xFilesFactor float32) *Whisper {
+func testCreateDB(t *testing.T, archiveInfoListDefs string, aggMethod AggregationMethod, xFilesFactor float32) *Whisper {
 	t.Helper()
 
-	retentions, err := ParseArchiveInfoList(retentionDefs)
+	archiveInfoList, err := ParseArchiveInfoList(archiveInfoListDefs)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	db, err := Create("", retentions, aggMethod, xFilesFactor, WithInMemory())
+	file, err := ioutil.TempFile("", "whispertool-test-*.wsp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		os.Remove(file.Name())
+	})
+	db, err := Create(file.Name(), archiveInfoList, aggMethod, xFilesFactor, WithOpenFileFlag(os.O_RDWR))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1072,30 +1074,30 @@ func testCreateInMemoryDB(t *testing.T, retentionDefs string, aggMethod Aggregat
 }
 
 func testFetchAllPoints(t *testing.T, db *Whisper, now Timestamp) []*TimeSeries {
-	tsList := make([]*TimeSeries, len(db.Retentions()))
-	for retID, r := range db.Retentions() {
-		from := now.Add(-r.MaxRetention())
+	tsList := make([]*TimeSeries, len(db.ArchiveInfoList()))
+	for archiveID, a := range db.ArchiveInfoList() {
+		from := now.Add(-a.MaxRetention())
 		until := now
-		ts, err := db.FetchFromArchive(retID, from, until, now)
+		ts, err := db.FetchFromArchive(archiveID, from, until, now)
 		if err != nil {
 			t.Fatal(err)
 		}
-		tsList[retID] = ts
+		tsList[archiveID] = ts
 	}
 
-	for retID, r := range db.Retentions() {
-		ts := tsList[retID]
-		if got, want := len(ts.Points()), int(r.NumberOfPoints()); got != want {
-			t.Errorf("points length unmatched, now=%s, retID=%d, got=%d, want=%d", now, retID, got, want)
+	for archiveID, a := range db.ArchiveInfoList() {
+		ts := tsList[archiveID]
+		if got, want := len(ts.Points()), int(a.NumberOfPoints()); got != want {
+			t.Errorf("points length unmatched, now=%s, retID=%d, got=%d, want=%d", now, archiveID, got, want)
 		}
-		if got, want := ts.FromTime(), r.interval(now.Add(-r.MaxRetention())); got != want {
-			t.Errorf("fromTime unmatched, now=%s, retID=%d, got=%s, want=%s", now, retID, got, want)
+		if got, want := ts.FromTime(), a.interval(now.Add(-a.MaxRetention())); got != want {
+			t.Errorf("fromTime unmatched, now=%s, retID=%d, got=%s, want=%s", now, archiveID, got, want)
 		}
-		if got, want := ts.UntilTime(), r.interval(now); got != want {
-			t.Errorf("until unmatched, now=%s, retID=%d, got=%s, want=%s", now, retID, got, want)
+		if got, want := ts.UntilTime(), a.interval(now); got != want {
+			t.Errorf("until unmatched, now=%s, retID=%d, got=%s, want=%s", now, archiveID, got, want)
 		}
-		if got, want := ts.Step(), r.SecondsPerPoint(); got != want {
-			t.Errorf("step unmatched, now=%s, retID=%d, got=%s, want=%s", now, retID, got, want)
+		if got, want := ts.Step(), a.SecondsPerPoint(); got != want {
+			t.Errorf("step unmatched, now=%s, retID=%d, got=%s, want=%s", now, archiveID, got, want)
 		}
 	}
 	return tsList

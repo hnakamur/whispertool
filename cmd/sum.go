@@ -32,7 +32,7 @@ func (c *SumCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.SrcBase, "src-base", "", "src base directory or URL of \"whispertool server\"")
 	fs.StringVar(&c.ItemPattern, "item", "", "item directory glob pattern relative to src base")
 	fs.StringVar(&c.SrcPattern, "src", "", "whisper file glob pattern relative to item directory (ex. *.wsp).")
-	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
+	fs.IntVar(&c.RetID, "ret", ArchiveIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
 	fs.BoolVar(&c.ShowHeader, "header", true, "whether or not to show header (metadata and reteions)")
 
@@ -66,11 +66,11 @@ func (c *SumCommand) Execute() error {
 	}
 	for _, item := range items {
 		fmt.Printf("item:%s\n", item)
-		db, ptsList, err := sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.RetID, c.From, c.Until, c.Now)
+		h, tsList, err := sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.RetID, c.From, c.Until, c.Now)
 		if err != nil {
 			return err
 		}
-		if err := printFileData(c.TextOut, db, ptsList, c.ShowHeader); err != nil {
+		if err := printFileData(c.TextOut, h, tsList.PointsList(), c.ShowHeader); err != nil {
 			return err
 		}
 	}
@@ -133,14 +133,14 @@ func globItemsRemote(srcURL, itemRelDirPattern string) ([]string, error) {
 	return items, nil
 }
 
-func sumWhisperFile(baseDirOrURL, item, srcPattern string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {
+func sumWhisperFile(baseDirOrURL, item, srcPattern string, archiveID int, from, until, now whispertool.Timestamp) (*whispertool.Header, TimeSeriesList, error) {
 	if isBaseURL(baseDirOrURL) {
-		return sumWhisperFileRemote(baseDirOrURL, item, srcPattern, retID, from, until, now)
+		return sumWhisperFileRemote(baseDirOrURL, item, srcPattern, archiveID, from, until, now)
 	}
-	return sumWhisperFileLocal(baseDirOrURL, item, srcPattern, retID, from, until, now)
+	return sumWhisperFileLocal(baseDirOrURL, item, srcPattern, archiveID, from, until, now)
 }
 
-func sumWhisperFileLocal(baseDir, item, srcPattern string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {
+func sumWhisperFileLocal(baseDir, item, srcPattern string, archiveID int, from, until, now whispertool.Timestamp) (*whispertool.Header, TimeSeriesList, error) {
 	itemRelDir := itemToRelDir(item)
 	srcFullPattern := filepath.Join(baseDir, itemRelDir, srcPattern)
 	srcFilenames, err := filepath.Glob(srcFullPattern)
@@ -151,8 +151,8 @@ func sumWhisperFileLocal(baseDir, item, srcPattern string, retID int, from, unti
 		return nil, nil, fmt.Errorf("no file matched for -src=%s", srcPattern)
 	}
 
-	srcDBList := make([]*whispertool.Whisper, len(srcFilenames))
-	ptsListList := make([]PointsList, len(srcFilenames))
+	hList := make([]*whispertool.Header, len(srcFilenames))
+	tsListList := make([]TimeSeriesList, len(srcFilenames))
 	var g errgroup.Group
 	for i, srcFilename := range srcFilenames {
 		i := i
@@ -162,13 +162,13 @@ func sumWhisperFileLocal(baseDir, item, srcPattern string, retID int, from, unti
 			if err != nil {
 				return err
 			}
-			db, ptsList, err := readWhisperFile(baseDir, srcRelPath, retID, from, until, now)
+			db, ptsList, err := readWhisperFile(baseDir, srcRelPath, archiveID, from, until, now)
 			if err != nil {
 				return err
 			}
 
-			srcDBList[i] = db
-			ptsListList[i] = ptsList
+			hList[i] = db
+			tsListList[i] = ptsList
 			return nil
 		})
 	}
@@ -176,72 +176,66 @@ func sumWhisperFileLocal(baseDir, item, srcPattern string, retID int, from, unti
 		return nil, nil, err
 	}
 
-	for i := 1; i < len(srcDBList); i++ {
-		if !srcDBList[0].Retentions().Equal(srcDBList[i].Retentions()) {
+	for i := 1; i < len(hList); i++ {
+		if !hList[0].ArchiveInfoList().Equal(hList[i].ArchiveInfoList()) {
 			return nil, nil, fmt.Errorf("%s and %s archive confiugrations are unalike. "+
 				"Resize the input before summing", srcFilenames[0], srcFilenames[i])
 		}
 	}
-
-	srcDB0 := srcDBList[0]
-	sumDB, err := whispertool.Create("", srcDB0.Retentions(), srcDB0.AggregationMethod(), srcDB0.XFilesFactor(),
-		whispertool.WithInMemory())
-	if err != nil {
-		return nil, nil, err
+	for i := 1; i < len(tsListList); i++ {
+		if !tsListList[0].AllEqualTimeRangeAndStep(tsListList[i]) {
+			return nil, nil, fmt.Errorf("%s and %s timeseries time ranges and steps are unalike. "+
+				"Retry reading input files before summing", srcFilenames[0], srcFilenames[i])
+		}
 	}
 
-	sumPtsList := sumPointsLists(ptsListList)
+	tsList := sumTimeSeriesListList(tsListList)
 
-	return sumDB, sumPtsList, nil
+	return hList[0], tsList, nil
 }
 
-func sumWhisperFileRemote(srcURL, item, srcPattern string, retID int, from, until, now whispertool.Timestamp) (*whispertool.Whisper, PointsList, error) {
+func sumWhisperFileRemote(srcURL, item, srcPattern string, archiveID int, from, until, now whispertool.Timestamp) (*whispertool.Header, TimeSeriesList, error) {
 	reqURL := fmt.Sprintf("%s/sum?item=%s&pattern=%s&retention=%d&from=%s&until=%s&now=%s",
 		srcURL,
 		url.QueryEscape(item),
 		url.QueryEscape(srcPattern),
-		retID,
+		archiveID,
 		url.QueryEscape(from.String()),
 		url.QueryEscape(until.String()),
 		url.QueryEscape(now.String()))
-	db, err := getFileDataFromRemote(reqURL)
+	h, tsList, err := getFileDataFromRemote(reqURL)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	pointsList, err := fetchPointsList(db, retID, from, until, now)
-	if err != nil {
-		return nil, nil, err
-	}
-	return db, pointsList, nil
+	return h, tsList, nil
 }
 
-func sumPointsLists(ptsListList []PointsList) PointsList {
-	if len(ptsListList) == 0 {
+func sumTimeSeriesListList(tsListList []TimeSeriesList) TimeSeriesList {
+	if len(tsListList) == 0 {
 		return nil
 	}
-	retentionCount := len(ptsListList[0])
-	sumPtsList := make([]whispertool.Points, retentionCount)
-	for retID := range sumPtsList {
-		sumPtsList[retID] = sumPointsListsForRetention(ptsListList, retID)
+	archiveCount := len(tsListList[0])
+	sumTsList := make(TimeSeriesList, archiveCount)
+	for archiveID := range sumTsList {
+		sumTsList[archiveID] = sumTimeSeriesListForArchive(tsListList, archiveID)
 	}
-	return sumPtsList
+	return sumTsList
 }
 
-func sumPointsListsForRetention(ptsListList []PointsList, retID int) []whispertool.Point {
-	if len(ptsListList) == 0 {
+func sumTimeSeriesListForArchive(tsListList []TimeSeriesList, archiveID int) *whispertool.TimeSeries {
+	if len(tsListList) == 0 {
 		return nil
 	}
-	ptsCount := len(ptsListList[0][retID])
-	sumPoints := make([]whispertool.Point, ptsCount)
-	for i := range ptsListList {
-		for j := range sumPoints {
+	ts0 := tsListList[0][archiveID]
+	sumValues := make([]whispertool.Value, len(ts0.Values()))
+	for i := range tsListList {
+		for j := range sumValues {
 			if i == 0 {
-				sumPoints[j] = ptsListList[i][retID][j]
+				sumValues[j] = tsListList[i][archiveID].Values()[j]
 			} else {
-				sumPoints[j].Value = sumPoints[j].Value.Add(ptsListList[i][retID][j].Value)
+				sumValues[j] = sumValues[j].Add(tsListList[i][archiveID].Values()[j])
 			}
 		}
 	}
-	return sumPoints
+	return whispertool.NewTimeSeries(ts0.FromTime(), ts0.UntilTime(), ts0.Step(), sumValues)
 }

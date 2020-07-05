@@ -27,7 +27,7 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.SrcRelPath, "src", "", "whisper file relative path to src base")
 	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory or URL of \"whispertool server\"")
 	fs.StringVar(&c.DestRelPath, "dest", "", "whisper file relative path to dest base")
-	fs.IntVar(&c.RetID, "ret", RetIDAll, "retention ID to diff (-1 is all).")
+	fs.IntVar(&c.RetID, "ret", ArchiveIDAll, "retention ID to diff (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
 
 	c.Now = whispertool.TimestampFromStdTime(time.Now())
@@ -60,27 +60,27 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *CopyCommand) Execute() error {
-	srcDB, srcPtsList, err := readWhisperFile(c.SrcBase, c.SrcRelPath, c.RetID, c.From, c.Until, c.Now)
+	srcHeader, srcTsList, err := readWhisperFile(c.SrcBase, c.SrcRelPath, c.RetID, c.From, c.Until, c.Now)
 	if err != nil {
 		return err
 	}
 
 	destFullPath := filepath.Join(c.DestBase, c.DestRelPath)
-	destDB, err := openOrCreateCopyDestFile(destFullPath, srcDB)
+	destDB, err := openOrCreateCopyDestFile(destFullPath, srcHeader)
 	if err != nil {
 		return err
 	}
 	defer destDB.Close()
 
-	if !srcDB.Retentions().Equal(destDB.Retentions()) {
-		return errors.New("retentions unmatch between src and dest whisper files")
+	if !srcHeader.ArchiveInfoList().Equal(destDB.ArchiveInfoList()) {
+		return errors.New("archive info list unmatch between src and dest whisper files")
 	}
 
-	if err := updateFileDataWithPointsList(destDB, srcPtsList, c.Now); err != nil {
+	if err := updateFileDataWithPointsList(destDB, srcTsList.PointsList(), c.Now); err != nil {
 		return err
 	}
 
-	if err := printFileData(c.TextOut, srcDB, srcPtsList, true); err != nil {
+	if err := printFileData(c.TextOut, srcHeader, srcTsList.PointsList(), true); err != nil {
 		return err
 	}
 
@@ -90,15 +90,15 @@ func (c *CopyCommand) Execute() error {
 	return nil
 }
 
-func openOrCreateCopyDestFile(filename string, srcDB *whispertool.Whisper) (*whispertool.Whisper, error) {
-	destDB, err := whispertool.Open(filename, whispertool.WithFlock())
+func openOrCreateCopyDestFile(filename string, srcHeader *whispertool.Header) (*whispertool.Whisper, error) {
+	destDB, err := whispertool.Open(filename)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
 
-		destDB, err = whispertool.Create(filename, srcDB.Retentions(),
-			srcDB.AggregationMethod(), srcDB.XFilesFactor(), whispertool.WithFlock())
+		destDB, err = whispertool.Create(filename, srcHeader.ArchiveInfoList(),
+			srcHeader.AggregationMethod(), srcHeader.XFilesFactor())
 		if err != nil {
 			return nil, err
 		}

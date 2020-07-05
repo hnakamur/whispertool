@@ -27,6 +27,16 @@ type Point struct {
 // Value represents a value of Point.
 type Value float64
 
+// NewTimeSeries returns a new TimeSeries.
+func NewTimeSeries(fromTime, untilTime Timestamp, step Duration, values []Value) *TimeSeries {
+	return &TimeSeries{
+		fromTime:  fromTime,
+		untilTime: untilTime,
+		step:      step,
+		values:    values,
+	}
+}
+
 // FromTime returns the start time of ts.
 func (ts *TimeSeries) FromTime() Timestamp { return ts.fromTime }
 
@@ -46,6 +56,34 @@ func (ts *TimeSeries) Points() Points {
 		}
 	}
 	return pts
+}
+
+// EqualTimeRangeAndStep returns whether or not all of
+// FromTime(), UntilTime() and Step() are the same
+// between ts and us.
+func (ts *TimeSeries) EqualTimeRangeAndStep(us *TimeSeries) bool {
+	return ts.FromTime() == us.FromTime() &&
+		ts.UntilTime() == us.UntilTime() &&
+		ts.Step() == us.Step()
+}
+
+// DiffPoints returns the different points between ts and us.
+func (ts *TimeSeries) DiffPoints(us *TimeSeries) (Points, Points) {
+	if len(ts.Values()) != len(us.Values()) {
+		return ts.Points(), us.Points()
+	}
+
+	var pp2, qq2 Points
+	for i, tv := range ts.Values() {
+		tt := ts.FromTime().Add(Duration(i) * ts.Step())
+		ut := ts.FromTime().Add(Duration(i) * ts.Step())
+		uv := us.Values()[i]
+		if tt != ut || !tv.Equal(uv) {
+			pp2 = append(pp2, Point{Time: tt, Value: tv})
+			qq2 = append(qq2, Point{Time: ut, Value: uv})
+		}
+	}
+	return pp2, qq2
 }
 
 // Values returns the values in ts.
@@ -163,6 +201,49 @@ func (pp Points) Values() []Value {
 		values[i] = p.Value
 	}
 	return values
+}
+
+// AppendTo appends encoded bytes of pp to dst
+// and returns the extended buffer.
+//
+// AppendTo method implements the AppenderTo interface.
+func (pp *Points) AppendTo(dst []byte) []byte {
+	var b [uint64Size]byte
+	binary.BigEndian.PutUint64(b[:], uint64(len(*pp)))
+	dst = append(dst, b[:]...)
+	for i := range *pp {
+		dst = (*pp)[i].AppendTo(dst)
+	}
+	return dst
+}
+
+// TakeFrom updates pp from encoded bytes in src
+// and returns the rest of src.
+//
+// TakeFrom method implements the TakerFrom interface.
+// If there is an error, it may be of type *WantLargerBufferError.
+func (pp *Points) TakeFrom(src []byte) ([]byte, error) {
+	if len(src) < uint64Size {
+		return nil, &WantLargerBufferError{WantedByteLen: uint64Size - len(src)}
+	}
+
+	count := binary.BigEndian.Uint64(src)
+	src = src[uint64Size:]
+
+	wantSize := count * pointSize
+	if uint64(len(src)) < wantSize {
+		return nil, &WantLargerBufferError{WantedByteLen: int(wantSize - uint64(len(src)))}
+	}
+
+	*pp = make(Points, count)
+	for i := uint64(0); i < count; i++ {
+		var err error
+		src, err = (*pp)[i].TakeFrom(src)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return src, nil
 }
 
 // Equals returns whether or not p equals to q.
