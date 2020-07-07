@@ -106,6 +106,7 @@ func getFileDataFromRemote(reqURL string) (*whispertool.Header, TimeSeriesList, 
 
 	tsList := make(TimeSeriesList, len(h.ArchiveInfoList()))
 	for i := range h.ArchiveInfoList() {
+		tsList[i] = &whispertool.TimeSeries{}
 		if data, err = tsList[i].TakeFrom(data); err != nil {
 			return nil, nil, err
 		}
