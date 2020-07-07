@@ -47,7 +47,7 @@ func (tl TimeSeriesList) AllEqualTimeRangeAndStep(ul TimeSeriesList) bool {
 		return false
 	}
 	for i, ts := range tl {
-		if ts.EqualTimeRangeAndStep(ul[i]) {
+		if !ts.EqualTimeRangeAndStep(ul[i]) {
 			return false
 		}
 	}
