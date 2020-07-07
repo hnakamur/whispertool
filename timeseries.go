@@ -135,9 +135,9 @@ func (ts *TimeSeries) TakeFrom(src []byte) ([]byte, error) {
 	}
 
 	n := int(ts.untilTime.Sub(ts.fromTime) / ts.step)
-	wantedSize := 3*uint32Size + n*float64Size
+	wantedSize := n * float64Size
 	if len(src) < wantedSize {
-		return nil, &WantLargerBufferError{WantedBufSize: wantedSize}
+		return nil, &WantLargerBufferError{WantedBufSize: 3*uint32Size + wantedSize}
 	}
 
 	ts.values = make([]Value, n)
