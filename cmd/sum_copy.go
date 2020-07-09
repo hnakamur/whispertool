@@ -51,6 +51,9 @@ func (c *SumCopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	if c.DestBase == "" {
 		return newRequiredOptionError(fs, "dest-base")
 	}
+	if isBaseURL(c.DestBase) {
+		return errors.New("dest-base must be local directory")
+	}
 	if c.DestRelPath == "" {
 		return newRequiredOptionError(fs, "dest")
 	}

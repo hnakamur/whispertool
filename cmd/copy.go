@@ -50,7 +50,7 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 		return newRequiredOptionError(fs, "dest")
 	}
 	if isBaseURL(c.DestBase) {
-		return errors.New("not implemented yet for remote destination, currently only local destination is supported")
+		return errors.New("dest-base must be local directory")
 	}
 	if c.From > c.Until {
 		return errFromIsAfterUntil

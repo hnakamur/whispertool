@@ -58,7 +58,7 @@ func (c *HoleCommand) Parse(fs *flag.FlagSet, args []string) error {
 		return newRequiredOptionError(fs, "dest")
 	}
 	if isBaseURL(c.DestBase) {
-		return errors.New("not implemented yet for remote destination, currently only local destination is supported")
+		return errors.New("dest-base must be local directory")
 	}
 	if c.EmptyRate < 0 || 1 < c.EmptyRate {
 		return errEmptyRateOutOfBounds
