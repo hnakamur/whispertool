@@ -72,11 +72,6 @@ const sumDiffCmdUsage = `Usage: {{command}} sum-diff [options]
 options:
 `
 
-const holeCmdUsage = `Usage: {{command}} hole [options]
-
-options:
-`
-
 const diffCmdUsage = `Usage: {{command}} diff [options]
 
 options:
@@ -112,8 +107,6 @@ func run() int {
 		err = runSubcommand(args, &cmd.DiffCommand{}, diffCmdUsage)
 	case "generate":
 		err = runSubcommand(args, &cmd.GenerateCommand{}, generateCmdUsage)
-	case "hole":
-		err = runSubcommand(args, &cmd.HoleCommand{}, holeCmdUsage)
 	case "server":
 		err = runSubcommand(args, &cmd.ServerCommand{}, serverCmdUsage)
 	case "sum":
