@@ -18,7 +18,7 @@ type ViewRawCommand struct {
 	SrcRelPath  string
 	From        whispertool.Timestamp
 	Until       whispertool.Timestamp
-	RetID       int
+	ArchiveID   int
 	ShowHeader  bool
 	SortsByTime bool
 	TextOut     string
@@ -30,7 +30,7 @@ func (c *ViewRawCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.SrcRelPath, "src", "", "whisper file relative path to src base")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
-	fs.IntVar(&c.RetID, "ret", ArchiveIDAll, "retention ID to diff (-1 is all)")
+	fs.IntVar(&c.ArchiveID, "archive", ArchiveIDAll, "archive ID (-1 is all).")
 	fs.BoolVar(&c.ShowHeader, "header", true, "whether or not to show header (metadata and reteions)")
 	fs.BoolVar(&c.SortsByTime, "sort", false, "whether or not to sorts points by time")
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
@@ -44,7 +44,7 @@ func (c *ViewRawCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *ViewRawCommand) Execute() error {
-	h, ptsList, err := readWhisperFileRaw(c.SrcBase, c.SrcRelPath, c.RetID)
+	h, ptsList, err := readWhisperFileRaw(c.SrcBase, c.SrcRelPath, c.ArchiveID)
 	if err != nil {
 		return err
 	}

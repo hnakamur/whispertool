@@ -23,7 +23,7 @@ type DiffCommand struct {
 	From        whispertool.Timestamp
 	Until       whispertool.Timestamp
 	Now         whispertool.Timestamp
-	RetID       int
+	ArchiveID   int
 	TextOut     string
 }
 
@@ -32,7 +32,7 @@ func (c *DiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.SrcRelPath, "src", "", "whisper file relative path to src base")
 	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory or URL of \"whispertool server\"")
 	fs.StringVar(&c.DestRelPath, "dest", "", "whisper file relative path to dest base")
-	fs.IntVar(&c.RetID, "ret", ArchiveIDAll, "retention ID to diff (-1 is all).")
+	fs.IntVar(&c.ArchiveID, "archive", ArchiveIDAll, "archive ID (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
 
 	c.Now = whispertool.TimestampFromStdTime(time.Now())
@@ -67,12 +67,12 @@ func (c *DiffCommand) Execute() error {
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
-		srcHeader, srcTsList, err = readWhisperFile(c.SrcBase, c.SrcRelPath, c.RetID, c.From, c.Until, c.Now)
+		srcHeader, srcTsList, err = readWhisperFile(c.SrcBase, c.SrcRelPath, c.ArchiveID, c.From, c.Until, c.Now)
 		return err
 	})
 	eg.Go(func() error {
 		var err error
-		srcHeader, srcTsList, err = readWhisperFile(c.DestBase, c.DestRelPath, c.RetID, c.From, c.Until, c.Now)
+		srcHeader, srcTsList, err = readWhisperFile(c.DestBase, c.DestRelPath, c.ArchiveID, c.From, c.Until, c.Now)
 		return err
 	})
 	if err := eg.Wait(); err != nil {

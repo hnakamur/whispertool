@@ -24,7 +24,7 @@ type SumDiffCommand struct {
 	From        whispertool.Timestamp
 	Until       whispertool.Timestamp
 	Now         whispertool.Timestamp
-	RetID       int
+	ArchiveID   int
 	TextOut     string
 	SumTextOut  string
 	DestTextOut string
@@ -40,7 +40,7 @@ func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.SrcPattern, "src", "", "whisper file glob pattern relative to item directory (ex. *.wsp).")
 	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory or URL of \"whispertool server\"")
 	fs.StringVar(&c.DestRelPath, "dest", "", "dest whisper filename relative to item directory (ex. sum.wsp).")
-	fs.IntVar(&c.RetID, "ret", ArchiveIDAll, "retention ID to diff (-1 is all).")
+	fs.IntVar(&c.ArchiveID, "archive", ArchiveIDAll, "archive ID (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of diff. empty means no output, - means stdout, other means output file.")
 	fs.StringVar(&c.SumTextOut, "sum-text-out", "", "text output of sum. empty means no output, - means stdout, other means output file.")
 	fs.StringVar(&c.DestTextOut, "dest-text-out", "", "text output of destination. empty means no output, - means stdout, other means output file.")
@@ -132,13 +132,13 @@ func (c *SumDiffCommand) sumDiffItem(item string) error {
 	var g errgroup.Group
 	g.Go(func() error {
 		var err error
-		sumHeader, sumTsList, err = sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.RetID, c.From, until, c.Now)
+		sumHeader, sumTsList, err = sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.ArchiveID, c.From, until, c.Now)
 		return err
 	})
 	g.Go(func() error {
 		var err error
 		destRelPath := filepath.Join(itemToRelDir(item), c.DestRelPath)
-		destHeader, destTsList, err = readWhisperFile(c.DestBase, destRelPath, c.RetID, c.From, until, c.Now)
+		destHeader, destTsList, err = readWhisperFile(c.DestBase, destRelPath, c.ArchiveID, c.From, until, c.Now)
 		return err
 	})
 	if err := g.Wait(); err != nil {

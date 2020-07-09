@@ -25,7 +25,7 @@ type ViewCommand struct {
 	From       whispertool.Timestamp
 	Until      whispertool.Timestamp
 	Now        whispertool.Timestamp
-	RetID      int
+	ArchiveID  int
 	ShowHeader bool
 	TextOut    string
 }
@@ -38,7 +38,7 @@ func (c *ViewCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
-	fs.IntVar(&c.RetID, "ret", ArchiveIDAll, "retention ID to diff (-1 is all)")
+	fs.IntVar(&c.ArchiveID, "archive", ArchiveIDAll, "archive ID (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
 	fs.BoolVar(&c.ShowHeader, "header", true, "whether or not to show header (metadata and reteions)")
 	fs.Parse(args)
@@ -51,7 +51,7 @@ func (c *ViewCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *ViewCommand) Execute() error {
-	d, tsList, err := readWhisperFile(c.SrcBase, c.SrcRelPath, c.RetID, c.From, c.Until, c.Now)
+	d, tsList, err := readWhisperFile(c.SrcBase, c.SrcRelPath, c.ArchiveID, c.From, c.Until, c.Now)
 	if err != nil {
 		return err
 	}

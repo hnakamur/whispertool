@@ -19,7 +19,7 @@ type SumCopyCommand struct {
 	From        whispertool.Timestamp
 	Until       whispertool.Timestamp
 	Now         whispertool.Timestamp
-	RetID       int
+	ArchiveID   int
 	TextOut     string
 }
 
@@ -29,7 +29,7 @@ func (c *SumCopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.SrcPattern, "src", "", "whisper file glob pattern relative to item directory (ex. *.wsp).")
 	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory")
 	fs.StringVar(&c.DestRelPath, "dest", "", "dest whisper relative filename to item directory (ex. dest.wsp).")
-	fs.IntVar(&c.RetID, "ret", ArchiveIDAll, "retention ID to diff (-1 is all).")
+	fs.IntVar(&c.ArchiveID, "archive", ArchiveIDAll, "archive ID (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
 
 	c.Now = whispertool.TimestampFromStdTime(time.Now())
@@ -82,7 +82,7 @@ func (c *SumCopyCommand) Execute() error {
 func (c *SumCopyCommand) sumCopyItem(item string) error {
 	fmt.Printf("item:%s\n", item)
 
-	sumHeader, sumTsList, err := sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.RetID, c.From, c.Until, c.Now)
+	sumHeader, sumTsList, err := sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.ArchiveID, c.From, c.Until, c.Now)
 	if err != nil {
 		return err
 
