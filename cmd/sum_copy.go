@@ -74,6 +74,7 @@ func (c *SumCopyCommand) Execute() error {
 	if err != nil {
 		return err
 	}
+	totalItemCount = len(items)
 	for _, item := range items {
 		err = c.sumCopyItem(item)
 		if err != nil {
