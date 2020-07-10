@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hnakamur/whispertool"
+	"golang.org/x/sync/errgroup"
 )
 
 type CopyCommand struct {
@@ -60,27 +61,50 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *CopyCommand) Execute() error {
-	srcHeader, srcTsList, err := readWhisperFile(c.SrcBase, c.SrcRelPath, c.ArchiveID, c.From, c.Until, c.Now)
-	if err != nil {
+	var destDB *whispertool.Whisper
+	var srcHeader, destHeader *whispertool.Header
+	var srcTsList, destTsList TimeSeriesList
+	var eg errgroup.Group
+	eg.Go(func() error {
+		var err error
+		srcHeader, srcTsList, err = readWhisperFile(c.SrcBase, c.SrcRelPath, c.ArchiveID, c.From, c.Until, c.Now)
 		return err
-	}
-
-	destFullPath := filepath.Join(c.DestBase, c.DestRelPath)
-	destDB, err := openOrCreateCopyDestFile(destFullPath, srcHeader)
-	if err != nil {
+	})
+	eg.Go(func() error {
+		destFullPath := filepath.Join(c.DestBase, c.DestRelPath)
+		var err error
+		destDB, err = openOrCreateCopyDestFile(destFullPath, srcHeader)
+		if err != nil {
+			return err
+		}
+		destHeader = destDB.Header()
+		destTsList, err = fetchTimeSeriesList(destDB, c.ArchiveID, c.From, c.Until, c.Now)
+		return err
+	})
+	if err := eg.Wait(); err != nil {
 		return err
 	}
 	defer destDB.Close()
 
-	if !srcHeader.ArchiveInfoList().Equal(destDB.ArchiveInfoList()) {
+	if !srcHeader.ArchiveInfoList().Equal(destHeader.ArchiveInfoList()) {
 		return errors.New("archive info list unmatch between src and dest whisper files")
 	}
 
-	if err := updateFileDataWithPointsList(destDB, srcTsList.PointsList(), c.Now); err != nil {
+	if !srcTsList.AllEqualTimeRangeAndStep(destTsList) {
+		return errors.New("timeseries time ranges and steps are unalike. " +
+			"retry reading input files before copying")
+	}
+
+	srcPlDif, destPlDif := srcTsList.Diff(destTsList)
+	if srcPlDif.AllEmpty() && destPlDif.AllEmpty() {
+		return nil
+	}
+
+	if err := updateFileDataWithPointsList(destDB, srcPlDif, c.Now); err != nil {
 		return err
 	}
 
-	if err := printFileData(c.TextOut, srcHeader, srcTsList.PointsList(), true); err != nil {
+	if err := printFileData(c.TextOut, srcHeader, srcPlDif, true); err != nil {
 		return err
 	}
 
