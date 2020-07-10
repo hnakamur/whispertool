@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -10,7 +11,7 @@ import (
 	"github.com/hnakamur/whispertool"
 )
 
-func TestCopy(t *testing.T) {
+func TestCopyCommand(t *testing.T) {
 	tempdir, err := ioutil.TempDir("", "whispertool-test")
 	if err != nil {
 		t.Fatal(err)
@@ -28,75 +29,93 @@ func TestCopy(t *testing.T) {
 	srcBase := filepath.Join(tempdir, "src")
 	destBase := filepath.Join(tempdir, "dest")
 	item := "item1"
-	src := "sv01.wsp"
-	dest := src
 	retentionDefs := "1m:30h,1h:32d,1d:400d"
 
-	srcFullPath := filepath.Join(srcBase, item, src)
-	if err := os.MkdirAll(filepath.Dir(srcFullPath), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Join(srcBase, item), 0700); err != nil {
 		t.Fatal(err)
 	}
 
-	destFullPath := filepath.Join(destBase, item, dest)
-	if err := os.MkdirAll(filepath.Dir(destFullPath), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Join(destBase, item), 0700); err != nil {
 		t.Fatal(err)
 	}
 
 	now := whispertool.TimestampFromStdTime(time.Now())
 
-	genSrcCmd := &GenerateCommand{
-		Dest:          srcFullPath,
-		Perm:          0644,
-		RetentionDefs: retentionDefs,
-		RandMax:       1000,
-		Fill:          true,
-		Now:           now,
-		TextOut:       "",
+	testCases := []struct {
+		untilOffset whispertool.Duration
+	}{
+		{untilOffset: 0},
+		{untilOffset: 30*whispertool.Hour - whispertool.Second},
+		{untilOffset: 30 * whispertool.Hour},
+		{untilOffset: 30*whispertool.Hour + whispertool.Second},
+		{untilOffset: 32*whispertool.Day - whispertool.Second},
+		{untilOffset: 32 * whispertool.Day},
+		{untilOffset: 32*whispertool.Day + whispertool.Second},
+		{untilOffset: 400*whispertool.Day - whispertool.Second},
 	}
-	if err = genSrcCmd.Execute(); err != nil {
-		t.Fatal(err)
-	}
+	for _, tc := range testCases {
+		untilOffset := tc.untilOffset
+		t.Run("untilOffset"+untilOffset.String(), func(t *testing.T) {
+			t.Parallel()
+			src := fmt.Sprintf("uo%s.wsp", untilOffset)
+			dest := src
+			genSrcCmd := &GenerateCommand{
+				Dest:          filepath.Join(srcBase, item, src),
+				Perm:          0644,
+				RetentionDefs: retentionDefs,
+				RandMax:       1000,
+				Fill:          true,
+				Now:           now,
+				TextOut:       "",
+			}
+			if err = genSrcCmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
 
-	genDestCmd := &GenerateCommand{
-		Dest:          destFullPath,
-		Perm:          0644,
-		RetentionDefs: retentionDefs,
-		RandMax:       1000,
-		Fill:          true,
-		Now:           now,
-		TextOut:       "",
-	}
-	if err = genDestCmd.Execute(); err != nil {
-		t.Fatal(err)
-	}
+			genDestCmd := &GenerateCommand{
+				Dest:          filepath.Join(destBase, item, dest),
+				Perm:          0644,
+				RetentionDefs: retentionDefs,
+				RandMax:       1000,
+				Fill:          true,
+				Now:           now,
+				TextOut:       "",
+			}
+			if err = genDestCmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
 
-	copyCmd := &CopyCommand{
-		SrcBase:     srcBase,
-		SrcRelPath:  filepath.Join(item, src),
-		DestBase:    destBase,
-		DestRelPath: filepath.Join(item, dest),
-		From:        0,
-		Until:       now,
-		Now:         now.Add(-5*whispertool.Minute),
-		ArchiveID:   ArchiveIDAll,
-		TextOut:     "",
-	}
-	if err = copyCmd.Execute(); err != nil {
-		t.Fatal(err)
-	}
+			untilOffset := -29 * whispertool.Minute
 
-	diffCmd := &DiffCommand{
-		SrcBase:     srcBase,
-		SrcRelPath:  filepath.Join(item, src),
-		DestBase:    destBase,
-		DestRelPath: filepath.Join(item, dest),
-		From:        0,
-		Until:       now,
-		Now:         now,
-		ArchiveID:   ArchiveIDAll,
-		TextOut:     "-",
-	}
-	if err = diffCmd.Execute(); err != nil {
-		t.Fatal(err)
+			copyCmd := &CopyCommand{
+				SrcBase:     srcBase,
+				SrcRelPath:  filepath.Join(item, src),
+				DestBase:    destBase,
+				DestRelPath: filepath.Join(item, dest),
+				From:        0,
+				Until:       now.Add(untilOffset),
+				Now:         now,
+				ArchiveID:   ArchiveIDAll,
+				TextOut:     "",
+			}
+			if err = copyCmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+
+			diffCmd := &DiffCommand{
+				SrcBase:     srcBase,
+				SrcRelPath:  filepath.Join(item, src),
+				DestBase:    destBase,
+				DestRelPath: filepath.Join(item, dest),
+				From:        0,
+				Until:       now.Add(untilOffset),
+				Now:         now,
+				ArchiveID:   ArchiveIDAll,
+				TextOut:     "-",
+			}
+			if err = diffCmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
