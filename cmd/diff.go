@@ -1,12 +1,10 @@
 package cmd
 
 import (
-	"bufio"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"github.com/hnakamur/whispertool"
@@ -62,6 +60,10 @@ func (c *DiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *DiffCommand) Execute() error {
+	return withTextOutWriter(c.TextOut, c.execute)
+}
+
+func (c *DiffCommand) execute(tow io.Writer) (err error) {
 	var srcHeader, destHeader *whispertool.Header
 	var srcTsList, destTsList TimeSeriesList
 	var eg errgroup.Group
@@ -92,44 +94,14 @@ func (c *DiffCommand) Execute() error {
 		return nil
 	}
 
-	err := printDiff(c.TextOut, srcHeader, destHeader, srcPlDif, destPlDif)
-	if err != nil {
+	if err := printDiff(tow, srcHeader, destHeader, srcPlDif, destPlDif); err != nil {
 		return err
 	}
 
 	return ErrDiffFound
 }
 
-func printDiff(textOut string, srcHeader, destHeader *whispertool.Header, srcPlDif, destPlDif PointsList) error {
-	if textOut == "" {
-		return nil
-	}
-
-	if textOut == "-" {
-		return printDiffTo(os.Stdout, srcHeader, destHeader, srcPlDif, destPlDif)
-	}
-
-	file, err := os.Create(textOut)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	w := bufio.NewWriter(file)
-	err = printDiffTo(w, srcHeader, destHeader, srcPlDif, destPlDif)
-	if err != nil {
-		return err
-	}
-	if err = w.Flush(); err != nil {
-		return err
-	}
-	if err = file.Sync(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func printDiffTo(w io.Writer, srcHeader, destHeader *whispertool.Header, srcPlDif, destPlDif PointsList) error {
+func printDiff(w io.Writer, srcHeader, destHeader *whispertool.Header, srcPlDif, destPlDif PointsList) error {
 	for archiveID := range srcHeader.ArchiveInfoList() {
 		srcPtsDif := srcPlDif[archiveID]
 		destPtsDif := destPlDif[archiveID]

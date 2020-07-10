@@ -3,6 +3,7 @@ package cmd
 import (
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -50,6 +51,10 @@ func (c *ViewRawCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *ViewRawCommand) Execute() error {
+	return withTextOutWriter(c.TextOut, c.execute)
+}
+
+func (c *ViewRawCommand) execute(tow io.Writer) (err error) {
 	h, ptsList, err := readWhisperFileRaw(c.SrcBase, c.SrcRelPath, c.ArchiveID)
 	if err != nil {
 		return err
@@ -60,7 +65,7 @@ func (c *ViewRawCommand) Execute() error {
 		sortPointsListByTime(ptsList)
 	}
 
-	if err := printFileData(c.TextOut, h, ptsList, c.ShowHeader); err != nil {
+	if err := printFileData(tow, h, ptsList, c.ShowHeader); err != nil {
 		return err
 	}
 	return nil

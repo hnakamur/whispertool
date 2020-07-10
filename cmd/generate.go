@@ -4,6 +4,7 @@ import (
 	crand "crypto/rand"
 	"encoding/binary"
 	"flag"
+	"io"
 	"math/rand"
 	"os"
 	"time"
@@ -48,6 +49,10 @@ func (c *GenerateCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *GenerateCommand) Execute() error {
+	return withTextOutWriter(c.TextOut, c.execute)
+}
+
+func (c *GenerateCommand) execute(tow io.Writer) (err error) {
 	retentions, err := whispertool.ParseArchiveInfoList(c.RetentionDefs)
 	if err != nil {
 		return err
@@ -69,7 +74,7 @@ func (c *GenerateCommand) Execute() error {
 		}
 	}
 
-	if err = printFileData(c.TextOut, db.Header(), ptsList, true); err != nil {
+	if err = printFileData(tow, db.Header(), ptsList, true); err != nil {
 		return err
 	}
 

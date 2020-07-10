@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func TestCopyCommand(t *testing.T) {
+func TestSumCopyCommand(t *testing.T) {
 	tempdir, err := ioutil.TempDir("", "whispertool-test")
 	if err != nil {
 		t.Fatal(err)
@@ -27,6 +27,7 @@ func TestCopyCommand(t *testing.T) {
 		}
 	})
 
+	const srcServerCount = 40
 	srcBase := filepath.Join(tempdir, "src")
 	destBase := filepath.Join(tempdir, "dest")
 	retentionDefs := "1m:30h,1h:32d,1d:400d"
@@ -59,22 +60,25 @@ func TestCopyCommand(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			src := "sv01.wsp"
-			dest := src
+			dest := "sum.wsp"
 
 			var eg errgroup.Group
-			eg.Go(func() error {
-				genSrcCmd := &GenerateCommand{
-					Dest:          filepath.Join(srcBase, item, src),
-					Perm:          0644,
-					RetentionDefs: retentionDefs,
-					RandMax:       1000,
-					Fill:          true,
-					Now:           now,
-					TextOut:       "",
-				}
-				return genSrcCmd.Execute()
-			})
+			for i := 0; i < srcServerCount; i++ {
+				i := i
+				eg.Go(func() error {
+					src := fmt.Sprintf("sv%02d.wsp", i+1)
+					genSrcCmd := &GenerateCommand{
+						Dest:          filepath.Join(srcBase, item, src),
+						Perm:          0644,
+						RetentionDefs: retentionDefs,
+						RandMax:       1000,
+						Fill:          true,
+						Now:           now,
+						TextOut:       "",
+					}
+					return genSrcCmd.Execute()
+				})
+			}
 			eg.Go(func() error {
 				genDestCmd := &GenerateCommand{
 					Dest:          filepath.Join(destBase, item, dest),
@@ -91,33 +95,35 @@ func TestCopyCommand(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			copyCmd := &CopyCommand{
+			sumCopyCmd := &SumCopyCommand{
 				SrcBase:     srcBase,
-				SrcRelPath:  filepath.Join(item, src),
+				ItemPattern: item,
+				SrcPattern:  "sv*.wsp",
 				DestBase:    destBase,
-				DestRelPath: filepath.Join(item, dest),
+				DestRelPath: dest,
 				From:        0,
 				Until:       now.Add(untilOffset),
 				Now:         now,
 				ArchiveID:   ArchiveIDAll,
 				TextOut:     "",
 			}
-			if err = copyCmd.Execute(); err != nil {
+			if err = sumCopyCmd.Execute(); err != nil {
 				t.Fatal(err)
 			}
 
-			diffCmd := &DiffCommand{
+			sumDiffCmd := &SumDiffCommand{
 				SrcBase:     srcBase,
-				SrcRelPath:  filepath.Join(item, src),
+				ItemPattern: item,
+				SrcPattern:  "sv*.wsp",
 				DestBase:    destBase,
-				DestRelPath: filepath.Join(item, dest),
+				DestRelPath: dest,
 				From:        0,
 				Until:       now.Add(untilOffset),
 				Now:         now,
 				ArchiveID:   ArchiveIDAll,
-				TextOut:     "-",
+				TextOut:     "",
 			}
-			if err = diffCmd.Execute(); err != nil {
+			if err = sumDiffCmd.Execute(); err != nil {
 				t.Fatal(err)
 			}
 		})

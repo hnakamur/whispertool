@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"flag"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -61,6 +62,10 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *CopyCommand) Execute() error {
+	return withTextOutWriter(c.TextOut, c.execute)
+}
+
+func (c *CopyCommand) execute(tow io.Writer) (err error) {
 	var destDB *whispertool.Whisper
 	var srcHeader, destHeader *whispertool.Header
 	var srcTsList, destTsList TimeSeriesList
@@ -104,7 +109,7 @@ func (c *CopyCommand) Execute() error {
 		return err
 	}
 
-	if err := printFileData(c.TextOut, srcHeader, srcPlDif, true); err != nil {
+	if err := printFileData(tow, srcHeader, srcPlDif, true); err != nil {
 		return err
 	}
 

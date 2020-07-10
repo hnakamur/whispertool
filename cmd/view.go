@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"io"
@@ -57,12 +56,16 @@ func (c *ViewCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *ViewCommand) Execute() error {
+	return withTextOutWriter(c.TextOut, c.execute)
+}
+
+func (c *ViewCommand) execute(tow io.Writer) (err error) {
 	d, tsList, err := readWhisperFile(c.SrcBase, c.SrcRelPath, c.ArchiveID, c.From, c.Until, c.Now)
 	if err != nil {
 		return err
 	}
 
-	if err := printFileData(c.TextOut, d, tsList.PointsList(), c.ShowHeader); err != nil {
+	if err := printFileData(tow, d, tsList.PointsList(), c.ShowHeader); err != nil {
 		return err
 	}
 	return nil
@@ -156,35 +159,7 @@ func fetchTimeSeriesList(db *whispertool.Whisper, archiveID int, from, until, no
 	return tsList, nil
 }
 
-func printFileData(textOut string, h *whispertool.Header, ptsList PointsList, showHeader bool) error {
-	if textOut == "" {
-		return nil
-	}
-
-	if textOut == "-" {
-		return printHeaderAndPointsList(os.Stdout, h, ptsList, showHeader)
-	}
-
-	file, err := os.Create(textOut)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	w := bufio.NewWriter(file)
-	if err := printHeaderAndPointsList(w, h, ptsList, showHeader); err != nil {
-		return err
-	}
-	if err = w.Flush(); err != nil {
-		return err
-	}
-	if err = file.Sync(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func printHeaderAndPointsList(w io.Writer, h *whispertool.Header, ptsList PointsList, showHeader bool) error {
+func printFileData(w io.Writer, h *whispertool.Header, ptsList PointsList, showHeader bool) error {
 	if showHeader {
 		if _, err := fmt.Fprint(w, h.String()); err != nil {
 			return err

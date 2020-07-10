@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -60,6 +61,10 @@ func (c *SumCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *SumCommand) Execute() error {
+	return withTextOutWriter(c.TextOut, c.execute)
+}
+
+func (c *SumCommand) execute(tow io.Writer) (err error) {
 	items, err := globItems(c.SrcBase, c.ItemPattern)
 	if err != nil {
 		return err
@@ -70,7 +75,7 @@ func (c *SumCommand) Execute() error {
 		if err != nil {
 			return err
 		}
-		if err := printFileData(c.TextOut, h, tsList.PointsList(), c.ShowHeader); err != nil {
+		if err := printFileData(tow, h, tsList.PointsList(), c.ShowHeader); err != nil {
 			return err
 		}
 	}

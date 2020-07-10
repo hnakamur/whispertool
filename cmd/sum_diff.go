@@ -26,8 +26,6 @@ type SumDiffCommand struct {
 	Now         whispertool.Timestamp
 	ArchiveID   int
 	TextOut     string
-	SumTextOut  string
-	DestTextOut string
 
 	Interval       time.Duration
 	IntervalOffset time.Duration
@@ -42,8 +40,6 @@ func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.DestRelPath, "dest", "", "dest whisper filename relative to item directory (ex. sum.wsp).")
 	fs.IntVar(&c.ArchiveID, "archive", ArchiveIDAll, "archive ID (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of diff. empty means no output, - means stdout, other means output file.")
-	fs.StringVar(&c.SumTextOut, "sum-text-out", "", "text output of sum. empty means no output, - means stdout, other means output file.")
-	fs.StringVar(&c.DestTextOut, "dest-text-out", "", "text output of destination. empty means no output, - means stdout, other means output file.")
 
 	c.Now = whispertool.TimestampFromStdTime(time.Now())
 	c.Until = c.Now
@@ -97,12 +93,16 @@ func (c *SumDiffCommand) Execute() error {
 }
 
 func (c *SumDiffCommand) sumDiffOneTime() error {
+	return withTextOutWriter(c.TextOut, c.execute)
+}
+
+func (c *SumDiffCommand) execute(tow io.Writer) (err error) {
 	t0 := time.Now()
-	fmt.Printf("time:%s\tmsg:start\n", formatTime(t0))
+	fmt.Fprintf(tow, "time:%s\tmsg:start\n", formatTime(t0))
 	var totalItemCount int
 	defer func() {
 		t1 := time.Now()
-		fmt.Printf("time:%s\tmsg:finish\tduration:%s\ttotalItemCount:%d\n", formatTime(t1), t1.Sub(t0).String(), totalItemCount)
+		fmt.Fprintf(tow, "time:%s\tmsg:finish\tduration:%s\ttotalItemCount:%d\n", formatTime(t1), t1.Sub(t0).String(), totalItemCount)
 	}()
 
 	items, err := globItems(c.SrcBase, c.ItemPattern)
@@ -111,7 +111,7 @@ func (c *SumDiffCommand) sumDiffOneTime() error {
 	}
 	totalItemCount = len(items)
 	for _, item := range items {
-		err = c.sumDiffItem(item)
+		err = c.sumDiffItem(item, tow)
 		if err != nil {
 			return err
 		}
@@ -119,8 +119,8 @@ func (c *SumDiffCommand) sumDiffOneTime() error {
 	return nil
 }
 
-func (c *SumDiffCommand) sumDiffItem(item string) error {
-	fmt.Printf("item:%s\n", item)
+func (c *SumDiffCommand) sumDiffItem(item string, tow io.Writer) error {
+	fmt.Fprintf(tow, "item:%s\n", item)
 
 	until := c.Until
 	if c.UntilOffset != 0 {
@@ -154,14 +154,7 @@ func (c *SumDiffCommand) sumDiffItem(item string) error {
 		return nil
 	}
 
-	err := printDiff(c.TextOut, sumHeader, destHeader, sumPlDif, destPlDif)
-	if err != nil {
-		return err
-	}
-	if err := printPointsListAppend(c.SumTextOut, item, sumHeader, sumTsList.PointsList()); err != nil {
-		return err
-	}
-	if err := printPointsListAppend(c.DestTextOut, item, destHeader, destTsList.PointsList()); err != nil {
+	if err := printDiff(tow, sumHeader, destHeader, sumPlDif, destPlDif); err != nil {
 		return err
 	}
 	return nil

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"path/filepath"
 	"time"
 
@@ -62,12 +63,16 @@ func (c *SumCopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *SumCopyCommand) Execute() error {
+	return withTextOutWriter(c.TextOut, c.execute)
+}
+
+func (c *SumCopyCommand) execute(tow io.Writer) (err error) {
 	t0 := time.Now()
-	fmt.Printf("time:%s\tmsg:start\n", formatTime(t0))
+	fmt.Fprintf(tow, "time:%s\tmsg:start\n", formatTime(t0))
 	var totalItemCount int
 	defer func() {
 		t1 := time.Now()
-		fmt.Printf("time:%s\tmsg:finish\tduration:%s\ttotalItemCount:%d\n", formatTime(t1), t1.Sub(t0).String(), totalItemCount)
+		fmt.Fprintf(tow, "time:%s\tmsg:finish\tduration:%s\ttotalItemCount:%d\n", formatTime(t1), t1.Sub(t0).String(), totalItemCount)
 	}()
 
 	items, err := globItems(c.SrcBase, c.ItemPattern)
@@ -76,7 +81,7 @@ func (c *SumCopyCommand) Execute() error {
 	}
 	totalItemCount = len(items)
 	for _, item := range items {
-		err = c.sumCopyItem(item)
+		err = c.sumCopyItem(item, tow)
 		if err != nil {
 			return err
 		}
@@ -84,8 +89,8 @@ func (c *SumCopyCommand) Execute() error {
 	return nil
 }
 
-func (c *SumCopyCommand) sumCopyItem(item string) error {
-	fmt.Printf("item:%s\n", item)
+func (c *SumCopyCommand) sumCopyItem(item string, tow io.Writer) error {
+	fmt.Fprintf(tow, "item:%s\n", item)
 
 	var destDB *whispertool.Whisper
 	var srcHeader, destHeader *whispertool.Header
@@ -130,7 +135,7 @@ func (c *SumCopyCommand) sumCopyItem(item string) error {
 		return err
 	}
 
-	if err := printFileData(c.TextOut, srcHeader, srcPlDif, true); err != nil {
+	if err := printFileData(tow, srcHeader, srcPlDif, true); err != nil {
 		return err
 	}
 
