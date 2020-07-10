@@ -28,16 +28,7 @@ func TestCopyCommand(t *testing.T) {
 
 	srcBase := filepath.Join(tempdir, "src")
 	destBase := filepath.Join(tempdir, "dest")
-	item := "item1"
 	retentionDefs := "1m:30h,1h:32d,1d:400d"
-
-	if err := os.MkdirAll(filepath.Join(srcBase, item), 0700); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.MkdirAll(filepath.Join(destBase, item), 0700); err != nil {
-		t.Fatal(err)
-	}
 
 	now := whispertool.TimestampFromStdTime(time.Now())
 
@@ -57,8 +48,19 @@ func TestCopyCommand(t *testing.T) {
 		untilOffset := tc.untilOffset
 		t.Run("untilOffset"+untilOffset.String(), func(t *testing.T) {
 			t.Parallel()
-			src := fmt.Sprintf("uo%s.wsp", untilOffset)
+
+			item := fmt.Sprintf("item_%s", untilOffset)
+			if err := os.MkdirAll(filepath.Join(srcBase, item), 0700); err != nil {
+				t.Fatal(err)
+			}
+		
+			if err := os.MkdirAll(filepath.Join(destBase, item), 0700); err != nil {
+				t.Fatal(err)
+			}
+				
+			src := "sv01.wsp"
 			dest := src
+
 			genSrcCmd := &GenerateCommand{
 				Dest:          filepath.Join(srcBase, item, src),
 				Perm:          0644,
