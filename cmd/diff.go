@@ -72,7 +72,7 @@ func (c *DiffCommand) Execute() error {
 	})
 	eg.Go(func() error {
 		var err error
-		srcHeader, srcTsList, err = readWhisperFile(c.DestBase, c.DestRelPath, c.ArchiveID, c.From, c.Until, c.Now)
+		destHeader, destTsList, err = readWhisperFile(c.DestBase, c.DestRelPath, c.ArchiveID, c.From, c.Until, c.Now)
 		return err
 	})
 	if err := eg.Wait(); err != nil {
