@@ -26,10 +26,6 @@ type SumDiffCommand struct {
 	Now         whispertool.Timestamp
 	ArchiveID   int
 	TextOut     string
-
-	Interval       time.Duration
-	IntervalOffset time.Duration
-	UntilOffset    time.Duration
 }
 
 func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
@@ -47,9 +43,6 @@ func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 
-	fs.DurationVar(&c.Interval, "interval", 0, "run interval (0 means oneshot")
-	fs.DurationVar(&c.IntervalOffset, "interval-offset", 7*time.Second, "run interval offset")
-	fs.DurationVar(&c.UntilOffset, "until-offset", 0, "until offset")
 	fs.Parse(args)
 
 	if c.ItemPattern == "" {
@@ -71,28 +64,6 @@ func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 }
 
 func (c *SumDiffCommand) Execute() error {
-	if c.Interval == 0 {
-		err := c.sumDiffOneTime()
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-
-	for {
-		now := time.Now()
-		targetTime := now.Truncate(c.Interval).Add(c.Interval).Add(c.IntervalOffset)
-		time.Sleep(targetTime.Sub(now))
-
-		c.Now = whispertool.TimestampFromStdTime(time.Now())
-		err := c.sumDiffOneTime()
-		if err != nil {
-			return err
-		}
-	}
-}
-
-func (c *SumDiffCommand) sumDiffOneTime() error {
 	return withTextOutWriter(c.TextOut, c.execute)
 }
 
@@ -122,23 +93,18 @@ func (c *SumDiffCommand) execute(tow io.Writer) (err error) {
 func (c *SumDiffCommand) sumDiffItem(item string, tow io.Writer) error {
 	fmt.Fprintf(tow, "item:%s\n", item)
 
-	until := c.Until
-	if c.UntilOffset != 0 {
-		until = c.Now.Add(-whispertool.Duration(c.UntilOffset / time.Second))
-	}
-
 	var sumHeader, destHeader *whispertool.Header
 	var sumTsList, destTsList TimeSeriesList
 	var g errgroup.Group
 	g.Go(func() error {
 		var err error
-		sumHeader, sumTsList, err = sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.ArchiveID, c.From, until, c.Now)
+		sumHeader, sumTsList, err = sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.ArchiveID, c.From, c.Until, c.Now)
 		return err
 	})
 	g.Go(func() error {
 		var err error
 		destRelPath := filepath.Join(itemToRelDir(item), c.DestRelPath)
-		destHeader, destTsList, err = readWhisperFile(c.DestBase, destRelPath, c.ArchiveID, c.From, until, c.Now)
+		destHeader, destTsList, err = readWhisperFile(c.DestBase, destRelPath, c.ArchiveID, c.From, c.Until, c.Now)
 		return err
 	})
 	if err := g.Wait(); err != nil {
