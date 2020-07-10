@@ -36,6 +36,12 @@ func (c *ViewRawCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
 	fs.Parse(args)
 
+	if c.SrcBase == "" {
+		return newRequiredOptionError(fs, "src-base")
+	}
+	if c.SrcRelPath == "" {
+		return newRequiredOptionError(fs, "src")
+	}
 	if c.From > c.Until {
 		return errFromIsAfterUntil
 	}

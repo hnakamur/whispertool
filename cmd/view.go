@@ -43,6 +43,12 @@ func (c *ViewCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.BoolVar(&c.ShowHeader, "header", true, "whether or not to show header (metadata and reteions)")
 	fs.Parse(args)
 
+	if c.SrcBase == "" {
+		return newRequiredOptionError(fs, "src-base")
+	}
+	if c.SrcRelPath == "" {
+		return newRequiredOptionError(fs, "src")
+	}
 	if c.From > c.Until {
 		return errFromIsAfterUntil
 	}
@@ -180,7 +186,7 @@ func printFileData(textOut string, h *whispertool.Header, ptsList PointsList, sh
 
 func printHeaderAndPointsList(w io.Writer, h *whispertool.Header, ptsList PointsList, showHeader bool) error {
 	if showHeader {
-		if _, err := fmt.Fprintln(w, h.String()); err != nil {
+		if _, err := fmt.Fprint(w, h.String()); err != nil {
 			return err
 		}
 	}

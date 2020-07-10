@@ -90,7 +90,7 @@ func (h *Header) ExpectedFileSize() int64 {
 // [1] Labeled Tab-separated Values http://ltsv.org/
 func (h *Header) String() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%s\trarchiveCount:%d\n",
+	fmt.Fprintf(&b, "aggMethod:%s\taggMethodNum:%d\tmaxRetention:%s\txFileFactor:%s\tarchiveCount:%d\n",
 		h.aggregationMethod,
 		int(h.aggregationMethod),
 		h.maxRetention,
@@ -99,7 +99,7 @@ func (h *Header) String() string {
 
 	for i := range h.archiveInfoList {
 		r := &h.ArchiveInfoList()[i]
-		fmt.Fprintf(&b, "archiveInfo:%d\tstep:%s\tnumberOfPoints:%d\toffset:%d\n",
+		fmt.Fprintf(&b, "archiveInfo:%d\tdurationPerPoint:%s\tnumberOfPoints:%d\toffset:%d\n",
 			i,
 			Duration(r.secondsPerPoint),
 			r.numberOfPoints,

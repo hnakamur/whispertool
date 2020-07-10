@@ -12,7 +12,7 @@ type PointsList []whispertool.Points
 func (pp PointsList) Print(w io.Writer) error {
 	for i, points := range pp {
 		for _, p := range points {
-			_, err := fmt.Fprintf(w, "retID:%d\tt:%s\tval:%s\n", i, p.Time, p.Value)
+			_, err := fmt.Fprintf(w, "archive:%d\tt:%s\tval:%s\n", i, p.Time, p.Value)
 			if err != nil {
 				return err
 			}
