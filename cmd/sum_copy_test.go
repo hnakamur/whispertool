@@ -103,16 +103,19 @@ func TestSumCopyCommand(t *testing.T) {
 			}
 
 			sumCopyCmd := &SumCopyCommand{
-				SrcBase:     srcBase,
-				ItemPattern: item,
-				SrcPattern:  "sv*.wsp",
-				DestBase:    destBase,
-				DestRelPath: dest,
-				From:        0,
-				Until:       now.Add(untilOffset),
-				Now:         now,
-				ArchiveID:   ArchiveIDAll,
-				TextOut:     "",
+				SrcBase:           srcBase,
+				ItemPattern:       item,
+				SrcPattern:        "sv*.wsp",
+				DestBase:          destBase,
+				DestRelPath:       dest,
+				ArchiveInfoList:   archiveInfoList,
+				AggregationMethod: whispertool.Sum,
+				XFilesFactor:      0.0,
+				From:              0,
+				Until:             now.Add(untilOffset),
+				Now:               now,
+				ArchiveID:         ArchiveIDAll,
+				TextOut:           "",
 			}
 			if err = sumCopyCmd.Execute(); err != nil {
 				t.Fatal(err)

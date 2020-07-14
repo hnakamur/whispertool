@@ -13,15 +13,18 @@ import (
 )
 
 type CopyCommand struct {
-	SrcBase     string
-	SrcRelPath  string
-	DestBase    string
-	DestRelPath string
-	From        whispertool.Timestamp
-	Until       whispertool.Timestamp
-	Now         whispertool.Timestamp
-	ArchiveID   int
-	TextOut     string
+	SrcBase           string
+	SrcRelPath        string
+	DestBase          string
+	DestRelPath       string
+	AggregationMethod whispertool.AggregationMethod
+	XFilesFactor      float32
+	ArchiveInfoList   whispertool.ArchiveInfoList
+	From              whispertool.Timestamp
+	Until             whispertool.Timestamp
+	Now               whispertool.Timestamp
+	ArchiveID         int
+	TextOut           string
 }
 
 func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
@@ -29,14 +32,20 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.SrcRelPath, "src", "", "whisper file relative path to src base")
 	fs.StringVar(&c.DestBase, "dest-base", "", "dest base directory or URL of \"whispertool server\"")
 	fs.StringVar(&c.DestRelPath, "dest", "", "whisper file relative path to dest base")
-	fs.IntVar(&c.ArchiveID, "archive", ArchiveIDAll, "archive ID (-1 is all).")
-	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
+
+	fs.Var(&aggregationMethodValue{&c.AggregationMethod}, "agg-method", "aggregation method")
+	fs.Var(&xFilesFactorValue{&c.XFilesFactor}, "x-files-factor", "xFilesFactor")
+	fs.Var(&archiveInfoListValue{&c.ArchiveInfoList}, "retentions", "retentions definitions")
 
 	c.Now = whispertool.TimestampFromStdTime(time.Now())
 	c.Until = c.Now
 	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
+
+	fs.IntVar(&c.ArchiveID, "archive", ArchiveIDAll, "archive ID (-1 is all).")
+	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
+
 	fs.Parse(args)
 
 	if c.SrcBase == "" {
@@ -48,11 +57,17 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	if c.DestBase == "" {
 		return newRequiredOptionError(fs, "dest-base")
 	}
+	if isBaseURL(c.DestBase) {
+		return errors.New("dest-base must be local directory")
+	}
 	if c.DestRelPath == "" {
 		return newRequiredOptionError(fs, "dest")
 	}
-	if isBaseURL(c.DestBase) {
-		return errors.New("dest-base must be local directory")
+	if c.AggregationMethod == 0 {
+		return newRequiredOptionError(fs, "agg-method")
+	}
+	if c.ArchiveInfoList == nil {
+		return newRequiredOptionError(fs, "retentions")
 	}
 	if c.From > c.Until {
 		return errFromIsAfterUntil
@@ -77,8 +92,11 @@ func (c *CopyCommand) execute(tow io.Writer) (err error) {
 	})
 	eg.Go(func() error {
 		destFullPath := filepath.Join(c.DestBase, c.DestRelPath)
-		var err error
-		destDB, err = openOrCreateCopyDestFile(destFullPath, srcHeader)
+		destHeaderForCreate, err := whispertool.NewHeader(c.AggregationMethod, c.XFilesFactor, c.ArchiveInfoList)
+		if err != nil {
+			return err
+		}
+		destDB, err = openOrCreateCopyDestFile(destFullPath, destHeaderForCreate)
 		if err != nil {
 			return err
 		}

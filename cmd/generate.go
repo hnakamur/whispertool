@@ -32,6 +32,7 @@ func (c *GenerateCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.Var(&aggregationMethodValue{&c.AggregationMethod}, "agg-method", "aggregation method")
 	fs.Var(&xFilesFactorValue{&c.XFilesFactor}, "x-files-factor", "xFilesFactor")
 	fs.Var(&archiveInfoListValue{&c.ArchiveInfoList}, "retentions", "retentions definitions")
+
 	fs.IntVar(&c.RandMax, "max", 100, "random max value for shortest retention unit")
 	fs.BoolVar(&c.Fill, "fill", true, "fill with random data")
 

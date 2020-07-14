@@ -99,15 +99,18 @@ func TestCopyCommand(t *testing.T) {
 			}
 
 			copyCmd := &CopyCommand{
-				SrcBase:     srcBase,
-				SrcRelPath:  filepath.Join(item, src),
-				DestBase:    destBase,
-				DestRelPath: filepath.Join(item, dest),
-				From:        0,
-				Until:       now.Add(untilOffset),
-				Now:         now,
-				ArchiveID:   ArchiveIDAll,
-				TextOut:     "",
+				SrcBase:           srcBase,
+				SrcRelPath:        filepath.Join(item, src),
+				DestBase:          destBase,
+				DestRelPath:       filepath.Join(item, dest),
+				ArchiveInfoList:   archiveInfoList,
+				AggregationMethod: whispertool.Sum,
+				XFilesFactor:      0.0,
+				From:              0,
+				Until:             now.Add(untilOffset),
+				Now:               now,
+				ArchiveID:         ArchiveIDAll,
+				TextOut:           "",
 			}
 			if err = copyCmd.Execute(); err != nil {
 				t.Fatal(err)
