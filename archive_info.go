@@ -53,7 +53,7 @@ func ParseArchiveInfoList(s string) (ArchiveInfoList, error) {
 	if len(s) == 0 {
 		return nil, fmt.Errorf("invalid ArchiveInfoList: %q", s)
 	}
-	var rr []ArchiveInfo
+	var archiveInfoList ArchiveInfoList
 	for {
 		var rStr string
 		i := strings.IndexRune(s, ',')
@@ -62,11 +62,11 @@ func ParseArchiveInfoList(s string) (ArchiveInfoList, error) {
 		} else {
 			rStr = s[:i]
 		}
-		r, err := ParseArchiveInfo(rStr)
+		archiveInfo, err := ParseArchiveInfo(rStr)
 		if err != nil {
 			return nil, fmt.Errorf("invalid ArchiveInfoList: %q", s)
 		}
-		rr = append(rr, r)
+		archiveInfoList = append(archiveInfoList, archiveInfo)
 
 		if i == -1 {
 			break
@@ -76,7 +76,12 @@ func ParseArchiveInfoList(s string) (ArchiveInfoList, error) {
 		}
 		s = s[i+1:]
 	}
-	return rr, nil
+
+	archiveInfoList.fillOffset()
+	if err := archiveInfoList.validate(); err != nil {
+		return nil, err
+	}
+	return archiveInfoList, nil
 }
 
 // ParseArchiveInfo parses a single retention definition as you would find in the storage-schemas.conf
@@ -130,6 +135,15 @@ func (aa ArchiveInfoList) Equal(bb ArchiveInfoList) bool {
 		}
 	}
 	return true
+}
+
+func (aa ArchiveInfoList) fillOffset() {
+	off := metaSize + uint32(len(aa))*archiveInfoListSize
+	for i := range aa {
+		a := &aa[i]
+		a.offset = off
+		off += uint32(a.numberOfPoints) * pointSize
+	}
 }
 
 func (aa ArchiveInfoList) validate() error {

@@ -13,32 +13,39 @@ import (
 )
 
 type GenerateCommand struct {
-	Dest          string
-	Perm          os.FileMode
-	RetentionDefs string
-	RandMax       int
-	Fill          bool
-	Now           whispertool.Timestamp
-	TextOut       string
+	Dest              string
+	Perm              os.FileMode
+	AggregationMethod whispertool.AggregationMethod
+	XFilesFactor      float32
+	ArchiveInfoList   whispertool.ArchiveInfoList
+	RandMax           int
+	Fill              bool
+	Now               whispertool.Timestamp
+	TextOut           string
 }
 
 func (c *GenerateCommand) Parse(fs *flag.FlagSet, args []string) error {
-	fs.StringVar(&c.Dest, "dest", "", "dest whisper filename (ex. dest.wsp).")
+	fs.StringVar(&c.Dest, "dest", "", "dest whisper filename (ex. dest.wsp)")
 	c.Perm = os.FileMode(0644)
 	fs.Var(&fileModeValue{m: &c.Perm}, "perm", "whisper file permission (octal)")
 
-	fs.StringVar(&c.RetentionDefs, "retentions", "1m:2h,1h:2d,1d:30d", "retentions definitions.")
-	fs.IntVar(&c.RandMax, "max", 100, "random max value for shortest retention unit.")
-	fs.BoolVar(&c.Fill, "fill", true, "fill with random data.")
+	fs.Var(&aggregationMethodValue{&c.AggregationMethod}, "agg-method", "aggregation method")
+	fs.Var(&xFilesFactorValue{&c.XFilesFactor}, "x-files-factor", "xFilesFactor")
+	fs.Var(&archiveInfoListValue{&c.ArchiveInfoList}, "retentions", "retentions definitions")
+	fs.IntVar(&c.RandMax, "max", 100, "random max value for shortest retention unit")
+	fs.BoolVar(&c.Fill, "fill", true, "fill with random data")
 
-	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file.")
+	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file")
 
 	c.Now = whispertool.TimestampFromStdTime(time.Now())
 	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 
 	fs.Parse(args)
 
-	if c.RetentionDefs == "" {
+	if c.AggregationMethod == 0 {
+		return newRequiredOptionError(fs, "agg-method")
+	}
+	if c.ArchiveInfoList == nil {
 		return newRequiredOptionError(fs, "retentions")
 	}
 	if c.Dest == "" {
@@ -53,12 +60,7 @@ func (c *GenerateCommand) Execute() error {
 }
 
 func (c *GenerateCommand) execute(tow io.Writer) (err error) {
-	retentions, err := whispertool.ParseArchiveInfoList(c.RetentionDefs)
-	if err != nil {
-		return err
-	}
-
-	db, err := whispertool.Create(c.Dest, retentions, whispertool.Sum, 0)
+	db, err := whispertool.Create(c.Dest, c.ArchiveInfoList, c.AggregationMethod, c.XFilesFactor)
 	if err != nil {
 		return err
 	}
@@ -68,7 +70,7 @@ func (c *GenerateCommand) execute(tow io.Writer) (err error) {
 	if c.Fill {
 		rnd := rand.New(rand.NewSource(newRandSeed()))
 		until := c.Now
-		ptsList = randomPointsList(retentions, rnd, c.RandMax, until, c.Now)
+		ptsList = randomPointsList(c.ArchiveInfoList, rnd, c.RandMax, until, c.Now)
 		if err := updateFileDataWithPointsList(db, ptsList, c.Now); err != nil {
 			return err
 		}

@@ -38,12 +38,7 @@ func NewHeader(aggregationMethod AggregationMethod, xFilesFactor float32, archiv
 		return nil, err
 	}
 
-	off := metaSize + uint32(len(archiveInfoList))*archiveInfoListSize
-	for i := range archiveInfoList {
-		a := &archiveInfoList[i]
-		a.offset = off
-		off += uint32(a.numberOfPoints) * pointSize
-	}
+	archiveInfoList.fillOffset()
 	if err := archiveInfoList.validate(); err != nil {
 		return nil, err
 	}

@@ -56,6 +56,74 @@ func (v fileModeValue) Set(s string) error {
 	return nil
 }
 
+type aggregationMethodValue struct {
+	m *whispertool.AggregationMethod
+}
+
+func (v aggregationMethodValue) String() string {
+	if v.m == nil {
+		return ""
+	}
+	return v.m.String()
+}
+
+func (v aggregationMethodValue) Set(s string) error {
+	m, err := whispertool.AggregationMethodString(s)
+	if err != nil {
+		return err
+	}
+	switch m {
+	case whispertool.Average, whispertool.Sum, whispertool.Last, whispertool.Max, whispertool.Min, whispertool.First:
+		*v.m = m
+		return nil
+	default:
+		return errors.New(`aggregation method must be one of "average", "sum", "last", "max", "min", or "first"`)
+	}
+}
+
+type xFilesFactorValue struct {
+	f *float32
+}
+
+func (v xFilesFactorValue) String() string {
+	if v.f == nil {
+		return ""
+	}
+	return strconv.FormatFloat(float64(*v.f), 'f', -1, 32)
+}
+
+func (v xFilesFactorValue) Set(s string) error {
+	f, err := strconv.ParseFloat(s, 32)
+	if err != nil {
+		return err
+	}
+	if f < 0 || 1 < f {
+		return errors.New("xFilesFactor must be between 0.0 and 1.0")
+	}
+	*v.f = float32(f)
+	return nil
+}
+
+type archiveInfoListValue struct {
+	l *whispertool.ArchiveInfoList
+}
+
+func (v archiveInfoListValue) String() string {
+	if v.l == nil {
+		return ""
+	}
+	return v.l.String()
+}
+
+func (v archiveInfoListValue) Set(s string) error {
+	l, err := whispertool.ParseArchiveInfoList(s)
+	if err != nil {
+		return err
+	}
+	*v.l = l
+	return nil
+}
+
 type RequiredOptionError struct {
 	fs     *flag.FlagSet
 	option string

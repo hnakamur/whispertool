@@ -29,7 +29,10 @@ func TestCopyCommand(t *testing.T) {
 
 	srcBase := filepath.Join(tempdir, "src")
 	destBase := filepath.Join(tempdir, "dest")
-	retentionDefs := "1m:30h,1h:32d,1d:400d"
+	archiveInfoList, err := whispertool.ParseArchiveInfoList("1m:30h,1h:32d,1d:400d")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	now := whispertool.TimestampFromStdTime(time.Now())
 
@@ -65,25 +68,29 @@ func TestCopyCommand(t *testing.T) {
 			var eg errgroup.Group
 			eg.Go(func() error {
 				genSrcCmd := &GenerateCommand{
-					Dest:          filepath.Join(srcBase, item, src),
-					Perm:          0644,
-					RetentionDefs: retentionDefs,
-					RandMax:       1000,
-					Fill:          true,
-					Now:           now,
-					TextOut:       "",
+					Dest:              filepath.Join(srcBase, item, src),
+					Perm:              0644,
+					ArchiveInfoList:   archiveInfoList,
+					AggregationMethod: whispertool.Sum,
+					XFilesFactor:      0.0,
+					RandMax:           1000,
+					Fill:              true,
+					Now:               now,
+					TextOut:           "",
 				}
 				return genSrcCmd.Execute()
 			})
 			eg.Go(func() error {
 				genDestCmd := &GenerateCommand{
-					Dest:          filepath.Join(destBase, item, dest),
-					Perm:          0644,
-					RetentionDefs: retentionDefs,
-					RandMax:       1000,
-					Fill:          true,
-					Now:           now,
-					TextOut:       "",
+					Dest:              filepath.Join(destBase, item, dest),
+					Perm:              0644,
+					ArchiveInfoList:   archiveInfoList,
+					AggregationMethod: whispertool.Sum,
+					XFilesFactor:      0.0,
+					RandMax:           1000,
+					Fill:              true,
+					Now:               now,
+					TextOut:           "",
 				}
 				return genDestCmd.Execute()
 			})
