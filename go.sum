@@ -1,9 +1,5 @@
-github.com/go-graphite/go-whisper v0.0.0-20200420141052-f2ba40d1bfdc h1:cZa1Uo3RXnu8eSbf8BQoH/4e2CrRUBbrjHQn/zEK2jc=
-github.com/go-graphite/go-whisper v0.0.0-20200420141052-f2ba40d1bfdc/go.mod h1:XnU8q9X8C3OhD8R7gAlRLI6VXU2KMwqgTO9Tshub2qE=
 github.com/hnakamur/filebuffer v0.1.0 h1:Is62hIQLrvoSWeyu7PqDbPbNpjsPZTlL6tyD1MeUY40=
 github.com/hnakamur/filebuffer v0.1.0/go.mod h1:Reawi5xSYJ5a8SQzJNZ9wEy6aIgKF7hJFwkpbL6Jt5k=
-github.com/hnakamur/timestamp v0.1.0 h1:BW9QgHnUGkYga0JSd9aL6T9sbRqB06oAXUhxuQH+Imo=
-github.com/hnakamur/timestamp v0.1.0/go.mod h1:ms4Qt1ZxxF8z3QSk7ab8l8yj7/QVNuS+HPYyVlG9qx8=
 github.com/tklauser/go-sysconf v0.0.0-20200513113950-67a71062da8a h1:jeAzWylWYtgXQ5h9lmsKe17g53D01FQXt5Eqp3iiknc=
 github.com/tklauser/go-sysconf v0.0.0-20200513113950-67a71062da8a/go.mod h1:tm+kIOGK/2Uiq2HMIWPO8sYKXcvFsZxamsEjebitk7o=
 github.com/tklauser/numcpus v0.0.0-20200513113108-b180d8d09e7f h1:3tXMZR77OcDtqsBRpkODqLSo+aNI929wDmkTNGv4rDQ=
@@ -13,7 +9,5 @@ github.com/willf/bitset v1.1.10/go.mod h1:RjeCKbqT1RxIR/KWY6phxZiaY1IyutSBfGjNPy
 golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a h1:WXEvlFVvvGxCJLG6REjsT03iWnKLEWinaScsxF2Vm2o=
 golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sys v0.0.0-20200513112337-417ce2331b5c/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
-golang.org/x/sys v0.0.0-20200610111108-226ff32320da h1:bGb80FudwxpeucJUjPYJXuJ8Hk91vNtfvrymzwiei38=
-golang.org/x/sys v0.0.0-20200610111108-226ff32320da/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20200625212154-ddb9806d33ae h1:Ih9Yo4hSPImZOpfGuA4bR/ORKTAbhZo2AbWNRCnevdo=
 golang.org/x/sys v0.0.0-20200625212154-ddb9806d33ae/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
