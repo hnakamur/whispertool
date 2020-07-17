@@ -1016,6 +1016,154 @@ retID:2	from:2020-07-03T06:00:00Z	until:2020-07-03T06:01:04Z	step:16s	values:NaN
 	}
 }
 
+func TestUpdatePointOld(t *testing.T) {
+	now := testParseTimestamp(t, "2020-07-03T06:00:38Z")
+	testCases := []struct {
+		offset Duration
+		want   string
+	}{
+		{
+			offset: 0,
+			want: `now:2020-07-03T06:00:38Z
+retID:0	from:2020-07-03T06:00:31Z	until:2020-07-03T06:00:39Z	step:1s	values:NaN NaN NaN NaN NaN NaN NaN 1
+retID:1	from:2020-07-03T06:00:08Z	until:2020-07-03T06:00:40Z	step:4s	values:NaN NaN NaN NaN NaN NaN NaN 1
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 1`,
+		},
+		{
+			offset: 0,
+			want: `now:2020-07-03T06:00:39Z
+retID:0	from:2020-07-03T06:00:32Z	until:2020-07-03T06:00:40Z	step:1s	values:NaN NaN NaN NaN NaN NaN 1 2
+retID:1	from:2020-07-03T06:00:08Z	until:2020-07-03T06:00:40Z	step:4s	values:NaN NaN NaN NaN NaN NaN NaN 3
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 3`,
+		},
+		{
+			offset: 0,
+			want: `now:2020-07-03T06:00:40Z
+retID:0	from:2020-07-03T06:00:33Z	until:2020-07-03T06:00:41Z	step:1s	values:NaN NaN NaN NaN NaN 1 2 4
+retID:1	from:2020-07-03T06:00:12Z	until:2020-07-03T06:00:44Z	step:4s	values:NaN NaN NaN NaN NaN NaN 3 4
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 7`,
+		},
+		{
+			offset: 0,
+			want: `now:2020-07-03T06:00:41Z
+retID:0	from:2020-07-03T06:00:34Z	until:2020-07-03T06:00:42Z	step:1s	values:NaN NaN NaN NaN 1 2 4 8
+retID:1	from:2020-07-03T06:00:12Z	until:2020-07-03T06:00:44Z	step:4s	values:NaN NaN NaN NaN NaN NaN 3 12
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 15`,
+		},
+		{
+			offset: 0,
+			want: `now:2020-07-03T06:00:42Z
+retID:0	from:2020-07-03T06:00:35Z	until:2020-07-03T06:00:43Z	step:1s	values:NaN NaN NaN 1 2 4 8 16
+retID:1	from:2020-07-03T06:00:12Z	until:2020-07-03T06:00:44Z	step:4s	values:NaN NaN NaN NaN NaN NaN 3 28
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 31`,
+		},
+		{
+			offset: 0,
+			want: `now:2020-07-03T06:00:43Z
+retID:0	from:2020-07-03T06:00:36Z	until:2020-07-03T06:00:44Z	step:1s	values:NaN NaN 1 2 4 8 16 32
+retID:1	from:2020-07-03T06:00:12Z	until:2020-07-03T06:00:44Z	step:4s	values:NaN NaN NaN NaN NaN NaN 3 60
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 63`,
+		},
+		{
+			offset: 0,
+			want: `now:2020-07-03T06:00:44Z
+retID:0	from:2020-07-03T06:00:37Z	until:2020-07-03T06:00:45Z	step:1s	values:NaN 1 2 4 8 16 32 64
+retID:1	from:2020-07-03T06:00:16Z	until:2020-07-03T06:00:48Z	step:4s	values:NaN NaN NaN NaN NaN 3 60 64
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 127`,
+		},
+		{
+			offset: 0,
+			want: `now:2020-07-03T06:00:45Z
+retID:0	from:2020-07-03T06:00:38Z	until:2020-07-03T06:00:46Z	step:1s	values:1 2 4 8 16 32 64 128
+retID:1	from:2020-07-03T06:00:16Z	until:2020-07-03T06:00:48Z	step:4s	values:NaN NaN NaN NaN NaN 3 60 192
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 255`,
+		},
+		{
+			offset: -7 * Second,
+			want: `now:2020-07-03T06:00:46Z
+retID:0	from:2020-07-03T06:00:39Z	until:2020-07-03T06:00:47Z	step:1s	values:256 4 8 16 32 64 128 NaN
+retID:1	from:2020-07-03T06:00:16Z	until:2020-07-03T06:00:48Z	step:4s	values:NaN NaN NaN NaN NaN 256 60 448
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 511`,
+		},
+	}
+	db := testCreateDB(t, "1s:8s,4s:32s,16s:64s", Sum, 0)
+	archiveID := 0
+	v := Value(1)
+	for i, tc := range testCases {
+		if err := db.UpdatePointForArchive(archiveID, now.Add(tc.offset), v, now); err != nil {
+			t.Fatal(err)
+		}
+
+		tsList := testFetchAllPoints(t, db, now)
+		got := fmt.Sprintf("now:%s\n%s", now, timeSeriesListString(tsList))
+		if got != tc.want {
+			t.Errorf("time series unmatch, i=%d,\n gotQuoted=%q,\nwantQuoted=%q,\n got=%s,\nwant=%s", i, got, tc.want, got, tc.want)
+		}
+
+		now = now.Add(Second)
+		v *= 2
+	}
+}
+
+func TestUpdatePointOld2(t *testing.T) {
+	db := testCreateDB(t, "1s:2s,2s:4s", Sum, 0)
+	now := time.Now()
+	targetTime := now.Truncate(2 * time.Second).Add(2 * time.Second)
+	time.Sleep(targetTime.Sub(now))
+
+	var err error
+	err = db.Update(TimestampFromStdTime(time.Now()), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testViewWhisper(t, db)
+
+	time.Sleep(time.Second)
+	err = db.Update(TimestampFromStdTime(time.Now()), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testViewWhisper(t, db)
+
+	time.Sleep(time.Second)
+	err = db.Update(TimestampFromStdTime(time.Now()), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testViewWhisper(t, db)
+
+	err = db.Update(TimestampFromStdTime(time.Now()), 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testViewWhisper(t, db)
+
+	err = db.Update(TimestampFromStdTime(time.Now()).Add(-Second), 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testViewWhisper(t, db)
+}
+
+func testViewWhisper(t *testing.T, db *Whisper) {
+	t.Helper()
+
+	untilTime := TimestampFromStdTime(time.Now())
+	fromTime := untilTime.Add(-2 * Second)
+	ts, err := db.Fetch(fromTime, untilTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("-----------------\n archive0 ts=%v", ts)
+
+	fromTime = untilTime.Add(-4 * Second)
+	ts, err = db.Fetch(fromTime, untilTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("-----------------\n archive1 ts=%v", ts)
+}
+
 func testParseTimestamp(t *testing.T, s string) Timestamp {
 	t.Helper()
 	ts, err := ParseTimestamp(s)

@@ -3,6 +3,7 @@ package whispertool
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math"
 	"strconv"
 )
@@ -88,6 +89,15 @@ func (ts *TimeSeries) DiffPoints(us *TimeSeries) (Points, Points) {
 
 // Values returns the values in ts.
 func (ts *TimeSeries) Values() []Value { return ts.values }
+
+// String returns the string representation of ts.
+func (ts *TimeSeries) String() string {
+	if ts == nil {
+		return ""
+	}
+	return fmt.Sprintf("&{fromTime:%s untilTime:%s step:%s values:%v}",
+		ts.fromTime, ts.untilTime, ts.step, ts.values)
+}
 
 // AppendTo appends encoded bytes of ts to dst
 // and returns the extended buffer.
