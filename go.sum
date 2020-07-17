@@ -1,5 +1,14 @@
+github.com/go-graphite/go-whisper v0.0.0-20200605201515-e5e7d31ca755 h1:ljS9HNe0HUZwR5hvdV1TKm4d/nPuc8+gqPBnzCIf3Rw=
+github.com/go-graphite/go-whisper v0.0.0-20200605201515-e5e7d31ca755/go.mod h1:XnU8q9X8C3OhD8R7gAlRLI6VXU2KMwqgTO9Tshub2qE=
+github.com/google/go-cmp v0.5.0 h1:/QaMHBdZ26BB3SSst0Iwl10Epc+xhTquomWX0oZEB6w=
+github.com/google/go-cmp v0.5.0/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 github.com/hnakamur/filebuffer v0.1.0 h1:Is62hIQLrvoSWeyu7PqDbPbNpjsPZTlL6tyD1MeUY40=
 github.com/hnakamur/filebuffer v0.1.0/go.mod h1:Reawi5xSYJ5a8SQzJNZ9wEy6aIgKF7hJFwkpbL6Jt5k=
+github.com/kr/pretty v0.2.0 h1:s5hAObm+yFO5uHYt5dYjxi2rXrsnmRpJx4OYvIWUaQs=
+github.com/kr/pretty v0.2.0/go.mod h1:ipq/a2n7PKx3OHsz4KJII5eveXtPO4qwEXGdVfWzfnI=
+github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
+github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
+github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
 github.com/tklauser/go-sysconf v0.0.0-20200513113950-67a71062da8a h1:jeAzWylWYtgXQ5h9lmsKe17g53D01FQXt5Eqp3iiknc=
 github.com/tklauser/go-sysconf v0.0.0-20200513113950-67a71062da8a/go.mod h1:tm+kIOGK/2Uiq2HMIWPO8sYKXcvFsZxamsEjebitk7o=
 github.com/tklauser/numcpus v0.0.0-20200513113108-b180d8d09e7f h1:3tXMZR77OcDtqsBRpkODqLSo+aNI929wDmkTNGv4rDQ=
@@ -11,3 +20,5 @@ golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a/go.mod h1:RxMgew5VJxzue5/jJ
 golang.org/x/sys v0.0.0-20200513112337-417ce2331b5c/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20200625212154-ddb9806d33ae h1:Ih9Yo4hSPImZOpfGuA4bR/ORKTAbhZo2AbWNRCnevdo=
 golang.org/x/sys v0.0.0-20200625212154-ddb9806d33ae/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543 h1:E7g+9GITq07hpfrRu66IVDexMakfv52eLZ2CXBWiKr4=
+golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
