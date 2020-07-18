@@ -1,6 +1,8 @@
 package compattest
 
 import (
+	"path/filepath"
+
 	"github.com/hnakamur/whispertool"
 	"github.com/hnakamur/whispertool/cmd"
 	"golang.org/x/sync/errgroup"
@@ -13,6 +15,26 @@ type CommonDB interface {
 	UpdatePointsForArchive(points []whispertool.Point, archiveID int) error
 	Sync() error
 	Close() error
+}
+
+func BothCreate(dir, retentionDefs, aggregationMethod string, xFilesFactor float32) (db1 *GoWhisperDB, db2 *WhispertoolDB, err error) {
+	const goWhisperFilename = "go-whisper.wsp"
+	const whispertoolFilename = "whispertool.wsp"
+	var eg errgroup.Group
+	eg.Go(func() error {
+		var err error
+		db1, err = CreateGoWhisperDB(filepath.Join(dir, goWhisperFilename), retentionDefs, aggregationMethod, xFilesFactor)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		db2, err = CreateWhispertoolDB(filepath.Join(dir, whispertoolFilename), retentionDefs, aggregationMethod, xFilesFactor)
+		return err
+	})
+	if err := eg.Wait(); err != nil {
+		return nil, nil, err
+	}
+	return db1, db2, nil
 }
 
 func BothUpdate(db1, db2 CommonDB, t whispertool.Timestamp, value whispertool.Value) error {

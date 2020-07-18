@@ -50,6 +50,10 @@ func (db *WhispertoolDB) Sync() error {
 	return db.db.Sync()
 }
 
+func (db *WhispertoolDB) Close() error {
+	return db.db.Close()
+}
+
 func (db *WhispertoolDB) Fetch(from, until whispertool.Timestamp) (*whispertool.TimeSeries, error) {
 	return db.db.Fetch(from, until)
 }

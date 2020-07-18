@@ -10,10 +10,10 @@ import (
 type TimeSeriesList []*whispertool.TimeSeries
 
 func (tl TimeSeriesList) Print(w io.Writer) error {
-	for retID, ts := range tl {
+	for archiveID, ts := range tl {
 		for i, v := range ts.Values() {
 			t := ts.FromTime().Add(whispertool.Duration(i) * ts.Step())
-			_, err := fmt.Fprintf(w, "retID:%d\tt:%s\tval:%s\n", retID, t, v)
+			_, err := fmt.Fprintf(w, "archiveID:%d\tt:%s\tval:%s\n", archiveID, t, v)
 			if err != nil {
 				return err
 			}

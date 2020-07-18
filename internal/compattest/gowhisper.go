@@ -73,6 +73,10 @@ func (db *GoWhisperDB) Sync() error {
 	return nil
 }
 
+func (db *GoWhisperDB) Close() error {
+	return db.db.Close()
+}
+
 func (db *GoWhisperDB) Fetch(from, until whispertool.Timestamp) (*whispertool.TimeSeries, error) {
 	ts, err := db.db.Fetch(int(from), int(until))
 	if err != nil {
