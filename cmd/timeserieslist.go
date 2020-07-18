@@ -62,6 +62,20 @@ func (tl TimeSeriesList) PointsList() PointsList {
 	return pl
 }
 
+// Equal returns whether or not tl equals to tl2.
+func (tl TimeSeriesList) Equal(tl2 TimeSeriesList) bool {
+	if len(tl) != len(tl2) {
+		return false
+	}
+	for i, ts := range tl {
+		ts2 := tl2[i]
+		if !ts.Equal(ts2) {
+			return false
+		}
+	}
+	return true
+}
+
 func (tl TimeSeriesList) Diff(ul TimeSeriesList) (PointsList, PointsList) {
 	if len(tl) != len(ul) {
 		return tl.PointsList(), ul.PointsList()

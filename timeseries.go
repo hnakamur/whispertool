@@ -62,29 +62,48 @@ func (ts *TimeSeries) Points() Points {
 // EqualTimeRangeAndStep returns whether or not all of
 // FromTime(), UntilTime() and Step() are the same
 // between ts and us.
-func (ts *TimeSeries) EqualTimeRangeAndStep(us *TimeSeries) bool {
-	return ts.FromTime() == us.FromTime() &&
-		ts.UntilTime() == us.UntilTime() &&
-		ts.Step() == us.Step()
+func (ts *TimeSeries) EqualTimeRangeAndStep(ts2 *TimeSeries) bool {
+	return ts.FromTime() == ts2.FromTime() &&
+		ts.UntilTime() == ts2.UntilTime() &&
+		ts.Step() == ts2.Step()
+}
+
+// Equal returns whether or not ts equals to us.
+func (ts *TimeSeries) Equal(ts2 *TimeSeries) bool {
+	return ts.EqualTimeRangeAndStep(ts2) &&
+		ts.valuesEqual(ts2)
+}
+
+func (ts *TimeSeries) valuesEqual(ts2 *TimeSeries) bool {
+	if len(ts.Values()) != len(ts2.Values()) {
+		return false
+	}
+	for i, v := range ts.Values() {
+		v2 := ts2.Values()[i]
+		if !v.Equal(v2) {
+			return false
+		}
+	}
+	return true
 }
 
 // DiffPoints returns the different points between ts and us.
-func (ts *TimeSeries) DiffPoints(us *TimeSeries) (Points, Points) {
-	if len(ts.Values()) != len(us.Values()) {
-		return ts.Points(), us.Points()
+func (ts *TimeSeries) DiffPoints(ts2 *TimeSeries) (Points, Points) {
+	if len(ts.Values()) != len(ts2.Values()) {
+		return ts.Points(), ts2.Points()
 	}
 
-	var pp2, qq2 Points
-	for i, tv := range ts.Values() {
-		tt := ts.FromTime().Add(Duration(i) * ts.Step())
-		ut := ts.FromTime().Add(Duration(i) * ts.Step())
-		uv := us.Values()[i]
-		if tt != ut || !tv.Equal(uv) {
-			pp2 = append(pp2, Point{Time: tt, Value: tv})
-			qq2 = append(qq2, Point{Time: ut, Value: uv})
+	var pts, pts2 Points
+	for i, v := range ts.Values() {
+		t := ts.FromTime().Add(Duration(i) * ts.Step())
+		t2 := ts2.FromTime().Add(Duration(i) * ts.Step())
+		v2 := ts2.Values()[i]
+		if t != t2 || !v.Equal(v2) {
+			pts = append(pts, Point{Time: t, Value: v})
+			pts2 = append(pts2, Point{Time: t2, Value: v2})
 		}
 	}
-	return pp2, qq2
+	return pts, pts2
 }
 
 // Values returns the values in ts.

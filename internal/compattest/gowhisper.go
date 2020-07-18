@@ -2,7 +2,6 @@ package compattest
 
 import (
 	"errors"
-	"time"
 
 	"github.com/go-graphite/go-whisper"
 	"github.com/hnakamur/whispertool"
@@ -56,11 +55,15 @@ func OpenGoWhisperDB(filename string) (*GoWhisperDB, error) {
 	return &GoWhisperDB{db: db}, nil
 }
 
-func (db *GoWhisperDB) Update(t time.Time, value float64) error {
-	return db.db.Update(value, int(t.Unix()))
+func (db *GoWhisperDB) ArciveInfoList() whispertool.ArchiveInfoList {
+	return convertGoWhisperRetentions(db.db.Retentions())
 }
 
-func (db *GoWhisperDB) UpdatePointsForArchive(points []Point, archiveID int) error {
+func (db *GoWhisperDB) Update(t whispertool.Timestamp, value whispertool.Value) error {
+	return db.db.Update(float64(value), int(t))
+}
+
+func (db *GoWhisperDB) UpdatePointsForArchive(points []whispertool.Point, archiveID int) error {
 	return db.db.UpdateManyForArchive(
 		convertToGoWhisperTimeSeriesPointPointers(points),
 		db.db.Retentions()[archiveID].MaxRetention())
@@ -70,39 +73,53 @@ func (db *GoWhisperDB) Sync() error {
 	return nil
 }
 
-func (db *GoWhisperDB) Fetch(from, until time.Time) (*TimeSeries, error) {
-	ts, err := db.db.Fetch(int(from.Unix()), int(until.Unix()))
+func (db *GoWhisperDB) Fetch(from, until whispertool.Timestamp) (*whispertool.TimeSeries, error) {
+	ts, err := db.db.Fetch(int(from), int(until))
 	if err != nil {
 		return nil, err
 	}
 	return convertGoWhisperTimeSeries(ts), nil
 }
 
-func convertToGoWhisperTimeSeriesPointPointers(pts []Point) []*whisper.TimeSeriesPoint {
+func convertToGoWhisperTimeSeriesPointPointers(pts []whispertool.Point) []*whisper.TimeSeriesPoint {
 	if pts == nil {
 		return nil
 	}
 	points := make([]*whisper.TimeSeriesPoint, len(pts))
 	for i, p := range pts {
 		points[i] = &whisper.TimeSeriesPoint{
-			Time:  int(p.Time.Unix()),
-			Value: p.Value,
+			Time:  int(p.Time),
+			Value: float64(p.Value),
 		}
 	}
 	return points
 }
 
-func convertGoWhisperTimeSeries(ts *whisper.TimeSeries) *TimeSeries {
+func convertGoWhisperRetentions(retentions []whisper.Retention) whispertool.ArchiveInfoList {
+	archiveInfoList := make(whispertool.ArchiveInfoList, len(retentions))
+	for i, r := range retentions {
+		archiveInfoList[i] = whispertool.NewArchiveInfo(
+			whispertool.Duration(r.SecondsPerPoint()),
+			uint32(r.NumberOfPoints()))
+	}
+	return archiveInfoList
+}
+
+func convertGoWhisperTimeSeries(ts *whisper.TimeSeries) *whispertool.TimeSeries {
 	if ts == nil {
 		return nil
 	}
-	from := time.Unix(int64(ts.FromTime()), 0)
-	until := time.Unix(int64(ts.UntilTime()), 0)
-	step := time.Duration(ts.Step())
-	return &TimeSeries{
-		from:   from,
-		until:  until,
-		step:   step,
-		values: ts.Values(),
+	from := whispertool.Timestamp(ts.FromTime())
+	until := whispertool.Timestamp(ts.UntilTime())
+	step := whispertool.Duration(ts.Step())
+	values := convertValues(ts.Values())
+	return whispertool.NewTimeSeries(from, until, step, values)
+}
+
+func convertValues(values []float64) []whispertool.Value {
+	vv := make([]whispertool.Value, len(values))
+	for i, v := range values {
+		vv[i] = whispertool.Value(v)
 	}
+	return vv
 }
