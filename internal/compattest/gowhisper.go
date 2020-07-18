@@ -60,9 +60,9 @@ func (db *GoWhisperDB) Update(t time.Time, value float64) error {
 	return db.db.Update(value, int(t.Unix()))
 }
 
-func (db *GoWhisperDB) UpdatePointsForArchive(points []whispertool.Point, archiveID int) error {
+func (db *GoWhisperDB) UpdatePointsForArchive(points []Point, archiveID int) error {
 	return db.db.UpdateManyForArchive(
-		convertWhispertoolsPointsToToGoWhisperTimeSeriesPointPointers(points),
+		convertToGoWhisperTimeSeriesPointPointers(points),
 		db.db.Retentions()[archiveID].MaxRetention())
 }
 
@@ -70,41 +70,39 @@ func (db *GoWhisperDB) Sync() error {
 	return nil
 }
 
-func (db *GoWhisperDB) Fetch(from, until time.Time) (*whispertool.TimeSeries, error) {
+func (db *GoWhisperDB) Fetch(from, until time.Time) (*TimeSeries, error) {
 	ts, err := db.db.Fetch(int(from.Unix()), int(until.Unix()))
 	if err != nil {
 		return nil, err
 	}
-	return convertGoWhisperTimeSeriesToWhispertoolTimeSeries(ts), nil
+	return convertGoWhisperTimeSeries(ts), nil
 }
 
-func convertWhispertoolsPointsToToGoWhisperTimeSeriesPointPointers(pts []whispertool.Point) []*whisper.TimeSeriesPoint {
+func convertToGoWhisperTimeSeriesPointPointers(pts []Point) []*whisper.TimeSeriesPoint {
 	if pts == nil {
 		return nil
 	}
 	points := make([]*whisper.TimeSeriesPoint, len(pts))
 	for i, p := range pts {
 		points[i] = &whisper.TimeSeriesPoint{
-			Time:  int(p.Time),
-			Value: float64(p.Value),
+			Time:  int(p.Time.Unix()),
+			Value: p.Value,
 		}
 	}
 	return points
 }
 
-func convertGoWhisperTimeSeriesToWhispertoolTimeSeries(ts *whisper.TimeSeries) *whispertool.TimeSeries {
+func convertGoWhisperTimeSeries(ts *whisper.TimeSeries) *TimeSeries {
 	if ts == nil {
 		return nil
 	}
-	from := whispertool.Timestamp(ts.FromTime())
-	until := whispertool.Timestamp(ts.UntilTime())
-	step := whispertool.Duration(ts.Step())
-	var values []whispertool.Value
-	if ts.Values() != nil {
-		values = make([]whispertool.Value, len(ts.Values()))
-		for i, v := range ts.Values() {
-			values[i] = whispertool.Value(v)
-		}
+	from := time.Unix(int64(ts.FromTime()), 0)
+	until := time.Unix(int64(ts.UntilTime()), 0)
+	step := time.Duration(ts.Step())
+	return &TimeSeries{
+		from:   from,
+		until:  until,
+		step:   step,
+		values: ts.Values(),
 	}
-	return whispertool.NewTimeSeries(from, until, step, values)
 }
