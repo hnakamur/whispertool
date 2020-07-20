@@ -5,6 +5,8 @@ import (
 
 	"github.com/go-graphite/go-whisper"
 	"github.com/hnakamur/whispertool"
+	"github.com/hnakamur/whispertool/cmd"
+	"golang.org/x/sync/errgroup"
 )
 
 type GoWhisperDB struct {
@@ -126,4 +128,27 @@ func convertValues(values []float64) []whispertool.Value {
 		vv[i] = whispertool.Value(v)
 	}
 	return vv
+}
+
+func (db *GoWhisperDB) fetchAllArchives() (cmd.TimeSeriesList, error) {
+	tl := make(cmd.TimeSeriesList, len(db.ArciveInfoList()))
+	now := whispertool.TimestampFromStdTime(whisper.Now())
+	var eg errgroup.Group
+	for archiveID, archiveInfo := range db.ArciveInfoList() {
+		archiveID := archiveID
+		eg.Go(func() error {
+			until := now
+			from := now.Add(-archiveInfo.MaxRetention())
+			ts, err := db.Fetch(from, until)
+			if err != nil {
+				return err
+			}
+			tl[archiveID] = ts
+			return nil
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+	return tl, nil
 }

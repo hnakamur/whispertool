@@ -5,18 +5,24 @@ import (
 	"time"
 )
 
-type fakeClock struct {
+type fixedClock struct {
 	now time.Time
 	mu  sync.Mutex
 }
 
-func (c *fakeClock) SetFixed(t time.Time) {
+func (c *fixedClock) Set(t time.Time) {
 	c.mu.Lock()
 	c.now = t
 	c.mu.Unlock()
 }
 
-func (c *fakeClock) Now() time.Time {
+func (c *fixedClock) Sleep(d time.Duration) {
+	c.mu.Lock()
+	c.now = c.now.Add(d)
+	c.mu.Unlock()
+}
+
+func (c *fixedClock) Now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.now

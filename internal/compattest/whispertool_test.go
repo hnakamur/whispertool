@@ -2,6 +2,8 @@ package compattest
 
 import (
 	"github.com/hnakamur/whispertool"
+	"github.com/hnakamur/whispertool/cmd"
+	"golang.org/x/sync/errgroup"
 )
 
 type WhispertoolDB struct {
@@ -56,4 +58,27 @@ func (db *WhispertoolDB) Close() error {
 
 func (db *WhispertoolDB) Fetch(from, until whispertool.Timestamp) (*whispertool.TimeSeries, error) {
 	return db.db.Fetch(from, until)
+}
+
+func (db *WhispertoolDB) fetchAllArchives() (cmd.TimeSeriesList, error) {
+	tl := make(cmd.TimeSeriesList, len(db.ArciveInfoList()))
+	now := whispertool.TimestampFromStdTime(whispertool.Now())
+	var eg errgroup.Group
+	for archiveID, archiveInfo := range db.ArciveInfoList() {
+		archiveID := archiveID
+		eg.Go(func() error {
+			until := now
+			from := now.Add(-archiveInfo.MaxRetention())
+			ts, err := db.Fetch(from, until)
+			if err != nil {
+				return err
+			}
+			tl[archiveID] = ts
+			return nil
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+	return tl, nil
 }
