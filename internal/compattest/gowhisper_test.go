@@ -136,6 +136,7 @@ func (db *GoWhisperDB) fetchAllArchives() (cmd.TimeSeriesList, error) {
 	var eg errgroup.Group
 	for archiveID, archiveInfo := range db.ArciveInfoList() {
 		archiveID := archiveID
+		archiveInfo := archiveInfo
 		eg.Go(func() error {
 			until := now
 			from := now.Add(-archiveInfo.MaxRetention())
