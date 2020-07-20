@@ -48,9 +48,14 @@ func (m *updateAtNowMachine) Update(t *rapid.T) {
 }
 
 func (m *updateAtNowMachine) Check(t *rapid.T) {
-	ts1, ts2 := bothFetchAllArchives(t, m.db1, m.db2)
-	if !ts1.Equal(ts2) {
-		t.Fatalf("timeSeries unmatch,\n got=%s,\nwant=%s", ts1, ts2)
+	tl1, tl2 := bothFetchAllArchives(t, m.db1, m.db2)
+	if !tl1.AllEqualTimeRangeAndStep(tl2) {
+		t.Fatalf("timeSeries time range or step unmatch,\n got=%s,\nwant=%s",
+			tl1.TimeRangeStepString(), tl2.TimeRangeStepString())
+	}
+	if !tl1.Equal(tl2) {
+		pl1, pl2 := tl1.Diff(tl2)
+		t.Fatalf("timeSeries unmatch,\npl1=%s,\npl2=%s", pl1, pl2)
 	}
 }
 

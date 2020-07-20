@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/hnakamur/whispertool"
 )
@@ -87,4 +88,18 @@ func (tl TimeSeriesList) Diff(ul TimeSeriesList) (PointsList, PointsList) {
 		pl2[i], ql2[i] = ts.DiffPoints(ul[i])
 	}
 	return pl2, ql2
+}
+
+func (tl TimeSeriesList) TimeRangeStepString() string {
+	var b strings.Builder
+	b.WriteString("{")
+	for archiveID, ts := range tl {
+		if archiveID > 0 {
+			b.WriteString(" ")
+		}
+		fmt.Fprintf(&b, "{archiveID:%d fromTime:%s untilTime:%s step:%s}",
+			archiveID, ts.FromTime(), ts.UntilTime(), ts.Step())
+	}
+	b.WriteString("}")
+	return b.String()
 }
