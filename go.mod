@@ -8,4 +8,5 @@ require (
 	github.com/hnakamur/filebuffer v0.1.0
 	github.com/kr/pretty v0.2.0 // indirect
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
+	pgregory.net/rapid v0.4.0
 )

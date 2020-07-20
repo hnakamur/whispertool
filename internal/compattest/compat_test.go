@@ -8,26 +8,30 @@ import (
 
 	"github.com/go-graphite/go-whisper"
 	"github.com/hnakamur/whispertool"
+	"pgregory.net/rapid"
 )
 
 var clock = &fixedClock{}
 
 func TestCompatUpdate(t *testing.T) {
-	dir := tempDir(t)
-	db1, db2 := bothCreate(t, dir, "1s:2s,2s:4s", "sum", 0)
+	rapid.Check(t, func(rt *rapid.T) {
+		dir := tempDir(t)
+		db1, db2 := bothCreate(t, dir, "1s:2s,2s:4s", "sum", 0)
 
-	clock.Set(time.Date(2020, 7, 20, 23, 48, 01, 0, time.Local))
-	now := whispertool.TimestampFromStdTime(clock.Now())
-	bothUpdate(t, db1, db2, now, whispertool.Value(1))
+		clock.Set(time.Now().Truncate(time.Second))
+		c := rapid.IntRange(4, 8).Draw(rt, "c").(int)
+		for i := 0; i < c; i++ {
+			v := rapid.Float64().Draw(rt, "v").(float64)
+			now := whispertool.TimestampFromStdTime(clock.Now())
+			bothUpdate(t, db1, db2, now, whispertool.Value(v))
+			ts1, ts2 := bothFetchAllArchives(t, db1, db2)
+			if !ts1.Equal(ts2) {
+				t.Fatalf("timeSeries unmatch,\n got=%s,\nwant=%s", ts1, ts2)
+			}
 
-	clock.Sleep(time.Second)
-	now = whispertool.TimestampFromStdTime(clock.Now())
-	bothUpdate(t, db1, db2, now, whispertool.Value(2))
-
-	ts1, ts2 := bothFetchAllArchives(t, db1, db2)
-	if !ts1.Equal(ts2) {
-		t.Logf("timeSeries unmatch,\n got=%s,\nwant=%s", ts1, ts2)
-	}
+			clock.Sleep(time.Second)
+		}
+	})
 }
 
 func tempDir(t *testing.T) string {
