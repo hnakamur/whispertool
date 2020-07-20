@@ -33,7 +33,7 @@ func (m *updateAtNowMachine) Init(t *rapid.T) {
 	m.dir = dir
 
 	m.db1, m.db2 = bothCreate(t, dir, "1s:30h,1h:32d,1d:400d", "sum", 0)
-	clock.Set(time.Now().Truncate(time.Second))
+	clock.Set(time.Now())
 }
 
 func (m *updateAtNowMachine) Cleanup() {
