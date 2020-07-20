@@ -2,39 +2,33 @@ package compattest
 
 import (
 	"io/ioutil"
+	"log"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/go-graphite/go-whisper"
 	"github.com/hnakamur/whispertool"
 )
 
+var clock = &fakeClock{}
+
 func TestCompatUpdate(t *testing.T) {
-	dir := testTempDir(t)
-	db1, db2, err := BothCreate(dir, "1s:2s,2s:4s", "sum", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	dir := tempDir(t)
+	db1, db2 := bothCreate(t, dir, "1s:2s,2s:4s", "sum", 0)
 
-	now := whispertool.TimestampFromStdTime(time.Now())
-	if err := BothUpdate(db1, db2, now, whispertool.Value(1)); err != nil {
-		t.Fatal(err)
+	clock.SetFixed(time.Date(2020, 7, 20, 23, 48, 01, 0, time.Local))
+	now := whispertool.TimestampFromStdTime(clock.Now())
+	log.Printf("now=%s, whisertool.Now()=%s, whisper.Now()=%s", now, whispertool.Now().Format(time.RFC3339), whisper.Now().Format(time.RFC3339))
+	bothUpdate(t, db1, db2, now, whispertool.Value(1))
+	log.Printf("after bothUpdate")
+	ts1, ts2 := bothFetchAllArchives(t, db1, db2, now)
+	if !ts1.Equal(ts2) {
+		t.Logf("timeSeries unmatch,\n got=%s,\nwant=%s", ts1, ts2)
 	}
-
-	ts1, ts2, err := BothFetchAllArchives(db1, db2, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if ts1.Equal(ts2) {
-		t.Logf("match ts1 ts2")
-	} else {
-		t.Logf("unmatch ts1 ts2")
-	}
-	t.Logf("ts1=%s, ts2=%s", ts1, ts2)
 }
 
-func testTempDir(t *testing.T) string {
+func tempDir(t *testing.T) string {
 	dir, err := ioutil.TempDir("", "whispertool-compat-test")
 	if err != nil {
 		t.Fatal(err)
@@ -43,4 +37,12 @@ func testTempDir(t *testing.T) string {
 		os.RemoveAll(dir)
 	})
 	return dir
+}
+
+func TestMain(m *testing.M) {
+	whispertool.Now = clock.Now
+	whisper.Now = clock.Now
+	log.Printf("set whispertool.Now and whisper.Now")
+
+	os.Exit(m.Run())
 }
