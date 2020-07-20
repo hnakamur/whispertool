@@ -183,6 +183,10 @@ func (w *Whisper) Fetch(from, until Timestamp) (*TimeSeries, error) {
 	return w.FetchFromArchive(ArchiveIDBest, from, until, 0)
 }
 
+// Now is a function which returns the current time.
+// You can mock this function in tests.
+var Now = time.Now
+
 // FetchFromArchive fetches points in the specified archive and the time range.
 //
 // FetchFromArchive fetches points from archive specified with `arhiveID`.
@@ -190,7 +194,7 @@ func (w *Whisper) Fetch(from, until Timestamp) (*TimeSeries, error) {
 // If `now` is zero, the current time is used.
 func (w *Whisper) FetchFromArchive(arhiveID int, from, until, now Timestamp) (*TimeSeries, error) {
 	if now == 0 {
-		now = TimestampFromStdTime(time.Now())
+		now = TimestampFromStdTime(Now())
 	}
 	if from > until {
 		return nil, fmt.Errorf("invalid time interval: from time '%d' is after until time '%d'", from, until)
@@ -284,7 +288,7 @@ func (w *Whisper) Update(t Timestamp, v Value) error {
 func (w *Whisper) UpdatePointForArchive(archiveID int, t Timestamp, v Value, now Timestamp) error {
 	// log.Printf("UpdatePointForArchive start, archiveID=%d, t=%s, v=%s, now=%s", archiveID, t, v, now)
 	if now == 0 {
-		now = TimestampFromStdTime(time.Now())
+		now = TimestampFromStdTime(Now())
 	}
 
 	if t <= now.Add(-w.MaxRetention()) || now < t {
@@ -325,7 +329,7 @@ func (w *Whisper) UpdateMany(points []Point) (err error) {
 // the best matching archives and update the corresponding archives.
 func (w *Whisper) UpdatePointsForArchive(points []Point, archiveID int, now Timestamp) error {
 	if now == 0 {
-		now = TimestampFromStdTime(time.Now())
+		now = TimestampFromStdTime(Now())
 	}
 
 	sort.Stable(Points(points))
