@@ -15,36 +15,43 @@ var clock = &fixedClock{}
 
 func TestCompatUpdate(t *testing.T) {
 	t.Run("updateAtNow", func(t *testing.T) {
-		rapid.Check(t, func(rt *rapid.T) {
-			dir := tempDir(t)
-			db1, db2 := bothCreate(t, dir, "1s:2s,2s:4s", "sum", 0)
-
-			clock.Set(time.Now().Truncate(time.Second))
-			c := rapid.IntRange(4, 8).Draw(rt, "c").(int)
-			for i := 0; i < c; i++ {
-				v := rapid.Float64().Draw(rt, "v").(float64)
-				now := whispertool.TimestampFromStdTime(clock.Now())
-				bothUpdate(t, db1, db2, now, whispertool.Value(v))
-				ts1, ts2 := bothFetchAllArchives(t, db1, db2)
-				if !ts1.Equal(ts2) {
-					t.Fatalf("timeSeries unmatch,\n got=%s,\nwant=%s", ts1, ts2)
-				}
-
-				clock.Sleep(time.Second)
-			}
-		})
+		rapid.Check(t, rapid.Run(&updateAtNowMachine{}))
 	})
 }
 
-func tempDir(t *testing.T) string {
+type updateAtNowMachine struct {
+	dir string
+	db1 *WhispertoolDB
+	db2 *GoWhisperDB
+}
+
+func (m *updateAtNowMachine) Init(t *rapid.T) {
 	dir, err := ioutil.TempDir("", "whispertool-compat-test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		os.RemoveAll(dir)
-	})
-	return dir
+	m.dir = dir
+
+	m.db1, m.db2 = bothCreate(t, dir, "1s:2s,2s:4s", "sum", 0)
+	clock.Set(time.Now().Truncate(time.Second))
+}
+
+func (m *updateAtNowMachine) Cleanup() {
+	os.RemoveAll(m.dir)
+}
+
+func (m *updateAtNowMachine) Update(t *rapid.T) {
+	clock.Sleep(time.Second)
+	now := whispertool.TimestampFromStdTime(clock.Now())
+	v := rapid.Float64().Draw(t, "v").(float64)
+	bothUpdate(t, m.db1, m.db2, now, whispertool.Value(v))
+}
+
+func (m *updateAtNowMachine) Check(t *rapid.T) {
+	ts1, ts2 := bothFetchAllArchives(t, m.db1, m.db2)
+	if !ts1.Equal(ts2) {
+		t.Fatalf("timeSeries unmatch,\n got=%s,\nwant=%s", ts1, ts2)
+	}
 }
 
 func TestMain(m *testing.M) {

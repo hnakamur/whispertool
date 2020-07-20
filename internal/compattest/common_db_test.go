@@ -3,7 +3,6 @@ package compattest
 import (
 	"fmt"
 	"path/filepath"
-	"testing"
 
 	"github.com/hnakamur/whispertool"
 	"github.com/hnakamur/whispertool/cmd"
@@ -15,7 +14,11 @@ const (
 	whispertoolFilename = "whispertool.wsp"
 )
 
-func bothCreate(t *testing.T, dir, retentionDefs, aggregationMethod string, xFilesFactor float32) (db1 *WhispertoolDB, db2 *GoWhisperDB) {
+type tb interface {
+	Fatal(args ...interface{})
+}
+
+func bothCreate(t tb, dir, retentionDefs, aggregationMethod string, xFilesFactor float32) (db1 *WhispertoolDB, db2 *GoWhisperDB) {
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
@@ -33,7 +36,7 @@ func bothCreate(t *testing.T, dir, retentionDefs, aggregationMethod string, xFil
 	return db1, db2
 }
 
-func bothOpen(t *testing.T, dir string) (db1 *WhispertoolDB, db2 *GoWhisperDB) {
+func bothOpen(t tb, dir string) (db1 *WhispertoolDB, db2 *GoWhisperDB) {
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
@@ -51,7 +54,7 @@ func bothOpen(t *testing.T, dir string) (db1 *WhispertoolDB, db2 *GoWhisperDB) {
 	return db1, db2
 }
 
-func bothUpdate(t *testing.T, db1 *WhispertoolDB, db2 *GoWhisperDB, timestamp whispertool.Timestamp, value whispertool.Value) {
+func bothUpdate(t tb, db1 *WhispertoolDB, db2 *GoWhisperDB, timestamp whispertool.Timestamp, value whispertool.Value) {
 	var eg errgroup.Group
 	eg.Go(func() error {
 		if err := db1.Update(timestamp, value); err != nil {
@@ -70,7 +73,7 @@ func bothUpdate(t *testing.T, db1 *WhispertoolDB, db2 *GoWhisperDB, timestamp wh
 	}
 }
 
-func bothUpdatePointsForArchive(t *testing.T, db1 *WhispertoolDB, db2 *GoWhisperDB, points []whispertool.Point, archiveID int) {
+func bothUpdatePointsForArchive(t tb, db1 *WhispertoolDB, db2 *GoWhisperDB, points []whispertool.Point, archiveID int) {
 	var eg errgroup.Group
 	eg.Go(func() error {
 		return db1.UpdatePointsForArchive(points, archiveID)
@@ -83,7 +86,7 @@ func bothUpdatePointsForArchive(t *testing.T, db1 *WhispertoolDB, db2 *GoWhisper
 	}
 }
 
-func bothSync(t *testing.T, db1 *WhispertoolDB, db2 *GoWhisperDB) {
+func bothSync(t tb, db1 *WhispertoolDB, db2 *GoWhisperDB) {
 	var eg errgroup.Group
 	eg.Go(db1.Sync)
 	eg.Go(db2.Sync)
@@ -92,7 +95,7 @@ func bothSync(t *testing.T, db1 *WhispertoolDB, db2 *GoWhisperDB) {
 	}
 }
 
-func bothClose(t *testing.T, db1 *WhispertoolDB, db2 *GoWhisperDB) {
+func bothClose(t tb, db1 *WhispertoolDB, db2 *GoWhisperDB) {
 	var eg errgroup.Group
 	eg.Go(db1.Close)
 	eg.Go(db2.Close)
@@ -101,7 +104,7 @@ func bothClose(t *testing.T, db1 *WhispertoolDB, db2 *GoWhisperDB) {
 	}
 }
 
-func bothFetchAllArchives(t *testing.T, db1 *WhispertoolDB, db2 *GoWhisperDB) (ts1, ts2 cmd.TimeSeriesList) {
+func bothFetchAllArchives(t tb, db1 *WhispertoolDB, db2 *GoWhisperDB) (ts1, ts2 cmd.TimeSeriesList) {
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
