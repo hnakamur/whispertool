@@ -32,7 +32,7 @@ func (m *updateAtNowMachine) Init(t *rapid.T) {
 	}
 	m.dir = dir
 
-	m.db1, m.db2 = bothCreate(t, dir, "1s:2s,2s:4s", "sum", 0)
+	m.db1, m.db2 = bothCreate(t, dir, "1s:30h,1h:32d,1d:400d", "sum", 0)
 	clock.Set(time.Now().Truncate(time.Second))
 }
 
@@ -43,7 +43,7 @@ func (m *updateAtNowMachine) Cleanup() {
 func (m *updateAtNowMachine) Update(t *rapid.T) {
 	clock.Sleep(time.Second)
 	now := whispertool.TimestampFromStdTime(clock.Now())
-	v := rapid.Float64().Draw(t, "v").(float64)
+	v := rapid.Float64Range(0, 1000).Draw(t, "v").(float64)
 	bothUpdate(t, m.db1, m.db2, now, whispertool.Value(v))
 }
 
