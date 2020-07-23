@@ -64,10 +64,7 @@ func bothUpdate(t tb, db1 *WhispertoolDB, db2 *GoWhisperDB, timestamp whispertoo
 	})
 	eg.Go(func() error {
 		if err := db2.Update(timestamp, value); err != nil {
-			now := whispertool.TimestampFromStdTime(clock.Now())
-			whispertoolOldest := now.Add(-db1.db.MaxRetention())
-			goWhisperOldest := now.Add(-whispertool.Duration(db2.db.MaxRetention()))
-			return fmt.Errorf("go-whisper: %s, whispertoolOldest=%s, goWhisperOldest=%s, now=%s, timestamp=%s", err, whispertoolOldest, goWhisperOldest, now, timestamp)
+			return fmt.Errorf("go-whisper: %s", err)
 		}
 		return nil
 	})
@@ -79,10 +76,16 @@ func bothUpdate(t tb, db1 *WhispertoolDB, db2 *GoWhisperDB, timestamp whispertoo
 func bothUpdatePointsForArchive(t tb, db1 *WhispertoolDB, db2 *GoWhisperDB, points []whispertool.Point, archiveID int) {
 	var eg errgroup.Group
 	eg.Go(func() error {
-		return db1.UpdatePointsForArchive(points, archiveID)
+		if err := db1.UpdatePointsForArchive(points, archiveID); err != nil {
+			return fmt.Errorf("whispertool: %s", err)
+		}
+		return nil
 	})
 	eg.Go(func() error {
-		return db2.UpdatePointsForArchive(points, archiveID)
+		if err := db2.UpdatePointsForArchive(points, archiveID); err != nil {
+			return fmt.Errorf("go-whisper: %s", err)
+		}
+		return nil
 	})
 	if err := eg.Wait(); err != nil {
 		t.Fatal(err)

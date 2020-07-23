@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 )
 
 // TimeSeries is a result from Fetch.
@@ -274,6 +275,25 @@ func (pp *Points) TakeFrom(src []byte) ([]byte, error) {
 		}
 	}
 	return src, nil
+}
+
+// String returns a string representation of pp for debugging.
+func (pp Points) String() string {
+	var b strings.Builder
+	b.WriteString("Points{")
+	for i, p := range pp {
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		b.WriteString(p.String())
+	}
+	b.WriteString("}")
+	return b.String()
+}
+
+// String returns a string representation of p for debugging.
+func (p Point) String() string {
+	return "{" + p.Time.String() + " " + p.Value.String() + "}"
 }
 
 // Equals returns whether or not p equals to q.

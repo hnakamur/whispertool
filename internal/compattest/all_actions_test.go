@@ -27,8 +27,9 @@ func (m *allActionsMachine) Init(t *rapid.T) {
 	}
 	m.dir = dir
 
-	m.db1, m.db2 = bothCreate(t, dir, "1s:30h,1h:32d,1d:400d", "sum", 0.5)
+	m.db1, m.db2 = bothCreate(t, dir, "1s:2s,2s:4s,4s:8s", "sum", 0.5)
 	clock.Set(time.Now())
+	t.Logf("Init set now=%s", whispertool.TimestampFromStdTime(time.Now()))
 }
 
 func (m *allActionsMachine) Cleanup() {
@@ -36,15 +37,20 @@ func (m *allActionsMachine) Cleanup() {
 }
 
 func (m *allActionsMachine) Update(t *rapid.T) {
-	now := whispertool.TimestampFromStdTime(clock.Now())
-	oldest := now.Add(-(m.db1.db.MaxRetention() - m.db1.ArciveInfoList()[0].SecondsPerPoint()))
-	timestamp := whispertool.Timestamp(rapid.Uint32Range(uint32(oldest), uint32(now)).Draw(t, "timestamp").(uint32))
-	v := rapid.Float64().Draw(t, "v").(float64)
-	bothUpdate(t, m.db1, m.db2, timestamp, whispertool.Value(v))
+	pt := NewPointGenerator(m.db1).Example(0).(whispertool.Point)
+	bothUpdate(t, m.db1, m.db2, pt.Time, pt.Value)
+}
+
+func (m *allActionsMachine) UpdateMany(t *rapid.T) {
+	points := NewPointsForAllArchivesGenerator(m.db1).Draw(t, "points").(Points)
+	archiveID := rapid.IntRange(0, len(m.db1.ArciveInfoList())-1).Draw(t, "archiveID").(int)
+	// points := NewPointsForArchiveGenerator(m.db1, archiveID).Example(0).(Points)
+	bothUpdatePointsForArchive(t, m.db1, m.db2, points, archiveID)
 }
 
 func (m *allActionsMachine) SleepSecond(t *rapid.T) {
 	clock.Sleep(time.Second)
+	t.Logf("SleepSecond now=%s", whispertool.TimestampFromStdTime(clock.Now()))
 }
 
 func (m *allActionsMachine) Check(t *rapid.T) {
@@ -55,6 +61,6 @@ func (m *allActionsMachine) Check(t *rapid.T) {
 	}
 	if !tl1.Equal(tl2) {
 		pl1, pl2 := tl1.Diff(tl2)
-		t.Fatalf("timeSeries unmatch,\npl1=%s,\npl2=%s", pl1, pl2)
+		t.Fatalf("timeSeries unmatch,\npl1=%s,\npl2=%s\ntl1=%s\ntl2=%s", pl1, pl2, tl1, tl2)
 	}
 }
