@@ -35,7 +35,6 @@ func NewPointsForArchiveGenerator(db *WhispertoolDB, archiveID int) *rapid.Gener
 			ptFillRatio := rapid.Float64Range(0, 1).Draw(t, "ptFillRatio").(float64)
 			if ptFillRatio < fillRatio {
 				v := rapid.Float64().Draw(t, "v").(float64)
-				// v := rapid.Float64Range(-math.MaxFloat64, math.MaxFloat64).Draw(t, "v").(float64)
 				points = append(points, whispertool.Point{Time: timestamp, Value: whispertool.Value(v)})
 			}
 		}
@@ -55,7 +54,6 @@ func NewPointsForAllArchivesGenerator(db *WhispertoolDB) *rapid.Generator {
 				ptFillRatio := rapid.Float64Range(0, 1).Draw(t, "ptFillRatio").(float64)
 				if ptFillRatio < fillRatio {
 					v := rapid.Float64().Draw(t, "v").(float64)
-					// v := rapid.Float64Range(-math.MaxFloat64, math.MaxFloat64).Draw(t, "v").(float64)
 					points = append(points, whispertool.Point{Time: timestamp, Value: whispertool.Value(v)})
 				}
 			}
