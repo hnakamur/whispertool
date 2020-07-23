@@ -42,7 +42,8 @@ func CreateGoWhisperDB(filename string, retentionDefs string, aggregationMethod 
 		return nil, errors.New("invalid aggregation method")
 	}
 
-	db, err := whisper.Create(filename, retentions, aggMethod, xFilesFactor)
+	opts := &whisper.Options{InMemory: true}
+	db, err := whisper.CreateWithOptions(filename, retentions, aggMethod, xFilesFactor, opts)
 	if err != nil {
 		return nil, err
 	}
