@@ -2,7 +2,6 @@ package compattest
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/hnakamur/whispertool"
 	"pgregory.net/rapid"
@@ -52,11 +51,11 @@ func NewPointsForAllArchivesGenerator(db *WhispertoolDB) *rapid.Generator {
 			step := archiveInfo.SecondsPerPoint()
 			oldest := now.Add(-archiveInfo.MaxRetention()).Add(step)
 			fillRatio := rapid.Float64Range(0, 1).Draw(t, "fillRatio").(float64)
-			for timestamp := oldest; timestamp <= now; timestamp = timestamp.Add(step) {
+			for timestamp := oldest.Add(step); timestamp <= now; timestamp = timestamp.Add(step) {
 				ptFillRatio := rapid.Float64Range(0, 1).Draw(t, "ptFillRatio").(float64)
 				if ptFillRatio < fillRatio {
-					//v := rapid.Float64().Draw(t, "v").(float64)
-					v := rapid.Float64Range(-math.MaxFloat64, math.MaxFloat64).Draw(t, "v").(float64)
+					v := rapid.Float64().Draw(t, "v").(float64)
+					// v := rapid.Float64Range(-math.MaxFloat64, math.MaxFloat64).Draw(t, "v").(float64)
 					points = append(points, whispertool.Point{Time: timestamp, Value: whispertool.Value(v)})
 				}
 			}

@@ -3,6 +3,7 @@ package compattest
 import (
 	"io/ioutil"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -11,10 +12,85 @@ import (
 )
 
 func TestCompatAllActions(t *testing.T) {
-	rapid.Check(t, rapid.Run(&allActionsMachine{}))
+	t.Run("small_sum_0", func(t *testing.T) {
+		rapid.Check(t, rapid.Run(&allActionsMachineSmallSum0{}))
+	})
+	t.Run("small_sum_0.5", func(t *testing.T) {
+		rapid.Check(t, rapid.Run(&allActionsMachineSmallSum05{}))
+	})
+	t.Run("small_sum_1", func(t *testing.T) {
+		rapid.Check(t, rapid.Run(&allActionsMachineSmallSum1{}))
+	})
+	t.Run("big_sum_0", func(t *testing.T) {
+		rapid.Check(t, rapid.Run(&allActionsMachineBigSum0{}))
+	})
+	t.Run("big_sum_0.5", func(t *testing.T) {
+		rapid.Check(t, rapid.Run(&allActionsMachineBigSum05{}))
+	})
+	t.Run("big_sum_1", func(t *testing.T) {
+		rapid.Check(t, rapid.Run(&allActionsMachineBigSum1{}))
+	})
+}
+
+type allActionsMachineSmallSum0 struct{ allActionsMachine }
+
+func (m *allActionsMachineSmallSum0) Init(t *rapid.T) {
+	m.allActionsMachine.retentionDefs = "1s:2s,2s:4s,4s:8s"
+	m.allActionsMachine.aggregationMethod = "sum"
+	m.allActionsMachine.xFilesFactor = 0.0
+	m.allActionsMachine.Init(t)
+}
+
+type allActionsMachineSmallSum05 struct{ allActionsMachine }
+
+func (m *allActionsMachineSmallSum05) Init(t *rapid.T) {
+	m.allActionsMachine.retentionDefs = "1s:2s,2s:4s,4s:8s"
+	m.allActionsMachine.aggregationMethod = "sum"
+	m.allActionsMachine.xFilesFactor = 0.5
+	m.allActionsMachine.Init(t)
+}
+
+type allActionsMachineSmallSum1 struct{ allActionsMachine }
+
+func (m *allActionsMachineSmallSum1) Init(t *rapid.T) {
+	m.allActionsMachine.retentionDefs = "1s:2s,2s:4s,4s:8s"
+	m.allActionsMachine.aggregationMethod = "sum"
+	m.allActionsMachine.xFilesFactor = 1
+	m.allActionsMachine.Init(t)
+}
+
+type allActionsMachineBigSum0 struct{ allActionsMachine }
+
+func (m *allActionsMachineBigSum0) Init(t *rapid.T) {
+	m.allActionsMachine.retentionDefs = "1s:1m,1m:1h,1h:1d"
+	m.allActionsMachine.aggregationMethod = "sum"
+	m.allActionsMachine.xFilesFactor = 0.0
+	m.allActionsMachine.Init(t)
+}
+
+type allActionsMachineBigSum05 struct{ allActionsMachine }
+
+func (m *allActionsMachineBigSum05) Init(t *rapid.T) {
+	m.allActionsMachine.retentionDefs = "1s:1m,1m:1h,1h:1d"
+	m.allActionsMachine.aggregationMethod = "sum"
+	m.allActionsMachine.xFilesFactor = 0.5
+	m.allActionsMachine.Init(t)
+}
+
+type allActionsMachineBigSum1 struct{ allActionsMachine }
+
+func (m *allActionsMachineBigSum1) Init(t *rapid.T) {
+	m.allActionsMachine.retentionDefs = "1s:1m,1m:1h,1h:1d"
+	m.allActionsMachine.aggregationMethod = "sum"
+	m.allActionsMachine.xFilesFactor = 1.0
+	m.allActionsMachine.Init(t)
 }
 
 type allActionsMachine struct {
+	retentionDefs     string
+	aggregationMethod string
+	xFilesFactor      float32
+
 	dir string
 	db1 *WhispertoolDB
 	db2 *GoWhisperDB
@@ -27,7 +103,8 @@ func (m *allActionsMachine) Init(t *rapid.T) {
 	}
 	m.dir = dir
 
-	m.db1, m.db2 = bothCreate(t, dir, "1s:2s,2s:4s,4s:8s", "sum", 0.5)
+	t.Logf("Init retentionDefs=%s, aggregationMethod=%s, xFilesFactor=%s", m.retentionDefs, m.aggregationMethod, strconv.FormatFloat(float64(m.xFilesFactor), 'f', -1, 32))
+	m.db1, m.db2 = bothCreate(t, dir, m.retentionDefs, m.aggregationMethod, m.xFilesFactor)
 	clock.Set(time.Now())
 	t.Logf("Init set now=%s", whispertool.TimestampFromStdTime(time.Now()))
 }
@@ -42,9 +119,9 @@ func (m *allActionsMachine) Update(t *rapid.T) {
 }
 
 func (m *allActionsMachine) UpdateMany(t *rapid.T) {
-	points := NewPointsForAllArchivesGenerator(m.db1).Draw(t, "points").(Points)
+	// points := NewPointsForAllArchivesGenerator(m.db1).Draw(t, "points").(Points)
 	archiveID := rapid.IntRange(0, len(m.db1.ArciveInfoList())-1).Draw(t, "archiveID").(int)
-	// points := NewPointsForArchiveGenerator(m.db1, archiveID).Example(0).(Points)
+	points := NewPointsForArchiveGenerator(m.db1, archiveID).Example(0).(Points)
 	bothUpdatePointsForArchive(t, m.db1, m.db2, points, archiveID)
 }
 

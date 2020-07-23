@@ -325,8 +325,14 @@ func (w *Whisper) UpdateMany(points []Point) (err error) {
 }
 
 // UpdatePointsForArchive updates points in the specified archive.
+//
 // If archiveID is ArchiveIDBest, points are first splitted for
 // the best matching archives and update the corresponding archives.
+//
+// Note this does NOT update points whose timestamp is out of
+// the timestamp range of the specified archive.
+// This behavior is not compatible to Whisper.UpdateMany in
+// github.com/go-graphite/go-whisper.
 func (w *Whisper) UpdatePointsForArchive(points []Point, archiveID int, now Timestamp) error {
 	if now == 0 {
 		now = TimestampFromStdTime(Now())

@@ -67,6 +67,9 @@ func (db *GoWhisperDB) Update(t whispertool.Timestamp, value whispertool.Value) 
 }
 
 func (db *GoWhisperDB) UpdatePointsForArchive(points []whispertool.Point, archiveID int) error {
+	// maxRetention := db.db.Retentions()[archiveID].MaxRetention()
+	// log.Printf("GoWhisperDB.UpdatePointsForArchive start, retentions=%+v", db.db.Retentions())
+	// log.Printf("GoWhisperDB.UpdatePointsForArchive start, archiveID=%d, maxRetention=%d", archiveID, maxRetention)
 	return db.db.UpdateManyForArchive(
 		convertToGoWhisperTimeSeriesPointPointers(points),
 		db.db.Retentions()[archiveID].MaxRetention())
