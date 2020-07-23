@@ -3,7 +3,6 @@ package compattest
 import (
 	"io/ioutil"
 	"os"
-	"strconv"
 	"testing"
 	"time"
 
@@ -103,7 +102,6 @@ func (m *allActionsMachine) Init(t *rapid.T) {
 	}
 	m.dir = dir
 
-	t.Logf("Init retentionDefs=%s, aggregationMethod=%s, xFilesFactor=%s", m.retentionDefs, m.aggregationMethod, strconv.FormatFloat(float64(m.xFilesFactor), 'f', -1, 32))
 	m.db1, m.db2 = bothCreate(t, dir, m.retentionDefs, m.aggregationMethod, m.xFilesFactor)
 	clock.Set(time.Now())
 	t.Logf("Init set now=%s", whispertool.TimestampFromStdTime(time.Now()))
@@ -119,7 +117,6 @@ func (m *allActionsMachine) Update(t *rapid.T) {
 }
 
 func (m *allActionsMachine) UpdateMany(t *rapid.T) {
-	// points := NewPointsForAllArchivesGenerator(m.db1).Draw(t, "points").(Points)
 	archiveID := rapid.IntRange(0, len(m.db1.ArciveInfoList())-1).Draw(t, "archiveID").(int)
 	points := NewPointsForArchiveGenerator(m.db1, archiveID).Example(0).(Points)
 	bothUpdatePointsForArchive(t, m.db1, m.db2, points, archiveID)
