@@ -2,6 +2,7 @@ package compattest
 
 import (
 	"io/ioutil"
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -38,7 +39,7 @@ func (m *updateAtNowMachine) Cleanup() {
 func (m *updateAtNowMachine) Update(t *rapid.T) {
 	clock.Sleep(time.Second)
 	now := whispertool.TimestampFromStdTime(clock.Now())
-	v := rapid.Float64Range(0, 1000).Draw(t, "v").(float64)
+	v := rapid.Float64Range(-math.MaxFloat64, math.MaxFloat64).Draw(t, "v").(float64)
 	bothUpdate(t, m.db1, m.db2, now, whispertool.Value(v))
 }
 
