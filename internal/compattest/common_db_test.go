@@ -110,20 +110,38 @@ func bothClose(t tb, db1 *WhispertoolDB, db2 *GoWhisperDB) {
 	}
 }
 
-func bothFetchAllArchives(t tb, db1 *WhispertoolDB, db2 *GoWhisperDB) (ts1, ts2 cmd.TimeSeriesList) {
+func bothFetch(t tb, db1 *WhispertoolDB, db2 *GoWhisperDB, from, until whispertool.Timestamp) (ts1, ts2 *whispertool.TimeSeries) {
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
-		ts1, err = db1.fetchAllArchives()
+		ts1, err = db1.Fetch(from, until)
 		return err
 	})
 	eg.Go(func() error {
 		var err error
-		ts2, err = db2.fetchAllArchives()
+		ts2, err = db2.Fetch(from, until)
 		return err
 	})
 	if err := eg.Wait(); err != nil {
 		t.Fatal(err)
 	}
 	return ts1, ts2
+}
+
+func bothFetchAllArchives(t tb, db1 *WhispertoolDB, db2 *GoWhisperDB) (tl1, tl2 cmd.TimeSeriesList) {
+	var eg errgroup.Group
+	eg.Go(func() error {
+		var err error
+		tl1, err = db1.fetchAllArchives()
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		tl2, err = db2.fetchAllArchives()
+		return err
+	})
+	if err := eg.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	return tl1, tl2
 }
