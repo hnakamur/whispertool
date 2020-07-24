@@ -127,6 +127,16 @@ func (m *allActionsMachine) SleepSecond(t *rapid.T) {
 	t.Logf("SleepSecond now=%s", whispertool.TimestampFromStdTime(clock.Now()))
 }
 
+func (m *allActionsMachine) CloseAndReopen(t *rapid.T) {
+	closeRatio := rapid.Float64Range(0, 1).Draw(t, "closeRatio").(float64)
+	if closeRatio < 0.1 {
+		bothSync(t, m.db1, m.db2)
+		bothClose(t, m.db1, m.db2)
+		m.db1, m.db2 = bothOpen(t, m.dir)
+		t.Logf("CloseAndReopen closed and reopened")
+	}
+}
+
 func (m *allActionsMachine) Check(t *rapid.T) {
 	tl1, tl2 := bothFetchAllArchives(t, m.db1, m.db2)
 	if !tl1.AllEqualTimeRangeAndStep(tl2) {
