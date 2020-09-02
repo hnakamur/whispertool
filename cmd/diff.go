@@ -70,14 +70,18 @@ func (c *DiffCommand) execute(tow io.Writer) (err error) {
 	eg.Go(func() error {
 		var err error
 		srcHeader, srcTsList, err = readWhisperFile(c.SrcBase, c.SrcRelPath, c.ArchiveID, c.From, c.Until, c.Now)
-		return err
+		return WrapFileNotExistError(Source, err)
 	})
 	eg.Go(func() error {
 		var err error
 		destHeader, destTsList, err = readWhisperFile(c.DestBase, c.DestRelPath, c.ArchiveID, c.From, c.Until, c.Now)
-		return err
+		return WrapFileNotExistError(Destination, err)
 	})
 	if err := eg.Wait(); err != nil {
+		if err2 := AsFileNotExistError(err); err2 != nil {
+			fmt.Fprintf(tow, "err:%s\tsrcOrDest:%s\n", err2.cause, err2.srcOrDest, err2.cause)
+			return nil
+		}
 		return err
 	}
 

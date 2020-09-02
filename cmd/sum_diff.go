@@ -99,15 +99,19 @@ func (c *SumDiffCommand) sumDiffItem(item string, tow io.Writer) error {
 	g.Go(func() error {
 		var err error
 		sumHeader, sumTsList, err = sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.ArchiveID, c.From, c.Until, c.Now)
-		return err
+		return WrapFileNotExistError(Source, err)
 	})
 	g.Go(func() error {
 		var err error
 		destRelPath := filepath.Join(itemToRelDir(item), c.DestRelPath)
 		destHeader, destTsList, err = readWhisperFile(c.DestBase, destRelPath, c.ArchiveID, c.From, c.Until, c.Now)
-		return err
+		return WrapFileNotExistError(Destination, err)
 	})
 	if err := g.Wait(); err != nil {
+		if err2 := AsFileNotExistError(err); err2 != nil {
+			fmt.Fprintf(tow, "err:%s\tsrcOrDest:%s\n", err2.cause, err2.srcOrDest, err2.cause)
+			return nil
+		}
 		return err
 	}
 

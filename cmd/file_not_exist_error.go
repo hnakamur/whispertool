@@ -3,11 +3,22 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"os"
 )
 
 type fileNotExistError struct {
 	srcOrDest SrcDestType
 	cause     error
+}
+
+func WrapFileNotExistError(srcOrDest SrcDestType, err error) error {
+	if err != nil && os.IsNotExist(err) {
+		return &fileNotExistError{
+			srcOrDest: srcOrDest,
+			cause:     err,
+		}
+	}
+	return err
 }
 
 func (e *fileNotExistError) Error() string {
