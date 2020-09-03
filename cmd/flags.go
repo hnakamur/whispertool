@@ -11,6 +11,10 @@ import (
 	"github.com/hnakamur/whispertool"
 )
 
+var errEmptyRateOutOfBounds = errors.New("emptyRate must be 0 <= r <= 1")
+var errFromIsAfterUntil = errors.New("from time must not be after until time")
+var errNonEmptyDestRelPathForSrcRelPathWithMeta = errors.New("dest must be empty when src contains glob meta character(s)")
+
 type Command interface {
 	Parse(fs *flag.FlagSet, args []string) error
 	Execute() error
@@ -140,6 +144,3 @@ func (e *RequiredOptionError) Error() string {
 func (e *RequiredOptionError) Usage() {
 	e.fs.Usage()
 }
-
-var errEmptyRateOutOfBounds = errors.New("emptyRate must be 0 <= r <= 1")
-var errFromIsAfterUntil = errors.New("from time must not be after until time")

@@ -48,6 +48,7 @@ func (c *ServerCommand) Execute() error {
 	http.HandleFunc("/view-raw", wrapHandler(a.handleViewRaw))
 	http.HandleFunc("/sum", wrapHandler(a.handleSum))
 	http.HandleFunc("/items", wrapHandler(a.handleItems))
+	http.HandleFunc("/files", wrapHandler(a.handleFiles))
 	s := &http.Server{
 		Addr:           c.Addr,
 		Handler:        nil,
@@ -223,6 +224,33 @@ func (a *app) handleItems(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	items, err := globItemsLocal(a.baseDir, pattern)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return setRespForNotExistErr(w, err)
+		}
+		return newHTTPError(http.StatusBadRequest, err)
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	for _, item := range items {
+		if _, err := fmt.Fprintf(w, "%s\n", item); err != nil {
+			return newHTTPError(http.StatusInternalServerError,
+				fmt.Errorf("cannot write item name: %s", err))
+		}
+	}
+	return nil
+}
+
+func (a *app) handleFiles(w http.ResponseWriter, r *http.Request) error {
+	if err := r.ParseForm(); err != nil {
+		return newHTTPError(http.StatusBadRequest, errors.New("cannot parse form"))
+	}
+	pattern := r.Form.Get("pattern")
+	if pattern == "" {
+		return newHTTPError(http.StatusBadRequest, errors.New("\"pattern\" parameter must not be empty"))
+	}
+
+	items, err := globFilesLocal(a.baseDir, pattern)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return setRespForNotExistErr(w, err)

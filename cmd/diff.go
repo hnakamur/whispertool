@@ -49,8 +49,8 @@ func (c *DiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	if c.DestBase == "" {
 		return newRequiredOptionError(fs, "dest-base")
 	}
-	if c.DestRelPath == "" {
-		return newRequiredOptionError(fs, "dest")
+	if c.DestRelPath != "" && hasMeta(c.SrcRelPath) {
+		return errNonEmptyDestRelPathForSrcRelPathWithMeta
 	}
 	if c.From > c.Until {
 		return errFromIsAfterUntil
@@ -64,23 +64,64 @@ func (c *DiffCommand) Execute() error {
 }
 
 func (c *DiffCommand) execute(tow io.Writer) (err error) {
+	if hasMeta(c.SrcRelPath) {
+		t0 := time.Now()
+		fmt.Fprintf(tow, "time:%s\tmsg:start\n", formatTime(t0))
+		var totalFileCount int
+		defer func() {
+			t1 := time.Now()
+			fmt.Fprintf(tow, "time:%s\tmsg:finish\tduration:%s\ttotalFileCount:%d\n", formatTime(t1), t1.Sub(t0).String(), totalFileCount)
+		}()
+
+		filenames, err := globFiles(c.SrcBase, c.SrcRelPath)
+		if err != nil {
+			return WrapFileNotExistError(Source, err)
+		}
+		totalFileCount = len(filenames)
+		diffFound := false
+		for _, relPath := range filenames {
+			err = c.diffOneFile(relPath, relPath, tow)
+			if err != nil {
+				if errors.Is(err, ErrDiffFound) {
+					diffFound = true
+					continue
+				}
+				return err
+			}
+		}
+		if diffFound {
+			return ErrDiffFound
+		}
+		return nil
+	}
+
+	var destRelPath string
+	if c.DestRelPath == "" {
+		destRelPath = c.SrcRelPath
+	} else {
+		destRelPath = c.DestRelPath
+	}
+	return c.diffOneFile(c.SrcRelPath, destRelPath, tow)
+}
+
+func (c *DiffCommand) diffOneFile(srcRelPath, destRelPath string, tow io.Writer) (err error) {
 	var srcHeader, destHeader *whispertool.Header
 	var srcTsList, destTsList TimeSeriesList
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
-		srcHeader, srcTsList, err = readWhisperFile(c.SrcBase, c.SrcRelPath, c.ArchiveID, c.From, c.Until, c.Now)
+		srcHeader, srcTsList, err = readWhisperFile(c.SrcBase, srcRelPath, c.ArchiveID, c.From, c.Until, c.Now)
 		return WrapFileNotExistError(Source, err)
 	})
 	eg.Go(func() error {
 		var err error
-		destHeader, destTsList, err = readWhisperFile(c.DestBase, c.DestRelPath, c.ArchiveID, c.From, c.Until, c.Now)
+		destHeader, destTsList, err = readWhisperFile(c.DestBase, destRelPath, c.ArchiveID, c.From, c.Until, c.Now)
 		return WrapFileNotExistError(Destination, err)
 	})
 	if err := eg.Wait(); err != nil {
 		if err2 := AsFileNotExistError(err); err2 != nil {
 			fmt.Fprintf(tow, "err:%s\tsrcOrDest:%s\n", err2.cause, err2.srcOrDest)
-			return nil
+			return ErrDiffFound
 		}
 		return err
 	}
