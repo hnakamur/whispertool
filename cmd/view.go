@@ -108,6 +108,10 @@ func getFileDataFromRemote(reqURL string) (*whispertool.Header, TimeSeriesList, 
 		return nil, nil, err
 	}
 
+	if len(data) == 0 {
+		return nil, nil, convertRemoteErrNotExist(resp)
+	}
+
 	h := &whispertool.Header{}
 	if data, err = h.TakeFrom(data); err != nil {
 		return nil, nil, err
@@ -121,6 +125,14 @@ func getFileDataFromRemote(reqURL string) (*whispertool.Header, TimeSeriesList, 
 		}
 	}
 	return h, tsList, nil
+}
+
+func convertRemoteErrNotExist(resp *http.Response) error {
+	return &os.PathError{
+		Op:   resp.Header.Get(RespHeaderNameXOp),
+		Path: resp.Header.Get(RespHeaderNameXPath),
+		Err:  os.ErrNotExist,
+	}
 }
 
 func readWhisperFileLocal(filename string, archiveID int, from, until, now whispertool.Timestamp) (*whispertool.Header, TimeSeriesList, error) {

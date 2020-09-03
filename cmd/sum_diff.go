@@ -78,7 +78,7 @@ func (c *SumDiffCommand) execute(tow io.Writer) (err error) {
 
 	items, err := globItems(c.SrcBase, c.ItemPattern)
 	if err != nil {
-		return err
+		return WrapFileNotExistError(Source, err)
 	}
 	totalItemCount = len(items)
 	for _, item := range items {
@@ -109,7 +109,7 @@ func (c *SumDiffCommand) sumDiffItem(item string, tow io.Writer) error {
 	})
 	if err := g.Wait(); err != nil {
 		if err2 := AsFileNotExistError(err); err2 != nil {
-			fmt.Fprintf(tow, "err:%s\tsrcOrDest:%s\n", err2.cause, err2.srcOrDest, err2.cause)
+			fmt.Fprintf(tow, "err:%s\tsrcOrDest:%s\n", err2.cause, err2.srcOrDest)
 			return nil
 		}
 		return err

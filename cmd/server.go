@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/hnakamur/whispertool"
 )
+
+const RespHeaderNameXOp = "X-Op"
+const RespHeaderNameXPath = "X-Path"
 
 type ServerCommand struct {
 	Addr    string
@@ -128,6 +132,9 @@ func (a *app) handleView(w http.ResponseWriter, r *http.Request) error {
 	filename := filepath.Join(a.baseDir, fileParam)
 	h, tsList, err := readWhisperFileLocal(filename, retID, from, until, now)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return setRespForNotExistErr(w, err)
+		}
 		return err
 	}
 
@@ -141,6 +148,16 @@ func (a *app) handleView(w http.ResponseWriter, r *http.Request) error {
 	_, err = w.Write(buf)
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func setRespForNotExistErr(w http.ResponseWriter, err error) error {
+	w.Header().Set("Content-Type", "application/octet-stream")
+	var perr *os.PathError
+	if errors.As(err, &perr) {
+		w.Header().Set(RespHeaderNameXOp, perr.Op)
+		w.Header().Set(RespHeaderNameXPath, perr.Path)
 	}
 	return nil
 }
@@ -176,6 +193,9 @@ func (a *app) handleSum(w http.ResponseWriter, r *http.Request) error {
 
 	h, tsList, err := sumWhisperFileLocal(a.baseDir, item, pattern, retID, from, until, now)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return setRespForNotExistErr(w, err)
+		}
 		return err
 	}
 
@@ -204,6 +224,9 @@ func (a *app) handleItems(w http.ResponseWriter, r *http.Request) error {
 
 	items, err := globItemsLocal(a.baseDir, pattern)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return setRespForNotExistErr(w, err)
+		}
 		return newHTTPError(http.StatusBadRequest, err)
 	}
 

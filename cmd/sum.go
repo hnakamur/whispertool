@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -94,12 +95,17 @@ func globItems(baseDirOrURL, itemDirPattern string) ([]string, error) {
 }
 
 func globItemsLocal(baseDir, itemDirPattern string) ([]string, error) {
-	items, err := filepath.Glob(filepath.Join(baseDir, itemDirPattern))
+	itemDirAbsPattern := filepath.Join(baseDir, itemDirPattern)
+	items, err := filepath.Glob(itemDirAbsPattern)
 	if err != nil {
 		return nil, err
 	}
 	if len(items) == 0 {
-		return nil, fmt.Errorf("itemPattern match no directries, itemPattern=%s", itemDirPattern)
+		return nil, &os.PathError{
+			Op:   "glob",
+			Path: itemDirAbsPattern,
+			Err:  os.ErrNotExist,
+		}
 	}
 	for i, itemDirname := range items {
 		itemRelDir, err := filepath.Rel(baseDir, itemDirname)
@@ -125,6 +131,10 @@ func globItemsRemote(srcURL, itemRelDirPattern string) ([]string, error) {
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(data) == 0 {
+		return nil, convertRemoteErrNotExist(resp)
 	}
 
 	var items []string
@@ -153,7 +163,11 @@ func sumWhisperFileLocal(baseDir, item, srcPattern string, archiveID int, from, 
 		return nil, nil, err
 	}
 	if len(srcFilenames) == 0 {
-		return nil, nil, fmt.Errorf("no file matched for -src=%s", srcPattern)
+		return nil, nil, &os.PathError{
+			Op:   "glob",
+			Path: srcFullPattern,
+			Err:  os.ErrNotExist,
+		}
 	}
 
 	hList := make([]*whispertool.Header, len(srcFilenames))
@@ -163,11 +177,7 @@ func sumWhisperFileLocal(baseDir, item, srcPattern string, archiveID int, from, 
 		i := i
 		srcFilename := srcFilename
 		g.Go(func() error {
-			srcRelPath, err := filepath.Rel(baseDir, srcFilename)
-			if err != nil {
-				return err
-			}
-			db, ptsList, err := readWhisperFile(baseDir, srcRelPath, archiveID, from, until, now)
+			db, ptsList, err := readWhisperFileLocal(srcFilename, archiveID, from, until, now)
 			if err != nil {
 				return err
 			}

@@ -79,7 +79,7 @@ func (c *DiffCommand) execute(tow io.Writer) (err error) {
 	})
 	if err := eg.Wait(); err != nil {
 		if err2 := AsFileNotExistError(err); err2 != nil {
-			fmt.Fprintf(tow, "err:%s\tsrcOrDest:%s\n", err2.cause, err2.srcOrDest, err2.cause)
+			fmt.Fprintf(tow, "err:%s\tsrcOrDest:%s\n", err2.cause, err2.srcOrDest)
 			return nil
 		}
 		return err
