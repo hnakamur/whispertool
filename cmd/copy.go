@@ -96,19 +96,11 @@ func (c *CopyCommand) execute(tow io.Writer) (err error) {
 			return WrapFileNotExistError(Source, err)
 		}
 		totalFileCount = len(filenames)
-		diffFound := false
 		for _, relPath := range filenames {
 			err = c.copyOneFile(relPath, relPath, tow)
 			if err != nil {
-				if errors.Is(err, ErrDiffFound) {
-					diffFound = true
-					continue
-				}
 				return err
 			}
-		}
-		if diffFound {
-			return ErrDiffFound
 		}
 		return nil
 	}
@@ -184,6 +176,11 @@ func openOrCreateCopyDestFile(filename string, srcHeader *whispertool.Header) (*
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
+		}
+
+		dir := filepath.Dir(filename)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, fmt.Errorf("mkdirAll: dir=%s: err", dir, err)
 		}
 
 		destDB, err = whispertool.Create(filename, srcHeader.ArchiveInfoList(),
