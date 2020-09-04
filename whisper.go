@@ -102,28 +102,24 @@ func Open(filename string, opts ...Option) (*Whisper, error) {
 		opt(w)
 	}
 
-	// log.Printf("Open filename=%s, before openAndLockFile", filename)
 	if err := w.openAndLockFile(filename); err != nil {
 		return nil, err
 	}
 
-	// log.Printf("Open filename=%s, before stat", filename)
 	st, err := w.file.Stat()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("stat: %s: %s", filename, err)
 	}
 
 	w.fileBuf = filebuffer.New(w.file, st.Size(), w.pageSize)
 
-	// log.Printf("Open filename=%s, before readHeader", filename)
 	if err := w.readHeader(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("readHeader: %s: %s", filename, err)
 	}
 	return w, nil
 }
 
 func (w *Whisper) openAndLockFile(filename string) error {
-	// log.Printf("openAndLockFile start, filename=%s, openFlag=0x%x", filename, w.openFileFlag)
 	file, err := os.OpenFile(filename, w.openFileFlag, w.perm)
 	if err != nil {
 		return err
@@ -131,10 +127,9 @@ func (w *Whisper) openAndLockFile(filename string) error {
 	w.file = file
 
 	if w.flock {
-		// log.Printf("openAndLockFile before flock, filename=%s", filename)
 		if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
 			file.Close()
-			return err
+			return fmt.Errorf("flock: %s %s", filename, err)
 		}
 	}
 	return nil
