@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -60,8 +61,8 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	if isBaseURL(c.DestBase) {
 		return errors.New("dest-base must be local directory")
 	}
-	if c.DestRelPath == "" {
-		return newRequiredOptionError(fs, "dest")
+	if c.DestRelPath != "" && hasMeta(c.SrcRelPath) {
+		return errNonEmptyDestRelPathForSrcRelPathWithMeta
 	}
 	if c.AggregationMethod == 0 {
 		return newRequiredOptionError(fs, "agg-method")
@@ -81,17 +82,58 @@ func (c *CopyCommand) Execute() error {
 }
 
 func (c *CopyCommand) execute(tow io.Writer) (err error) {
+	if hasMeta(c.SrcRelPath) {
+		t0 := time.Now()
+		fmt.Fprintf(tow, "time:%s\tmsg:start\n", formatTime(t0))
+		var totalFileCount int
+		defer func() {
+			t1 := time.Now()
+			fmt.Fprintf(tow, "time:%s\tmsg:finish\tduration:%s\ttotalFileCount:%d\n", formatTime(t1), t1.Sub(t0).String(), totalFileCount)
+		}()
+
+		filenames, err := globFiles(c.SrcBase, c.SrcRelPath)
+		if err != nil {
+			return WrapFileNotExistError(Source, err)
+		}
+		totalFileCount = len(filenames)
+		diffFound := false
+		for _, relPath := range filenames {
+			err = c.copyOneFile(relPath, relPath, tow)
+			if err != nil {
+				if errors.Is(err, ErrDiffFound) {
+					diffFound = true
+					continue
+				}
+				return err
+			}
+		}
+		if diffFound {
+			return ErrDiffFound
+		}
+		return nil
+	}
+
+	var destRelPath string
+	if c.DestRelPath == "" {
+		destRelPath = c.SrcRelPath
+	} else {
+		destRelPath = c.DestRelPath
+	}
+	return c.copyOneFile(c.SrcRelPath, destRelPath, tow)
+}
+
+func (c *CopyCommand) copyOneFile(srcRelPath, destRelPath string, tow io.Writer) (err error) {
 	var destDB *whispertool.Whisper
 	var srcHeader, destHeader *whispertool.Header
 	var srcTsList, destTsList TimeSeriesList
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
-		srcHeader, srcTsList, err = readWhisperFile(c.SrcBase, c.SrcRelPath, c.ArchiveID, c.From, c.Until, c.Now)
+		srcHeader, srcTsList, err = readWhisperFile(c.SrcBase, srcRelPath, c.ArchiveID, c.From, c.Until, c.Now)
 		return err
 	})
 	eg.Go(func() error {
-		destFullPath := filepath.Join(c.DestBase, c.DestRelPath)
+		destFullPath := filepath.Join(c.DestBase, destRelPath)
 		destHeaderForCreate, err := whispertool.NewHeader(c.AggregationMethod, c.XFilesFactor, c.ArchiveInfoList)
 		if err != nil {
 			return err
