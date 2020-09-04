@@ -188,6 +188,12 @@ func openOrCreateCopyDestFile(filename string, srcHeader *whispertool.Header) (*
 		if err != nil {
 			return nil, err
 		}
+
+		// NOTE: Sync header now because no sync is called later
+		// if source points are all empty.
+		if err := destDB.Sync(); err != nil {
+			return nil, err
+		}
 	}
 	return destDB, nil
 }
