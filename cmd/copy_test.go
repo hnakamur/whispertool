@@ -133,3 +133,112 @@ func TestCopyCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestCopyCommandMultiFiles(t *testing.T) {
+	tempdir, err := ioutil.TempDir("", "whispertool-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err != nil {
+			t.Logf("We leave temp dir %s for you to investigate, err=%v", tempdir, err)
+			return
+		}
+		if err := os.RemoveAll(tempdir); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	srcBase := filepath.Join(tempdir, "src")
+	destBase := filepath.Join(tempdir, "dest")
+	archiveInfoList, err := whispertool.ParseArchiveInfoList("1m:30h,1h:32d,1d:400d")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := whispertool.TimestampFromStdTime(time.Now())
+	item := "item01"
+
+	if err := os.MkdirAll(filepath.Join(srcBase, item), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(destBase, item), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	var eg errgroup.Group
+	const srcFileCount = 10
+	for i := 0; i < srcFileCount; i++ {
+		src := fmt.Sprintf("sv%02d.wsp", i)
+		eg.Go(func() error {
+			genSrcCmd := &GenerateCommand{
+				Dest:              filepath.Join(srcBase, item, src),
+				Perm:              0644,
+				ArchiveInfoList:   archiveInfoList,
+				AggregationMethod: whispertool.Sum,
+				XFilesFactor:      0.0,
+				RandMax:           1000,
+				Fill:              true,
+				Now:               now,
+				TextOut:           "",
+			}
+			return genSrcCmd.Execute()
+		})
+	}
+
+	const destFileCount = 5
+	for i := 0; i < destFileCount; i++ {
+		src := fmt.Sprintf("sv%02d.wsp", i)
+		eg.Go(func() error {
+			genDestCmd := &GenerateCommand{
+				Dest:              filepath.Join(destBase, item, src),
+				Perm:              0644,
+				ArchiveInfoList:   archiveInfoList,
+				AggregationMethod: whispertool.Sum,
+				XFilesFactor:      0.0,
+				RandMax:           1000,
+				Fill:              true,
+				Now:               now,
+				TextOut:           "",
+			}
+			return genDestCmd.Execute()
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		t.Fatal(err)
+	}
+
+	untilOffset := whispertool.Duration(0)
+	copyCmd := &CopyCommand{
+		SrcBase:           srcBase,
+		SrcRelPath:        filepath.Join(item, "sv*.wsp"),
+		DestBase:          destBase,
+		DestRelPath:       "",
+		ArchiveInfoList:   archiveInfoList,
+		AggregationMethod: whispertool.Sum,
+		XFilesFactor:      0.0,
+		From:              0,
+		Until:             now.Add(untilOffset),
+		Now:               now,
+		ArchiveID:         ArchiveIDAll,
+		TextOut:           "",
+	}
+	if err = copyCmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	diffCmd := &DiffCommand{
+		SrcBase:     srcBase,
+		SrcRelPath:  filepath.Join(item, "sv*.wsp"),
+		DestBase:    destBase,
+		DestRelPath: "",
+		From:        0,
+		Until:       now.Add(untilOffset),
+		Now:         now,
+		ArchiveID:   ArchiveIDAll,
+		TextOut:     "-",
+	}
+	if err = diffCmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+}
