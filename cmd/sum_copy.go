@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hnakamur/whispertool"
@@ -106,6 +107,7 @@ func (c *SumCopyCommand) execute(tow io.Writer) (err error) {
 
 func (c *SumCopyCommand) sumCopyItem(item string, tow io.Writer) error {
 	fmt.Fprintf(tow, "item:%s\n", item)
+	itemRelDir := strings.ReplaceAll(item, ".", string(filepath.Separator))
 
 	var destDB *whispertool.Whisper
 	var srcHeader, destHeader *whispertool.Header
@@ -113,11 +115,11 @@ func (c *SumCopyCommand) sumCopyItem(item string, tow io.Writer) error {
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
-		srcHeader, srcTsList, err = sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.ArchiveID, c.From, c.Until, c.Now)
+		srcHeader, srcTsList, err = sumWhisperFile(c.SrcBase, itemRelDir, c.SrcPattern, c.ArchiveID, c.From, c.Until, c.Now)
 		return err
 	})
 	eg.Go(func() error {
-		destFullPath := filepath.Join(c.DestBase, item, c.DestRelPath)
+		destFullPath := filepath.Join(c.DestBase, itemRelDir, c.DestRelPath)
 		destHeaderForCreate, err := whispertool.NewHeader(c.AggregationMethod, c.XFilesFactor, c.ArchiveInfoList)
 		if err != nil {
 			return err
