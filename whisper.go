@@ -361,7 +361,7 @@ func (w *Whisper) archiveUpdateMany(points []Point, archiveID int, now Timestamp
 		return err
 	}
 	if baseInterval == 0 {
-		baseInterval = r.intervalForWrite(now)
+		baseInterval = alignedPoints[0].Time
 	}
 
 	for _, p := range alignedPoints {
