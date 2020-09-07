@@ -186,7 +186,7 @@ func openOrCreateCopyDestFile(filename string, srcHeader *whispertool.Header) (*
 
 		dir := filepath.Dir(filename)
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			return nil, fmt.Errorf("mkdirAll: dir=%s: err", dir, err)
+			return nil, fmt.Errorf("mkdirAll: dir=%s: err=%s", dir, err)
 		}
 
 		destDB, err = whispertool.Create(filename, srcHeader.ArchiveInfoList(),
