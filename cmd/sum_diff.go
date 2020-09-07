@@ -128,7 +128,7 @@ func (c *SumDiffCommand) sumDiffItem(item string, tow io.Writer) error {
 	}
 
 	sumPlDif, destPlDif := sumTsList.Diff(destTsList)
-	if sumTsList.AllEmpty() && destPlDif.AllEmpty() {
+	if sumPlDif.AllEmpty() && destPlDif.AllEmpty() {
 		return nil
 	}
 
