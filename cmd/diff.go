@@ -105,7 +105,11 @@ func (c *DiffCommand) execute(tow io.Writer) (err error) {
 }
 
 func (c *DiffCommand) diffOneFile(srcRelPath, destRelPath string, tow io.Writer) (err error) {
-	fmt.Fprintf(tow, "srcRel:%s\tdestRel:%s\n", srcRelPath, destRelPath)
+	if c.DestRelPath == "" {
+		fmt.Fprintf(tow, "srcRel:%s\n", srcRelPath)
+	} else {
+		fmt.Fprintf(tow, "srcRel:%s\tdestRel:%s\n", srcRelPath, destRelPath)
+	}
 
 	var srcHeader, destHeader *whispertool.Header
 	var srcTsList, destTsList TimeSeriesList
