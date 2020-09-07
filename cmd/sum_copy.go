@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/hnakamur/whispertool"
@@ -107,7 +106,7 @@ func (c *SumCopyCommand) execute(tow io.Writer) (err error) {
 
 func (c *SumCopyCommand) sumCopyItem(item string, tow io.Writer) error {
 	fmt.Fprintf(tow, "item:%s\n", item)
-	itemRelDir := strings.ReplaceAll(item, ".", string(filepath.Separator))
+	itemRelDir := itemToRelDir(item)
 
 	var destDB *whispertool.Whisper
 	var srcHeader, destHeader *whispertool.Header

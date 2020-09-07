@@ -115,6 +115,8 @@ func (c *CopyCommand) execute(tow io.Writer) (err error) {
 }
 
 func (c *CopyCommand) copyOneFile(srcRelPath, destRelPath string, tow io.Writer) (err error) {
+	fmt.Fprintf(tow, "srcRel:%s\tdestRel:%s\n", srcRelPath, destRelPath)
+
 	var destDB *whispertool.Whisper
 	var srcHeader, destHeader *whispertool.Header
 	var srcTsList, destTsList TimeSeriesList

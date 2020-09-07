@@ -71,9 +71,10 @@ func (c *SumDiffCommand) execute(tow io.Writer) (err error) {
 	t0 := time.Now()
 	fmt.Fprintf(tow, "time:%s\tmsg:start\n", formatTime(t0))
 	var totalItemCount int
+	diffFound := false
 	defer func() {
 		t1 := time.Now()
-		fmt.Fprintf(tow, "time:%s\tmsg:finish\tduration:%s\ttotalItemCount:%d\n", formatTime(t1), t1.Sub(t0).String(), totalItemCount)
+		fmt.Fprintf(tow, "time:%s\tmsg:finish\tduration:%s\ttotalItemCount:%d\tdiffFound:%v\n", formatTime(t1), t1.Sub(t0).String(), totalItemCount, diffFound)
 	}()
 
 	items, err := globItems(c.SrcBase, c.ItemPattern)
@@ -84,8 +85,15 @@ func (c *SumDiffCommand) execute(tow io.Writer) (err error) {
 	for _, item := range items {
 		err = c.sumDiffItem(item, tow)
 		if err != nil {
+			if errors.Is(err, ErrDiffFound) {
+				diffFound = true
+				continue
+			}
 			return err
 		}
+	}
+	if diffFound {
+		return ErrDiffFound
 	}
 	return nil
 }
@@ -127,7 +135,8 @@ func (c *SumDiffCommand) sumDiffItem(item string, tow io.Writer) error {
 	if err := printDiff(tow, sumHeader, destHeader, sumPlDif, destPlDif); err != nil {
 		return err
 	}
-	return nil
+
+	return ErrDiffFound
 }
 
 func formatTime(t time.Time) string {

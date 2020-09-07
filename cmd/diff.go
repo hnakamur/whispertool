@@ -68,9 +68,10 @@ func (c *DiffCommand) execute(tow io.Writer) (err error) {
 		t0 := time.Now()
 		fmt.Fprintf(tow, "time:%s\tmsg:start\n", formatTime(t0))
 		var totalFileCount int
+		diffFound := false
 		defer func() {
 			t1 := time.Now()
-			fmt.Fprintf(tow, "time:%s\tmsg:finish\tduration:%s\ttotalFileCount:%d\n", formatTime(t1), t1.Sub(t0).String(), totalFileCount)
+			fmt.Fprintf(tow, "time:%s\tmsg:finish\tduration:%s\ttotalFileCount:%d\tdiffFound:%v\n", formatTime(t1), t1.Sub(t0).String(), totalFileCount, diffFound)
 		}()
 
 		filenames, err := globFiles(c.SrcBase, c.SrcRelPath)
@@ -78,7 +79,6 @@ func (c *DiffCommand) execute(tow io.Writer) (err error) {
 			return WrapFileNotExistError(Source, err)
 		}
 		totalFileCount = len(filenames)
-		diffFound := false
 		for _, relPath := range filenames {
 			err = c.diffOneFile(relPath, relPath, tow)
 			if err != nil {
@@ -105,6 +105,8 @@ func (c *DiffCommand) execute(tow io.Writer) (err error) {
 }
 
 func (c *DiffCommand) diffOneFile(srcRelPath, destRelPath string, tow io.Writer) (err error) {
+	fmt.Fprintf(tow, "srcRel:%s\tdestRel:%s\n", srcRelPath, destRelPath)
+
 	var srcHeader, destHeader *whispertool.Header
 	var srcTsList, destTsList TimeSeriesList
 	var eg errgroup.Group
