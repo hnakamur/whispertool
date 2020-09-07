@@ -172,8 +172,8 @@ func randomValWithHighSum(t whispertool.Timestamp, rnd *rand.Rand, highRndMax in
 }
 
 func updateFileDataWithPointsList(db *whispertool.Whisper, pointsList PointsList, now whispertool.Timestamp) error {
-	for retID := range db.ArchiveInfoList() {
-		if err := db.UpdatePointsForArchive(pointsList[retID], retID, now); err != nil {
+	for archiveID := range db.ArchiveInfoList() {
+		if err := db.UpdatePointsForArchive(pointsList[archiveID], archiveID, now); err != nil {
 			return err
 		}
 	}

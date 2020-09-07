@@ -114,14 +114,14 @@ func getRawFileDataFromRemote(reqURL string) (*whispertool.Header, PointsList, e
 	return h, ptsList, nil
 }
 
-func readWhisperFileRawLocal(filename string, retID int) (*whispertool.Header, PointsList, error) {
+func readWhisperFileRawLocal(filename string, archiveID int) (*whispertool.Header, PointsList, error) {
 	db, err := whispertool.Open(filename)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer db.Close()
 
-	ptsList, err := fetchRawPointsLists(db, retID)
+	ptsList, err := fetchRawPointsLists(db, archiveID)
 	if err != nil {
 		return nil, nil, err
 	}

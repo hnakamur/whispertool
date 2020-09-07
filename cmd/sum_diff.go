@@ -167,10 +167,10 @@ func printPointsListAppendTo(w io.Writer, itemName string, h *whispertool.Header
 	if _, err := fmt.Fprintf(w, "item:%s\n", itemName); err != nil {
 		return err
 	}
-	for retID := range h.ArchiveInfoList() {
+	for archiveID := range h.ArchiveInfoList() {
 		for _, pts := range ptsList {
 			for _, pt := range pts {
-				if _, err := fmt.Fprintf(w, "retID:%d\tt:%s\tvalue:%s\n", retID, pt.Time, pt.Value); err != nil {
+				if _, err := fmt.Fprintf(w, "archive:%d\tt:%s\tvalue:%s\n", archiveID, pt.Time, pt.Value); err != nil {
 					return err
 				}
 			}

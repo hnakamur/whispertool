@@ -152,7 +152,7 @@ func printDiff(w io.Writer, srcHeader, destHeader *whispertool.Header, srcPlDif,
 		destPtsDif := destPlDif[archiveID]
 		for i, srcPt := range srcPtsDif {
 			destPt := destPtsDif[i]
-			fmt.Fprintf(w, "retID:%d\tt:%s\tsrcVal:%s\tdestVal:%s\tdestMinusSrc:%s\n",
+			fmt.Fprintf(w, "archive:%d\tt:%s\tsrcVal:%s\tdestVal:%s\tdestMinusSrc:%s\n",
 				archiveID, srcPt.Time, srcPt.Value, destPt.Value, destPt.Value.Diff(srcPt.Value))
 
 		}
