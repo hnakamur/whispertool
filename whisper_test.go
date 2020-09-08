@@ -1079,11 +1079,13 @@ retID:1	from:2020-07-03T06:00:16Z	until:2020-07-03T06:00:48Z	step:4s	values:NaN 
 retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 255`,
 		},
 		{
+			// NOTE: In this case, the old value 1 remains without being overwritten,
+			// so the aggregated value at archiveID 1 is 257, not 256.
 			offset: -7 * Second,
 			want: `now:2020-07-03T06:00:46Z
 retID:0	from:2020-07-03T06:00:39Z	until:2020-07-03T06:00:47Z	step:1s	values:256 4 8 16 32 64 128 NaN
-retID:1	from:2020-07-03T06:00:16Z	until:2020-07-03T06:00:48Z	step:4s	values:NaN NaN NaN NaN NaN 256 60 448
-retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 511`,
+retID:1	from:2020-07-03T06:00:16Z	until:2020-07-03T06:00:48Z	step:4s	values:NaN NaN NaN NaN NaN 257 60 192
+retID:2	from:2020-07-03T05:59:44Z	until:2020-07-03T06:00:48Z	step:16s	values:NaN NaN NaN 509`,
 		},
 	}
 	db := testCreateDB(t, "1s:8s,4s:32s,16s:64s", Sum, 0)
