@@ -575,6 +575,7 @@ func (w *Whisper) propagate(archiveID int, ts []Timestamp, now Timestamp) (propa
 
 	step := r.secondsPerPoint
 	highRetID := archiveID - 1
+	rHigh := &w.ArchiveInfoList()[highRetID]
 	var rLow *ArchiveInfo
 	if archiveID+1 < len(w.ArchiveInfoList()) {
 		rLow = &w.ArchiveInfoList()[archiveID+1]
@@ -587,7 +588,7 @@ func (w *Whisper) propagate(archiveID int, ts []Timestamp, now Timestamp) (propa
 		if err != nil {
 			return nil, err
 		}
-		values := filterValidValues(points, fromInterval, &w.ArchiveInfoList()[highRetID])
+		values := filterValidValues(points, fromInterval, rHigh)
 		knownFactor := float32(len(values)) / float32(len(points))
 		if knownFactor < w.XFilesFactor() {
 			continue
