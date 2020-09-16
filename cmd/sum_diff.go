@@ -140,7 +140,7 @@ func (c *SumDiffCommand) sumDiffItem(item string, tow io.Writer) error {
 }
 
 func formatTime(t time.Time) string {
-	return t.Format(whispertool.UTCTimeLayout)
+	return t.UTC().Format(whispertool.UTCTimeLayout)
 }
 
 func printPointsListAppend(textOut string, itemName string, h *whispertool.Header, ptsList PointsList) error {
