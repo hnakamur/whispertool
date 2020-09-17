@@ -23,7 +23,6 @@ type SumDiffCommand struct {
 	DestRelPath string
 	From        whispertool.Timestamp
 	Until       whispertool.Timestamp
-	Now         whispertool.Timestamp
 	ArchiveID   int
 	TextOut     string
 }
@@ -37,9 +36,6 @@ func (c *SumDiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.IntVar(&c.ArchiveID, "archive", ArchiveIDAll, "archive ID (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of diff. empty means no output, - means stdout, other means output file.")
 
-	c.Now = whispertool.TimestampFromStdTime(time.Now())
-	c.Until = c.Now
-	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 
@@ -99,20 +95,28 @@ func (c *SumDiffCommand) execute(tow io.Writer) (err error) {
 }
 
 func (c *SumDiffCommand) sumDiffItem(item string, tow io.Writer) error {
-	fmt.Fprintf(tow, "item:%s\n", item)
+	now := whispertool.TimestampFromStdTime(time.Now())
+	var until whispertool.Timestamp
+	if c.Until == 0 {
+		until = now
+	} else {
+		until = c.Until
+	}
+
+	fmt.Fprintf(tow, "now:%s\titem:%s\n", now, item)
 
 	var sumHeader, destHeader *whispertool.Header
 	var sumTsList, destTsList TimeSeriesList
 	var g errgroup.Group
 	g.Go(func() error {
 		var err error
-		sumHeader, sumTsList, err = sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.ArchiveID, c.From, c.Until, c.Now)
+		sumHeader, sumTsList, err = sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.ArchiveID, c.From, until, now)
 		return WrapFileNotExistError(Source, err)
 	})
 	g.Go(func() error {
 		var err error
 		destRelPath := filepath.Join(itemToRelDir(item), c.DestRelPath)
-		destHeader, destTsList, err = readWhisperFile(c.DestBase, destRelPath, c.ArchiveID, c.From, c.Until, c.Now)
+		destHeader, destTsList, err = readWhisperFile(c.DestBase, destRelPath, c.ArchiveID, c.From, until, now)
 		return WrapFileNotExistError(Destination, err)
 	})
 	if err := g.Wait(); err != nil {

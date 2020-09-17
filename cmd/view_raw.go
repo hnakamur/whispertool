@@ -26,7 +26,6 @@ type ViewRawCommand struct {
 }
 
 func (c *ViewRawCommand) Parse(fs *flag.FlagSet, args []string) error {
-	c.Until = whispertool.TimestampFromStdTime(time.Now())
 	fs.StringVar(&c.SrcBase, "src-base", "", "src base directory or URL of \"whispertool server\"")
 	fs.StringVar(&c.SrcRelPath, "src", "", "whisper file relative path to src base")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
@@ -55,12 +54,19 @@ func (c *ViewRawCommand) Execute() error {
 }
 
 func (c *ViewRawCommand) execute(tow io.Writer) (err error) {
+	var until whispertool.Timestamp
+	if c.Until == 0 {
+		until = whispertool.TimestampFromStdTime(time.Now())
+	} else {
+		until = c.Until
+	}
+
 	h, ptsList, err := readWhisperFileRaw(c.SrcBase, c.SrcRelPath, c.ArchiveID)
 	if err != nil {
 		return err
 	}
 
-	ptsList = filterPointsListByTimeRange(h, ptsList, c.From, c.Until)
+	ptsList = filterPointsListByTimeRange(h, ptsList, c.From, until)
 	if c.SortsByTime {
 		sortPointsListByTime(ptsList)
 	}

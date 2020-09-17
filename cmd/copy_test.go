@@ -75,7 +75,6 @@ func TestCopyCommand(t *testing.T) {
 					XFilesFactor:      0.0,
 					RandMax:           1000,
 					Fill:              true,
-					Now:               now,
 					TextOut:           "",
 				}
 				return genSrcCmd.Execute()
@@ -89,7 +88,6 @@ func TestCopyCommand(t *testing.T) {
 					XFilesFactor:      0.0,
 					RandMax:           1000,
 					Fill:              true,
-					Now:               now,
 					TextOut:           "",
 				}
 				return genDestCmd.Execute()
@@ -108,7 +106,6 @@ func TestCopyCommand(t *testing.T) {
 				XFilesFactor:      0.0,
 				From:              0,
 				Until:             now.Add(untilOffset),
-				Now:               now,
 				ArchiveID:         ArchiveIDAll,
 				TextOut:           "",
 			}
@@ -123,7 +120,6 @@ func TestCopyCommand(t *testing.T) {
 				DestRelPath: filepath.Join(item, dest),
 				From:        0,
 				Until:       now.Add(untilOffset),
-				Now:         now,
 				ArchiveID:   ArchiveIDAll,
 				TextOut:     "-",
 			}
@@ -179,7 +175,6 @@ func TestCopyCommandMultiFiles(t *testing.T) {
 				XFilesFactor:      0.0,
 				RandMax:           1000,
 				Fill:              true,
-				Now:               now,
 				TextOut:           "",
 			}
 			return genSrcCmd.Execute()
@@ -198,7 +193,6 @@ func TestCopyCommandMultiFiles(t *testing.T) {
 				XFilesFactor:      0.0,
 				RandMax:           1000,
 				Fill:              true,
-				Now:               now,
 				TextOut:           "",
 			}
 			return genDestCmd.Execute()
@@ -219,7 +213,6 @@ func TestCopyCommandMultiFiles(t *testing.T) {
 		XFilesFactor:      0.0,
 		From:              0,
 		Until:             now.Add(untilOffset),
-		Now:               now,
 		ArchiveID:         ArchiveIDAll,
 		TextOut:           "",
 	}
@@ -234,7 +227,6 @@ func TestCopyCommandMultiFiles(t *testing.T) {
 		DestRelPath: "",
 		From:        0,
 		Until:       now.Add(untilOffset),
-		Now:         now,
 		ArchiveID:   ArchiveIDAll,
 		TextOut:     "-",
 	}

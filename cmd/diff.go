@@ -20,7 +20,6 @@ type DiffCommand struct {
 	DestRelPath string
 	From        whispertool.Timestamp
 	Until       whispertool.Timestamp
-	Now         whispertool.Timestamp
 	ArchiveID   int
 	TextOut     string
 }
@@ -33,9 +32,6 @@ func (c *DiffCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.IntVar(&c.ArchiveID, "archive", ArchiveIDAll, "archive ID (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
 
-	c.Now = whispertool.TimestampFromStdTime(time.Now())
-	c.Until = c.Now
-	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 	fs.Parse(args)
@@ -105,10 +101,18 @@ func (c *DiffCommand) execute(tow io.Writer) (err error) {
 }
 
 func (c *DiffCommand) diffOneFile(srcRelPath, destRelPath string, tow io.Writer) (err error) {
-	if c.DestRelPath == "" {
-		fmt.Fprintf(tow, "srcRel:%s\n", srcRelPath)
+	now := whispertool.TimestampFromStdTime(time.Now())
+	var until whispertool.Timestamp
+	if c.Until == 0 {
+		until = now
 	} else {
-		fmt.Fprintf(tow, "srcRel:%s\tdestRel:%s\n", srcRelPath, destRelPath)
+		until = c.Until
+	}
+
+	if c.DestRelPath == "" {
+		fmt.Fprintf(tow, "now:%s\tsrcRel:%s\n", now, srcRelPath)
+	} else {
+		fmt.Fprintf(tow, "now:%s\tsrcRel:%s\tdestRel:%s\n", now, srcRelPath, destRelPath)
 	}
 
 	var srcHeader, destHeader *whispertool.Header
@@ -116,12 +120,12 @@ func (c *DiffCommand) diffOneFile(srcRelPath, destRelPath string, tow io.Writer)
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
-		srcHeader, srcTsList, err = readWhisperFile(c.SrcBase, srcRelPath, c.ArchiveID, c.From, c.Until, c.Now)
+		srcHeader, srcTsList, err = readWhisperFile(c.SrcBase, srcRelPath, c.ArchiveID, c.From, until, now)
 		return WrapFileNotExistError(Source, err)
 	})
 	eg.Go(func() error {
 		var err error
-		destHeader, destTsList, err = readWhisperFile(c.DestBase, destRelPath, c.ArchiveID, c.From, c.Until, c.Now)
+		destHeader, destTsList, err = readWhisperFile(c.DestBase, destRelPath, c.ArchiveID, c.From, until, now)
 		return WrapFileNotExistError(Destination, err)
 	})
 	if err := eg.Wait(); err != nil {

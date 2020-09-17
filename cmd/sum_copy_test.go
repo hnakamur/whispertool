@@ -78,7 +78,6 @@ func TestSumCopyCommand(t *testing.T) {
 						XFilesFactor:      0.0,
 						RandMax:           1000,
 						Fill:              true,
-						Now:               now,
 						TextOut:           "",
 					}
 					return genSrcCmd.Execute()
@@ -93,7 +92,6 @@ func TestSumCopyCommand(t *testing.T) {
 					XFilesFactor:      0.0,
 					RandMax:           1000,
 					Fill:              true,
-					Now:               now,
 					TextOut:           "",
 				}
 				return genDestCmd.Execute()
@@ -113,7 +111,6 @@ func TestSumCopyCommand(t *testing.T) {
 				XFilesFactor:      0.0,
 				From:              0,
 				Until:             now.Add(untilOffset),
-				Now:               now,
 				ArchiveID:         ArchiveIDAll,
 				TextOut:           "",
 			}
@@ -129,7 +126,6 @@ func TestSumCopyCommand(t *testing.T) {
 				DestRelPath: dest,
 				From:        0,
 				Until:       now.Add(untilOffset),
-				Now:         now,
 				ArchiveID:   ArchiveIDAll,
 				TextOut:     "",
 			}

@@ -23,7 +23,6 @@ type SumCopyCommand struct {
 	ArchiveInfoList   whispertool.ArchiveInfoList
 	From              whispertool.Timestamp
 	Until             whispertool.Timestamp
-	Now               whispertool.Timestamp
 	ArchiveID         int
 	TextOut           string
 }
@@ -39,9 +38,6 @@ func (c *SumCopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.Var(&xFilesFactorValue{&c.XFilesFactor}, "x-files-factor", "xFilesFactor")
 	fs.Var(&archiveInfoListValue{&c.ArchiveInfoList}, "retentions", "retentions definitions")
 
-	c.Now = whispertool.TimestampFromStdTime(time.Now())
-	c.Until = c.Now
-	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 
@@ -105,7 +101,15 @@ func (c *SumCopyCommand) execute(tow io.Writer) (err error) {
 }
 
 func (c *SumCopyCommand) sumCopyItem(item string, tow io.Writer) error {
-	fmt.Fprintf(tow, "item:%s\n", item)
+	now := whispertool.TimestampFromStdTime(time.Now())
+	var until whispertool.Timestamp
+	if c.Until == 0 {
+		until = now
+	} else {
+		until = c.Until
+	}
+
+	fmt.Fprintf(tow, "now:%s\titem:%s\n", now, item)
 	itemRelDir := itemToRelDir(item)
 
 	var destDB *whispertool.Whisper
@@ -114,7 +118,7 @@ func (c *SumCopyCommand) sumCopyItem(item string, tow io.Writer) error {
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
-		srcHeader, srcTsList, err = sumWhisperFile(c.SrcBase, itemRelDir, c.SrcPattern, c.ArchiveID, c.From, c.Until, c.Now)
+		srcHeader, srcTsList, err = sumWhisperFile(c.SrcBase, itemRelDir, c.SrcPattern, c.ArchiveID, c.From, until, now)
 		return err
 	})
 	eg.Go(func() error {
@@ -128,7 +132,7 @@ func (c *SumCopyCommand) sumCopyItem(item string, tow io.Writer) error {
 			return err
 		}
 		destHeader = destDB.Header()
-		destTsList, err = fetchTimeSeriesList(destDB, c.ArchiveID, c.From, c.Until, c.Now)
+		destTsList, err = fetchTimeSeriesList(destDB, c.ArchiveID, c.From, until, now)
 		return err
 	})
 	if err := eg.Wait(); err != nil {
@@ -150,7 +154,7 @@ func (c *SumCopyCommand) sumCopyItem(item string, tow io.Writer) error {
 		return nil
 	}
 
-	if err := updateFileDataWithPointsList(destDB, srcPlDif, c.Now); err != nil {
+	if err := updateFileDataWithPointsList(destDB, srcPlDif, now); err != nil {
 		return err
 	}
 

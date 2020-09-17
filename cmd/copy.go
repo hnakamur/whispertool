@@ -23,7 +23,6 @@ type CopyCommand struct {
 	ArchiveInfoList   whispertool.ArchiveInfoList
 	From              whispertool.Timestamp
 	Until             whispertool.Timestamp
-	Now               whispertool.Timestamp
 	ArchiveID         int
 	TextOut           string
 }
@@ -38,9 +37,6 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.Var(&xFilesFactorValue{&c.XFilesFactor}, "x-files-factor", "xFilesFactor")
 	fs.Var(&archiveInfoListValue{&c.ArchiveInfoList}, "retentions", "retentions definitions")
 
-	c.Now = whispertool.TimestampFromStdTime(time.Now())
-	c.Until = c.Now
-	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 
@@ -115,10 +111,18 @@ func (c *CopyCommand) execute(tow io.Writer) (err error) {
 }
 
 func (c *CopyCommand) copyOneFile(srcRelPath, destRelPath string, tow io.Writer) (err error) {
-	if c.DestRelPath == "" {
-		fmt.Fprintf(tow, "srcRel:%s\n", srcRelPath)
+	now := whispertool.TimestampFromStdTime(time.Now())
+	var until whispertool.Timestamp
+	if c.Until == 0 {
+		until = now
 	} else {
-		fmt.Fprintf(tow, "srcRel:%s\tdestRel:%s\n", srcRelPath, destRelPath)
+		until = c.Until
+	}
+
+	if c.DestRelPath == "" {
+		fmt.Fprintf(tow, "now:%s\tsrcRel:%s\n", now, srcRelPath)
+	} else {
+		fmt.Fprintf(tow, "now:%s\tsrcRel:%s\tdestRel:%s\n", now, srcRelPath, destRelPath)
 	}
 
 	var destDB *whispertool.Whisper
@@ -127,7 +131,7 @@ func (c *CopyCommand) copyOneFile(srcRelPath, destRelPath string, tow io.Writer)
 	var eg errgroup.Group
 	eg.Go(func() error {
 		var err error
-		srcHeader, srcTsList, err = readWhisperFile(c.SrcBase, srcRelPath, c.ArchiveID, c.From, c.Until, c.Now)
+		srcHeader, srcTsList, err = readWhisperFile(c.SrcBase, srcRelPath, c.ArchiveID, c.From, until, now)
 		return err
 	})
 	eg.Go(func() error {
@@ -141,7 +145,7 @@ func (c *CopyCommand) copyOneFile(srcRelPath, destRelPath string, tow io.Writer)
 			return err
 		}
 		destHeader = destDB.Header()
-		destTsList, err = fetchTimeSeriesList(destDB, c.ArchiveID, c.From, c.Until, c.Now)
+		destTsList, err = fetchTimeSeriesList(destDB, c.ArchiveID, c.From, until, now)
 		return err
 	})
 	if err := eg.Wait(); err != nil {
@@ -163,7 +167,7 @@ func (c *CopyCommand) copyOneFile(srcRelPath, destRelPath string, tow io.Writer)
 		return nil
 	}
 
-	if err := updateFileDataWithPointsList(destDB, srcPlDif, c.Now); err != nil {
+	if err := updateFileDataWithPointsList(destDB, srcPlDif, now); err != nil {
 		return err
 	}
 

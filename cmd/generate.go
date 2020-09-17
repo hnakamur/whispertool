@@ -20,7 +20,6 @@ type GenerateCommand struct {
 	ArchiveInfoList   whispertool.ArchiveInfoList
 	RandMax           int
 	Fill              bool
-	Now               whispertool.Timestamp
 	TextOut           string
 }
 
@@ -37,9 +36,6 @@ func (c *GenerateCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.BoolVar(&c.Fill, "fill", true, "fill with random data")
 
 	fs.StringVar(&c.TextOut, "text-out", "", "text output of copying data. empty means no output, - means stdout, other means output file")
-
-	c.Now = whispertool.TimestampFromStdTime(time.Now())
-	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 
 	fs.Parse(args)
 
@@ -70,9 +66,10 @@ func (c *GenerateCommand) execute(tow io.Writer) (err error) {
 	var ptsList PointsList
 	if c.Fill {
 		rnd := rand.New(rand.NewSource(newRandSeed()))
-		until := c.Now
-		ptsList = randomPointsList(c.ArchiveInfoList, rnd, c.RandMax, until, c.Now)
-		if err := updateFileDataWithPointsList(db, ptsList, c.Now); err != nil {
+		now := whispertool.TimestampFromStdTime(time.Now())
+		until := now
+		ptsList = randomPointsList(c.ArchiveInfoList, rnd, c.RandMax, until, now)
+		if err := updateFileDataWithPointsList(db, ptsList, now); err != nil {
 			return err
 		}
 	}

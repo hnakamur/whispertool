@@ -23,18 +23,14 @@ type ViewCommand struct {
 	SrcRelPath string
 	From       whispertool.Timestamp
 	Until      whispertool.Timestamp
-	Now        whispertool.Timestamp
 	ArchiveID  int
 	ShowHeader bool
 	TextOut    string
 }
 
 func (c *ViewCommand) Parse(fs *flag.FlagSet, args []string) error {
-	c.Now = whispertool.TimestampFromStdTime(time.Now())
-	c.Until = c.Now
 	fs.StringVar(&c.SrcBase, "src-base", "", "src base directory or URL of \"whispertool server\"")
 	fs.StringVar(&c.SrcRelPath, "src", "", "whisper file relative path to src base")
-	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 	fs.IntVar(&c.ArchiveID, "archive", ArchiveIDAll, "archive ID (-1 is all).")
@@ -60,7 +56,15 @@ func (c *ViewCommand) Execute() error {
 }
 
 func (c *ViewCommand) execute(tow io.Writer) (err error) {
-	d, tsList, err := readWhisperFile(c.SrcBase, c.SrcRelPath, c.ArchiveID, c.From, c.Until, c.Now)
+	now := whispertool.TimestampFromStdTime(time.Now())
+	var until whispertool.Timestamp
+	if c.Until == 0 {
+		until = now
+	} else {
+		until = c.Until
+	}
+
+	d, tsList, err := readWhisperFile(c.SrcBase, c.SrcRelPath, c.ArchiveID, c.From, until, now)
 	if err != nil {
 		return err
 	}

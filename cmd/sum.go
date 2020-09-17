@@ -19,7 +19,6 @@ type SumCommand struct {
 	SrcPattern  string
 	From        whispertool.Timestamp
 	Until       whispertool.Timestamp
-	Now         whispertool.Timestamp
 	ArchiveID   int
 	TextOut     string
 	ShowHeader  bool
@@ -33,9 +32,6 @@ func (c *SumCommand) Parse(fs *flag.FlagSet, args []string) error {
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
 	fs.BoolVar(&c.ShowHeader, "header", true, "whether or not to show header (metadata and reteions)")
 
-	c.Now = whispertool.TimestampFromStdTime(time.Now())
-	c.Until = c.Now
-	fs.Var(&timestampValue{t: &c.Now}, "now", "current UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.From}, "from", "range start UTC time in 2006-01-02T15:04:05Z format")
 	fs.Var(&timestampValue{t: &c.Until}, "until", "range end UTC time in 2006-01-02T15:04:05Z format")
 	fs.Parse(args)
@@ -66,8 +62,16 @@ func (c *SumCommand) execute(tow io.Writer) (err error) {
 		return err
 	}
 	for _, item := range items {
-		fmt.Printf("item:%s\n", item)
-		h, tsList, err := sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.ArchiveID, c.From, c.Until, c.Now)
+		now := whispertool.TimestampFromStdTime(time.Now())
+		var until whispertool.Timestamp
+		if c.Until == 0 {
+			until = now
+		} else {
+			until = c.Until
+		}
+
+		fmt.Fprintf(tow, "now:%s\titem:%s\n", now, item)
+		h, tsList, err := sumWhisperFile(c.SrcBase, item, c.SrcPattern, c.ArchiveID, c.From, until, now)
 		if err != nil {
 			return err
 		}
