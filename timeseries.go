@@ -50,6 +50,9 @@ func (ts *TimeSeries) Step() Duration { return ts.step }
 
 // Points converts ts to points.
 func (ts *TimeSeries) Points() Points {
+	if ts == nil {
+		return []Point{}
+	}
 	pts := make([]Point, len(ts.values))
 	for i, v := range ts.values {
 		pts[i] = Point{
