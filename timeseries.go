@@ -110,6 +110,26 @@ func (ts *TimeSeries) DiffPoints(ts2 *TimeSeries) (Points, Points) {
 	return pts, pts2
 }
 
+// DiffPointsExcludeSrcNaN returns the different points between ts and us
+// excluding points of source NaN values.
+func (ts *TimeSeries) DiffPointsExcludeSrcNaN(ts2 *TimeSeries) (Points, Points) {
+	if len(ts.Values()) != len(ts2.Values()) {
+		return ts.Points(), ts2.Points()
+	}
+
+	var pts, pts2 Points
+	for i, v := range ts.Values() {
+		t := ts.FromTime().Add(Duration(i) * ts.Step())
+		t2 := ts2.FromTime().Add(Duration(i) * ts.Step())
+		v2 := ts2.Values()[i]
+		if (t != t2 || !v.Equal(v2)) && !v.IsNaN() {
+			pts = append(pts, Point{Time: t, Value: v})
+			pts2 = append(pts2, Point{Time: t2, Value: v2})
+		}
+	}
+	return pts, pts2
+}
+
 // Values returns the values in ts.
 func (ts *TimeSeries) Values() []Value { return ts.values }
 

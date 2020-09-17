@@ -90,6 +90,19 @@ func (tl TimeSeriesList) Diff(ul TimeSeriesList) (PointsList, PointsList) {
 	return pl2, ql2
 }
 
+func (tl TimeSeriesList) DiffExcludeSrcNaN(ul TimeSeriesList) (PointsList, PointsList) {
+	if len(tl) != len(ul) {
+		return tl.PointsList(), ul.PointsList()
+	}
+
+	pl2 := make(PointsList, len(tl))
+	ql2 := make(PointsList, len(ul))
+	for i, ts := range tl {
+		pl2[i], ql2[i] = ts.DiffPointsExcludeSrcNaN(ul[i])
+	}
+	return pl2, ql2
+}
+
 func (tl TimeSeriesList) TimeRangeStepString() string {
 	var b strings.Builder
 	b.WriteString("{")

@@ -25,6 +25,7 @@ type CopyCommand struct {
 	Until             whispertool.Timestamp
 	ArchiveID         int
 	TextOut           string
+	CopyNaN           bool
 }
 
 func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
@@ -42,6 +43,7 @@ func (c *CopyCommand) Parse(fs *flag.FlagSet, args []string) error {
 
 	fs.IntVar(&c.ArchiveID, "archive", ArchiveIDAll, "archive ID (-1 is all).")
 	fs.StringVar(&c.TextOut, "text-out", "-", "text output of copying data. empty means no output, - means stdout, other means output file.")
+	fs.BoolVar(&c.CopyNaN, "copy-nan", false, "whether or not copy when source value is NaN")
 
 	fs.Parse(args)
 
@@ -162,7 +164,12 @@ func (c *CopyCommand) copyOneFile(srcRelPath, destRelPath string, tow io.Writer)
 			"retry reading input files before copying")
 	}
 
-	srcPlDif, destPlDif := srcTsList.Diff(destTsList)
+	var srcPlDif, destPlDif PointsList
+	if c.CopyNaN {
+		srcPlDif, destPlDif = srcTsList.Diff(destTsList)
+	} else {
+		srcPlDif, destPlDif = srcTsList.DiffExcludeSrcNaN(destTsList)
+	}
 	if srcPlDif.AllEmpty() && destPlDif.AllEmpty() {
 		return nil
 	}
